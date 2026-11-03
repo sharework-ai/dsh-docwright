@@ -1,15 +1,20 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "COSMIC Tech Document",
-  "description": "Technical breakdown artifact migrated from cosmic-claude assets/schemas/tech.json; metadata and the manual-tracking `revised` flag dropped (no manual-editing UX in docwright), desiredCfps added as the chain anchor copied from the upstream func artifact.",
+  "description": "Technical breakdown artifact migrated from cosmic-claude assets/schemas/tech.json; metadata and the manual-tracking `revised` flag dropped (no manual-editing UX in docwright), desiredCfps added as the chain anchor copied from the upstream func artifact, plus the display-context fields (reqNo/reqTitle/l1Name/l2Name/l3Name) for the breakdown-table format.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["docType", "language", "index", "desiredCfps", "funcId", "diagrams", "processes"],
+  "required": ["docType", "language", "index", "desiredCfps", "reqNo", "reqTitle", "l1Name", "funcId", "diagrams", "processes"],
   "properties": {
     "docType": { "const": "tech" },
     "language": { "type": "string", "default": "zh-CN" },
     "index": { "type": "integer", "minimum": 1, "description": "1-based position of this function in the upstream plan functions array; must equal the upstream func artifact's index" },
     "desiredCfps": { "type": "integer", "minimum": 1, "description": "CFP budget copied from the upstream func artifact's desiredCfps; the total subprocess count is validated against it" },
+    "reqNo": { "type": "string", "minLength": 1, "description": "Requirement number copied verbatim from the upstream func artifact's reqNo (display context for the breakdown-table format)" },
+    "reqTitle": { "type": "string", "minLength": 1, "description": "Requirement title copied verbatim from the upstream func artifact's reqTitle (display context)" },
+    "l1Name": { "type": "string", "minLength": 1, "description": "Level 1 function name copied verbatim from the upstream func artifact's l1Name" },
+    "l2Name": { "type": "string", "minLength": 1, "description": "Level 2 function name copied verbatim from the upstream func artifact's l2Name; present only when the upstream declared it (moduleLevels >= 2)" },
+    "l3Name": { "type": "string", "minLength": 1, "description": "Level 3 function name copied verbatim from the upstream func artifact's l3Name; present only when the upstream declared it (moduleLevels = 3)" },
     "funcId": { "type": "string", "pattern": "^[A-Z0-9]{1,8}(?:-[A-Z0-9]{1,8})+$" },
     "diagrams": {
       "type": "array",

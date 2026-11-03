@@ -3,7 +3,12 @@
   "language": "zh-CN",
   "index": 1,
   "desiredCfps": 35,
+  "reqNo": "REQ-001-EXAMPLE",
+  "reqTitle": "商品收藏功能",
+  "l1Name": "个人收藏",
+  "l2Name": "添加收藏",
   "funcId": "KERQ-352-01",
+  "funcDesc": "为注册用户提供完整的商品收藏能力：用户在浏览商品列表或商品详情时可将感兴趣的商品加入个人收藏，系统校验登录态与商品有效性后写入收藏记录并即时反馈；重复收藏同一商品时不产生重复记录并返回友好提示；用户可在个人中心查询收藏列表、取消收藏、恢复误取消条目，并按自定义分组归类整理；对已下架或删除的商品提供失效条目批量清理；支持收藏清单导出留存与收藏数量统计展示；收藏商品降价时系统主动向收藏用户推送提醒。整条链路覆盖收藏的建立、维护、统计与召回，为个性化推荐与用户回访提供数据基础。",
   "diagrams": [
     "sequenceDiagram\n    autonumber\n    actor u as 注册用户\n    participant fav as 收藏服务\n    participant prod as 商品服务\n    participant price as 价格服务\n    participant notify as 通知服务\n    u->>fav: 收藏商品\n    fav-->>u: 收藏结果\n    u->>fav: 查询收藏列表\n    fav->>prod: 读取商品信息\n    prod-->>fav: 商品数据\n    fav-->>u: 收藏列表\n    price->>notify: 推送收藏降价提醒\n    notify-->>u: 降价通知"
   ],
@@ -14,7 +19,8 @@
       "description": "注册用户在商品列表或详情页将感兴趣的商品加入个人收藏，系统核验登录态与商品有效性后写入收藏记录并反馈收藏结果。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户在商品详情页点击“收藏”按钮"
+      "origination_event": "用户在商品详情页点击“收藏”按钮",
+      "dataGroups": ["收藏请求", "收藏记录"]
     },
     {
       "index": 2,
@@ -22,7 +28,8 @@
       "description": "注册用户从个人收藏列表中移除不再感兴趣的商品，系统更新收藏记录状态并即时反馈取消结果。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户在收藏列表中点击“取消收藏”"
+      "origination_event": "用户在收藏列表中点击“取消收藏”",
+      "dataGroups": ["取消请求", "收藏记录"]
     },
     {
       "index": 3,
@@ -30,7 +37,8 @@
       "description": "注册用户进入个人中心收藏页，系统分页返回收藏商品清单及每个商品的最新状态，供用户浏览与后续操作。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户进入个人中心的收藏页"
+      "origination_event": "用户进入个人中心的收藏页",
+      "dataGroups": ["列表请求", "收藏记录", "收藏列表"]
     },
     {
       "index": 4,
@@ -38,7 +46,8 @@
       "description": "注册用户从收藏列表进入某个商品的详情展示，系统在详情中标注该商品的收藏状态，帮助用户决定是否继续保留。",
       "originator": "注册用户",
       "receiver": "商品服务",
-      "origination_event": "用户在收藏列表中点击某个商品"
+      "origination_event": "用户在收藏列表中点击某个商品",
+      "dataGroups": ["详情请求", "商品档案", "商品详情"]
     },
     {
       "index": 5,
@@ -46,7 +55,8 @@
       "description": "对已下架或删除的商品，系统提示用户存在失效条目，用户确认后批量清理，收藏关系同步解除并反馈清理结果。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "系统提示存在失效收藏条目，用户确认清理"
+      "origination_event": "系统提示存在失效收藏条目，用户确认清理",
+      "dataGroups": ["清理请求", "收藏记录"]
     },
     {
       "index": 6,
@@ -54,7 +64,8 @@
       "description": "注册用户查看个人收藏总数角标，系统汇总有效收藏条目数量并返回，为收藏维护提供直观参考。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户查看个人中心的收藏总数角标"
+      "origination_event": "用户查看个人中心的收藏总数角标",
+      "dataGroups": ["汇总请求", "收藏记录", "收藏数量"]
     },
     {
       "index": 7,
@@ -62,7 +73,8 @@
       "description": "用户提交收藏请求时系统核对既有收藏记录，对重复收藏不产生新记录并返回友好提示，保证收藏列表不出现重复条目。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户提交收藏请求，系统核对既有收藏"
+      "origination_event": "用户提交收藏请求，系统核对既有收藏",
+      "dataGroups": ["收藏请求", "收藏记录", "重复提示"]
     },
     {
       "index": 8,
@@ -70,7 +82,8 @@
       "description": "收藏商品价格发生下降时，系统向收藏该商品的用户发送降价通知，提升收藏功能的回访价值。",
       "originator": "价格服务",
       "receiver": "通知服务",
-      "origination_event": "商品价格变动事件到达价格服务"
+      "origination_event": "商品价格变动事件到达价格服务",
+      "dataGroups": ["价格变动", "收藏记录", "降价通知"]
     },
     {
       "index": 9,
@@ -78,7 +91,8 @@
       "description": "注册用户将个人收藏清单导出为文件留存，系统按所选格式生成文件并提供下载，便于线下整理与分享。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户在收藏页点击“导出收藏”按钮"
+      "origination_event": "用户在收藏页点击“导出收藏”按钮",
+      "dataGroups": ["导出请求", "收藏记录", "导出文件"]
     },
     {
       "index": 10,
@@ -86,7 +100,8 @@
       "description": "注册用户在收藏页创建自定义分组，把收藏条目按主题归类，创建成功后立即可向分组内添加条目。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户在收藏页点击“新建分组”"
+      "origination_event": "用户在收藏页点击“新建分组”",
+      "dataGroups": ["分组请求", "收藏分组"]
     },
     {
       "index": 11,
@@ -94,7 +109,8 @@
       "description": "注册用户将其他渠道的收藏条目导入本应用，导入成功后按来源渠道登记，便于后续追溯。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户在收藏页选择“导入收藏”"
+      "origination_event": "用户在收藏页选择“导入收藏”",
+      "dataGroups": ["导入请求", "收藏记录"]
     },
     {
       "index": 12,
@@ -102,7 +118,8 @@
       "description": "注册用户在收藏回收站中恢复误取消的收藏条目，恢复后条目重新生效并回到原分组。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户在收藏回收站点击“恢复”"
+      "origination_event": "用户在收藏回收站点击“恢复”",
+      "dataGroups": ["恢复请求", "收藏记录"]
     },
     {
       "index": 13,
@@ -110,7 +127,8 @@
       "description": "注册用户将收藏条目移动到指定分组，移动成功后条目按新分组归类展示。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户在收藏列表中选择商品并点击“移动到分组”"
+      "origination_event": "用户在收藏列表中选择商品并点击“移动到分组”",
+      "dataGroups": ["移动请求", "收藏记录"]
     },
     {
       "index": 14,
@@ -118,7 +136,8 @@
       "description": "注册用户查看自己创建的全部分组及各分组的条目数量，便于在分组之间切换浏览。",
       "originator": "注册用户",
       "receiver": "收藏服务",
-      "origination_event": "用户进入收藏分组管理页"
+      "origination_event": "用户进入收藏分组管理页",
+      "dataGroups": ["分组查询", "收藏分组", "分组列表"]
     }
   ]
 }

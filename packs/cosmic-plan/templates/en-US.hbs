@@ -1,19 +1,14 @@
-# COSMIC Plan-Phase Report{{#if reqTitle}}: {{reqTitle}}{{/if}}
+# Requirement Breakdown Plan
 
-- Requirement No.: {{reqNo}}
-- Document type: plan (requirement decomposition)
-- Function count: {{functions.length}}
-- Total CFP: {{totalCfps}}
+## Requirement Information
 
-## Function Breakdown
+Requirement no. & title: {{reqNo}}_{{reqTitle}}
+Expected CFP count: {{totalCfps}}
 
-| Function ID | Change | Level 1 | Level 2 | Level 3 | Description | Est. CFP |
-|-------------|--------|---------|---------|---------|-------------|----------|
+## Function List
+
+|Level 1 Function|Level 2 Function|Level 3 Function|Function ID|Type|Description|Estimated CFPs|
+|---|---|---|---|---|---|---|
 {{#each functions}}
-| {{funcId}} | {{changeKind}} | {{l1Name}} | {{l2Name}} | {{l3Name}} | {{funcDesc}} | {{estimatedCfps}} |
+|{{l1Name}}|{{l2Name}}|{{l3Name}}|{{funcId}}|{{#if (eq changeKind "added")}}Added{{else}}Modified{{/if}}|{{funcDesc}}|{{estimatedCfps}}|
 {{/each}}
-
-## Totals
-
-- Function count: {{functions.length}}
-- Total CFP: {{totalCfps}}

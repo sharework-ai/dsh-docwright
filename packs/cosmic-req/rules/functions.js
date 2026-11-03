@@ -85,10 +85,14 @@ export const rules = [
     },
   },
   {
-    // E303 generalized: index/funcId/desiredCfps must align with the upstream plan function.
+    // E303 generalized: index/funcId/desiredCfps must align with the upstream
+    // plan function; reqNo/reqTitle/l1Name/l2Name/l3Name carry the display
+    // context (solution-document title and module hierarchy) and must be
+    // copied verbatim — compared only when the upstream declares them, since
+    // l2Name/l3Name follow the plan's moduleLevels and may be absent.
     id: 'req/plan-alignment',
     severity: 'error',
-    suggestion: 'index/funcId/desiredCfps 必须与上游 plan 中对应 function 完全一致：index 必须等于生效参数 targetIndex（生成哪个功能由调用方指定），funcId 与 desiredCfps（=estimatedCfps）从那里原样复制；doc_validate 复验时请传入与生成时相同的 upstream 路径。',
+    suggestion: 'index/funcId/desiredCfps 必须与上游 plan 中对应 function 完全一致：index 必须等于生效参数 targetIndex（生成哪个功能由调用方指定），funcId 与 desiredCfps（=estimatedCfps）从那里原样复制；reqNo/reqTitle 复制 plan 顶层，l1Name/l2Name/l3Name 复制对应 function（上游声明了才复制），均不得改写；doc_validate 复验时请传入与生成时相同的 upstream 路径。',
     check(artifact, context) {
       if (!isObject(artifact)) return []
       const upstream = Array.isArray(context?.upstream) ? context.upstream : []
@@ -142,6 +146,23 @@ export const rules = [
             `desiredCfps mismatches the upstream plan: req has ${String(artifact.desiredCfps)}, plan functions[${index - 1}].estimatedCfps is ${String(fn.estimatedCfps)}`),
           snapshot: `desiredCfps=${String(artifact.desiredCfps)}`,
         })
+      }
+      const expectPlanField = (field, planValue) => {
+        if (planValue === undefined || artifact[field] === planValue) return
+        issues.push({
+          jsonPath: `$.${field}`,
+          message: say(artifact,
+            `${field} 与上游 plan 不一致：req 为 "${String(artifact[field])}"，plan 为 "${String(planValue)}"`,
+            `${field} mismatches the upstream plan: req has "${String(artifact[field])}", plan has "${String(planValue)}"`),
+          snapshot: `${field}=${String(artifact[field])}`,
+        })
+      }
+      expectPlanField('reqNo', plan.reqNo)
+      expectPlanField('reqTitle', plan.reqTitle)
+      if (isObject(fn)) {
+        expectPlanField('l1Name', fn.l1Name)
+        expectPlanField('l2Name', fn.l2Name)
+        expectPlanField('l3Name', fn.l3Name)
       }
       return issues
     },

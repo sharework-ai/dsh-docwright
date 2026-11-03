@@ -1,21 +1,33 @@
-# Functional Process Design: {{funcId}}
+# Requirement Solution: {{reqNo}}_{{reqTitle}}
 
-- Document type: func (functional process design)
-- Requirement index: index {{index}}
-- Target CFPs: {{desiredCfps}}
+{{#if l1Name}}
+## {{l1Name}}
 
-## Sequence diagrams
+{{/if}}
+{{#if l2Name}}
+### {{l2Name}}
+
+{{/if}}
+{{#if l3Name}}
+#### {{l3Name}}
+
+{{/if}}
+**Functional Description**
+
+{{funcDesc}}
+
+**Sequence Diagrams**
 
 {{#each diagrams}}
 ```mermaid
 {{this}}
 ```
+
 {{/each}}
+**Functional Process List**
 
-## Functional process list
-
-| # | Process | Originator | Receiver | Origination event | Description |
-|---|---------|------------|----------|-------------------|-------------|
+| # | Process | Originator | Receiver | Origination event | Description | Major data groups |
+|---|---------|------------|----------|-------------------|-------------|-------------------|
 {{#each processes}}
-| {{index}} | {{name}} | {{originator}} | {{receiver}} | {{origination_event}} | {{description}} |
+| {{index}} | {{name}} | {{originator}} | {{receiver}} | {{origination_event}} | {{description}} | {{#each dataGroups}}{{#if @index}}、{{/if}}{{this}}{{/each}} |
 {{/each}}

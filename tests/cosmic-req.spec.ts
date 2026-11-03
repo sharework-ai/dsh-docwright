@@ -184,6 +184,13 @@ describe('cosmic-req mutation tests (guardrail-is-real)', () => {
     expect(issueRuleIds(validateOf(req, 'zh-CN', outOfRange, undefined, planContext(plan)))).toContain('req/plan-alignment')
     const wrongCfps = mutate(req.goldenSample, d => { d.desiredCfps = 40 })
     expect(issueRuleIds(validateOf(req, 'zh-CN', wrongCfps, undefined, planContext(plan)))).toContain('req/plan-alignment')
+    // Display-context fields: a wrong copy (or a dropped optional level the plan declares) is caught.
+    const wrongReqNo = mutate(req.goldenSample, d => { d.reqNo = 'OTHER-002' })
+    expect(issueRuleIds(validateOf(req, 'zh-CN', wrongReqNo, undefined, planContext(plan)))).toContain('req/plan-alignment')
+    const wrongTitle = mutate(req.goldenSample, d => { d.reqTitle = '别的需求' })
+    expect(issueRuleIds(validateOf(req, 'zh-CN', wrongTitle, undefined, planContext(plan)))).toContain('req/plan-alignment')
+    const missingL2 = mutate(req.goldenSample, d => { delete d.l2Name })
+    expect(issueRuleIds(validateOf(req, 'zh-CN', missingL2, undefined, planContext(plan)))).toContain('req/plan-alignment')
     // No upstream in the context (e.g. doc_validate without the upstream argument): loud, not silent.
     expect(issueRuleIds(validateOf(req, 'zh-CN', req.goldenSample))).toContain('req/plan-alignment')
     // Upstream that is not a plan artifact: same loud failure.

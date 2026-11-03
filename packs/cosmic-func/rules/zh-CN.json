@@ -48,5 +48,14 @@
     "pattern": { "param": "functionalUserPattern" },
     "mustMatch": true,
     "suggestion": "接收者（receiver）未通过功能用户正则（生效参数 functionalUserPattern，默认排除数据库/文件存储等存储设施字眼；置空该参数可停用本检查）：功能用户是人、外部系统或设备等业务角色，存储设施是实现载体，不能接收功能过程的结果；改写为真实的业务接收者。"
+  },
+  {
+    "id": "func/func-desc-min-length",
+    "severity": "error",
+    "given": "$",
+    "field": "funcDesc",
+    "kind": "minLength",
+    "min": 40,
+    "suggestion": "功能描述（funcDesc）过短：需求解决方案的功能描述须是一段完整段落（不少于 40 个字符），在上游 req 的 funcDesc 基础上扩写，覆盖核心环节、关键业务规则与质量属性。"
   }
 ]

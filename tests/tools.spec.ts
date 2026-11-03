@@ -43,7 +43,7 @@ describe('doc_packs tool', () => {
     const packs = await tool.execute({} as never, { signal } as never) as Array<{ name: string; version: string; description: string; languages: string[]; consumes: string[] }>
     expect(packs).toHaveLength(6)
     const plan = packs.find(p => p.name === 'cosmic-plan')!
-    expect(plan).toMatchObject({ version: '0.6.1', languages: ['zh-CN', 'en-US'], consumes: ['cosmic-context'] })
+    expect(plan).toMatchObject({ version: '0.7.0', languages: ['zh-CN', 'en-US'], consumes: ['cosmic-context'] })
     expect(plan.description.length).toBeGreaterThan(0)
   })
 

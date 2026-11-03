@@ -94,10 +94,13 @@ export const rules = [
   },
   {
     // E303 pattern (generalized in the req pack): index/funcId/desiredCfps
-    // must align with the upstream req artifact.
+    // must align with the upstream req artifact; reqNo/reqTitle/l1Name/
+    // l2Name/l3Name carry the display context and must be copied verbatim —
+    // compared only when the upstream declares them (l2Name/l3Name follow
+    // the plan's moduleLevels and may be absent).
     id: 'func/req-alignment',
     severity: 'error',
-    suggestion: 'index/funcId/desiredCfps 必须与上游 req 产物完全一致：三者都从绿回执的 req 产物对应字段原样复制，不得改写；doc_validate 复验时请传入与生成时相同的 upstream 路径。',
+    suggestion: 'index/funcId/desiredCfps 必须与上游 req 产物完全一致，reqNo/reqTitle/l1Name/l2Name/l3Name 同样原样复制（上游声明了才复制），均不得改写；doc_validate 复验时请传入与生成时相同的 upstream 路径。',
     check(artifact, context) {
       if (!isObject(artifact)) return []
       const upstream = Array.isArray(context?.upstream) ? context.upstream : []
@@ -125,6 +128,14 @@ export const rules = [
       expect('index', req.index)
       expect('funcId', req.funcId)
       expect('desiredCfps', req.desiredCfps)
+      const expectPresent = (field, reqValue) => {
+        if (reqValue !== undefined) expect(field, reqValue)
+      }
+      expectPresent('reqNo', req.reqNo)
+      expectPresent('reqTitle', req.reqTitle)
+      expectPresent('l1Name', req.l1Name)
+      expectPresent('l2Name', req.l2Name)
+      expectPresent('l3Name', req.l3Name)
       return issues
     },
   },

@@ -12,6 +12,8 @@ A sub-process is the next refinement of a functional process, and each sub-proce
   - `language` (string): always `"en-US"`.
   - `index` (integer, >=1): identical to the upstream func artifact's `index`.
   - `desiredCfps` (integer, >=1): identical to the upstream func artifact's `desiredCfps`.
+  - `reqNo`/`reqTitle`/`l1Name` (string): copied verbatim from the upstream func artifact.
+  - `l2Name`/`l3Name` (string, optional): copy verbatim only when the upstream func artifact declares them; omit the field otherwise.
   - `funcId` (string): identical to the upstream func artifact's `funcId`.
   - `diagrams` (string array, at least 1): complete mermaid diagram sources (sequenceDiagram recommended, annotating the main E/X/R/W movements).
   - `processes` (array, at least 1): a breakdown of every upstream func process — same `name`, none missing. Each item:
@@ -36,7 +38,7 @@ A sub-process is the next refinement of a functional process, and each sub-proce
 
 ## Hard constraints
 
-1. `index`, `funcId`, and `desiredCfps` must exactly match the upstream func artifact — never rewrite them.
+1. `index`, `funcId`, and `desiredCfps` must exactly match the upstream func artifact; `reqNo`, `reqTitle`, `l1Name`, `l2Name`, and `l3Name` are likewise copied verbatim from it (copy only what it declares) — never rewrite any of them.
 2. The total CFP count across all subprocesses must NEVER fall below the plan estimate `desiredCfps`, and must not exceed `desiredCfps×upFactor` (upper tolerance from the effective `cfpTotal` param's upFactor, default 1.2); aim the total at `desiredCfps`, not at the floor.
 3. Every upstream func process must appear in `processes` under the same name.
 

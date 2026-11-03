@@ -1,19 +1,14 @@
-# COSMIC 需求分解规划报告{{#if reqTitle}}：{{reqTitle}}{{/if}}
+# 需求分解规划书
 
-- 需求编号：{{reqNo}}
-- 文档类型：plan（需求分解规划）
-- 功能总数：{{functions.length}}
-- 总 CFP：{{totalCfps}}
+## 需求信息
 
-## 功能分解
+需求编号及标题：{{reqNo}}_{{reqTitle}}
+期望CFP数量：{{totalCfps}}
 
-| 功能ID | 变更类型 | 一级功能 | 二级功能 | 三级功能 | 功能描述 | 预估CFP |
-|--------|----------|----------|----------|----------|----------|---------|
+## 功能列表
+
+|一级功能|二级功能|三级功能|功能编号|类型|功能描述|预计CFP数量|
+|---|---|---|---|---|---|---|
 {{#each functions}}
-| {{funcId}} | {{changeKind}} | {{l1Name}} | {{l2Name}} | {{l3Name}} | {{funcDesc}} | {{estimatedCfps}} |
+|{{l1Name}}|{{l2Name}}|{{l3Name}}|{{funcId}}|{{#if (eq changeKind "added")}}新增{{else}}修改{{/if}}|{{funcDesc}}|{{estimatedCfps}}|
 {{/each}}
-
-## 合计
-
-- 功能总数：{{functions.length}}
-- 合计 totalCfps：{{totalCfps}}

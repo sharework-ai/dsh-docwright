@@ -8,6 +8,9 @@
     "language",
     "index",
     "desiredCfps",
+    "reqNo",
+    "reqTitle",
+    "l1Name",
     "functionalUsers",
     "funcId",
     "funcDesc",
@@ -30,6 +33,31 @@
       "type": "integer",
       "minimum": 1,
       "description": "CFP budget copied from the upstream plan function's estimatedCfps; sizes businessRules (rule req/business-rule-count)"
+    },
+    "reqNo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Requirement number copied verbatim from the upstream plan artifact's top-level reqNo (display context for the solution-document format)"
+    },
+    "reqTitle": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Requirement title copied verbatim from the upstream plan artifact's top-level reqTitle (display context)"
+    },
+    "l1Name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Level 1 function name copied verbatim from the upstream plan function's l1Name (functions[targetIndex-1])"
+    },
+    "l2Name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Level 2 function name copied verbatim from the upstream plan function's l2Name; present only when the plan declared it (moduleLevels >= 2)"
+    },
+    "l3Name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Level 3 function name copied verbatim from the upstream plan function's l3Name; present only when the plan declared it (moduleLevels = 3)"
     },
     "funcId": {
       "type": "string",

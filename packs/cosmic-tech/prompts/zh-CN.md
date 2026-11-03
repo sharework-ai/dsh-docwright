@@ -12,6 +12,8 @@
   - `language`（string）：固定为 `"zh-CN"`。
   - `index`（整数，≥1）：与上游 func 产物的 `index` 一致。
   - `desiredCfps`（整数，≥1）：与上游 func 产物的 `desiredCfps` 一致。
+  - `reqNo`/`reqTitle`/`l1Name`（string）：从上游 func 产物原样复制。
+  - `l2Name`/`l3Name`（string，可选）：上游 func 产物声明了才原样复制；未声明则省略该字段。
   - `funcId`（string）：与上游 func 产物的 `funcId` 一致。
   - `diagrams`（字符串数组，至少 1 项）：完整的 mermaid 图源码（推荐 sequenceDiagram，标注主要数据移动 E/X/R/W）。
   - `processes`（数组，至少 1 项）：对上游 func 全部功能过程的逐一拆分，`name` 与上游 func 同名且不得遗漏。每项：
@@ -36,7 +38,7 @@
 
 ## 硬性约束
 
-1. `index`、`funcId`、`desiredCfps` 必须与上游 func 产物完全一致，不得改写。
+1. `index`、`funcId`、`desiredCfps` 必须与上游 func 产物完全一致；`reqNo`、`reqTitle`、`l1Name`、`l2Name`、`l3Name` 同样从上游原样复制（上游声明了才复制）——以上字段均不得改写。
 2. 全部子过程的 CFP 总数**不得低于计划估算 `desiredCfps`**，且不超过 `desiredCfps×upFactor`（上限容差取生效参数 `cfpTotal` 的 upFactor，默认 1.2）；总量应贴近 `desiredCfps`，不要贴着下限凑数。
 3. 上游 func 的每个功能过程都必须出现在 `processes` 中，同名对应。
 

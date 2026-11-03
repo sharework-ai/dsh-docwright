@@ -12,6 +12,11 @@ User stories are the primary source for the later flow analysis (which role or m
   - `language` (string): always `"en-US"`.
   - `index` (integer, ≥1): equals the effective param `targetIndex` (1-based, locating the target function in the upstream plan `functions` array).
   - `desiredCfps` (integer, >=1): copied verbatim from the matching plan function's `estimatedCfps`.
+  - `reqNo` (string): copied verbatim from the upstream plan artifact's top-level `reqNo`.
+  - `reqTitle` (string): copied verbatim from the upstream plan artifact's top-level `reqTitle`.
+  - `l1Name` (string): copied verbatim from the matching plan function's `l1Name`.
+  - `l2Name` (string, optional): copy verbatim only when the matching plan function declares `l2Name`; omit the field otherwise.
+  - `l3Name` (string, optional): copy verbatim only when the matching plan function declares `l3Name`; omit the field otherwise.
   - `funcId` (string): copied verbatim from the matching plan function's `funcId`.
   - `funcDesc` (string): the functional requirement as one natural-language paragraph of at most 500 characters explaining the core functionality and business value; you may refine it from the materials, but never invent functions that are not grounded in them; avoid lists and overly technical language.
   - `functionalUsers` (array, at least 1 item): the functional users involved, whose `role` MUST come from the `functionalUserRoles` allowlist in the effective params. Each item:
@@ -25,7 +30,7 @@ User stories are the primary source for the later flow analysis (which role or m
 
 ## Hard constraints
 
-1. `index` must equal the effective param `targetIndex`; `index`, `funcId`, and `desiredCfps` must exactly match the upstream plan `functions[targetIndex-1]` — never rewrite them.
+1. `index` must equal the effective param `targetIndex`; `index`, `funcId`, and `desiredCfps` must exactly match the upstream plan `functions[targetIndex-1]`; `reqNo` and `reqTitle` must match the upstream plan's top level, and `l1Name`/`l2Name`/`l3Name` must match the matching function (copy only what it declares) — never rewrite any of them.
 2. Keep `funcDesc` within 500 characters as one coherent paragraph; `functionalUsers[].role` must be on the allowlist.
 3. The business rule count must stay inside the proportional range (both too few and too many are rejected).
 

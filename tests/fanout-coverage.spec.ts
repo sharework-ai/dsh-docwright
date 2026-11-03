@@ -126,9 +126,11 @@ describe('fan-out contract: targetIndex selection', () => {
 
   it('generates the second function when targetIndex picks it', async () => {
     const { req } = await packs()
-    const second = JSON.parse(JSON.stringify(req.goldenSample)) as { index: number; funcId: string; desiredCfps: number }
+    const second = JSON.parse(JSON.stringify(req.goldenSample)) as { index: number; funcId: string; desiredCfps: number; l2Name: string }
     second.index = 2
     second.funcId = 'KERQ-352-02'
+    // The display hierarchy is anchored to the picked plan function (req/plan-alignment).
+    second.l2Name = '删除收藏'
     const deps = await makeDeps([JSON.stringify((await packs()).plan.goldenSample), JSON.stringify(second)])
     const gen = defineDocGenerateTool(deps as never)
     await seedContext(deps as never)
@@ -148,7 +150,7 @@ describe('fan-out contract: targetIndex selection', () => {
     await writeFile(join(deps.ws, 'topic-a', 'output', 'plan.json'), JSON.stringify(plan.goldenSample), 'utf8')
     // Green receipt WITHOUT recorded params: the confirm params are unsatisfied.
     await writeFile(join(deps.ws, 'topic-a', 'output', 'plan.receipt.json'), JSON.stringify({
-      pack: 'cosmic-plan', packVersion: '0.6.1', artifactHash: artifactHashOf(plan.goldenSample), isValid: true,
+      pack: 'cosmic-plan', packVersion: '0.7.0', artifactHash: artifactHashOf(plan.goldenSample), isValid: true,
     }), 'utf8')
     const out = await defineDocGenerateTool(deps as never).execute({ pack: 'cosmic-req', topic: 'topic-a', materials: ['#!inline\n素材'], language: 'zh-CN', upstream: ['topic-a/output/plan.json'],
     } as never, { signal } as never) as { pendingConfirmation: boolean; missingRequired: string[]; candidates?: Array<{ index: number; funcId: string }> }
@@ -228,7 +230,7 @@ describe('doc_chain_status: coverage accounting', () => {
     // Shapeless plan upstream: candidates list is empty, the error still fires.
     await writeFile(join(deps.ws, 'output', 'shapeless.json'), '{}', 'utf8')
     await writeFile(join(deps.ws, 'output', 'shapeless.receipt.json'), JSON.stringify({
-      pack: 'cosmic-plan', packVersion: '0.6.1', artifactHash: artifactHashOf({}), isValid: true,
+      pack: 'cosmic-plan', packVersion: '0.7.0', artifactHash: artifactHashOf({}), isValid: true,
       params: { cfpTotal: { value: 1, downFactor: 1, upFactor: 1 }, cfpPerFunc: { value: 1, min: 1, max: 2 }, cfpMin: { value: 1, min: 1, max: 1 }, cfpMax: { value: 2, min: 1, max: 3 } },
     }), 'utf8')
     await expect(defineDocGenerateTool(deps as never).execute({ pack: 'cosmic-req', topic: 'topic-a', materials: ['#!inline\n素材'], language: 'zh-CN', upstream: ['output/shapeless.json'], confirm: true,

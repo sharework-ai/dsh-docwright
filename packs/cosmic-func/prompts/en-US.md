@@ -12,7 +12,10 @@ A functional process is the elementary unit obtained by splitting one function (
   - `language` (string): always `"en-US"`.
   - `index` (integer, >=1): identical to the upstream req artifact's `index`.
   - `desiredCfps` (integer, >=1): identical to the upstream req artifact's `desiredCfps`.
+  - `reqNo`/`reqTitle`/`l1Name` (string): copied verbatim from the upstream req artifact.
+  - `l2Name`/`l3Name` (string, optional): copy verbatim only when the upstream req artifact declares them; omit the field otherwise.
   - `funcId` (string): identical to the upstream req artifact's `funcId`.
+  - `funcDesc` (string): the functional description — expand the upstream req artifact's `funcDesc` into one full solution-document paragraph (about 150-300 characters, at least 40), covering the function's core steps, key business rules, and quality attributes (reliability, retries, auditing); still never invent functions that are not grounded in the materials.
   - `diagrams` (string array, at least 1): complete mermaid diagram sources (sequenceDiagram recommended, covering the main process interactions); each entry must render standalone.
   - `processes` (array, at least 1): the functional processes of this function, scaled to the `desiredCfps` budget (the downstream tech stage splits each process into the `ERX`/`EW`/`EX` movement patterns, averaging about 2.5 CFPs per process). Each item:
     - `index` (integer, >=1): sequential starting from 1.
@@ -21,12 +24,14 @@ A functional process is the elementary unit obtained by splitting one function (
     - `originator` (string): the functional user or external system that triggers the process; it must match the effective param `functionalUserPattern` (by default storage facilities like 数据库/文件存储 are excluded — storage is an implementation vehicle, not a functional user).
     - `receiver` (string): the system part that responds and implements it; must differ from `originator`, and likewise never a storage facility.
     - `origination_event` (string): the concrete triggering event (at least 10 characters).
+    - `dataGroups` (string array, at least 1): the major data groups this process works on (e.g. "收藏请求、收藏记录"), matching the tech stage's per-subprocess `dataGroup` values.
 
 ## Hard constraints
 
-1. `index`, `funcId`, and `desiredCfps` must exactly match the upstream req artifact — never rewrite them.
-2. `processes[].name` must be unique within the document and stay at the business level; `originator` and `receiver` must differ.
-3. `processes[].index` must be sequential starting from 1.
+1. `index`, `funcId`, and `desiredCfps` must exactly match the upstream req artifact; `reqNo`, `reqTitle`, `l1Name`, `l2Name`, and `l3Name` are likewise copied verbatim from it (copy only what it declares) — never rewrite any of them.
+2. Keep `funcDesc` at least 40 characters as one coherent paragraph (rule func/func-desc-min-length rejects too-short descriptions).
+3. `processes[].name` must be unique within the document and stay at the business level; `originator` and `receiver` must differ.
+4. `processes[].index` must be sequential starting from 1.
 
 ## Input materials
 

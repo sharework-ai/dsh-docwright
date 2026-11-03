@@ -1,9 +1,9 @@
 {
   "name": "cosmic-func",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": {
-    "zh": "COSMIC 功能过程设计（针对一个功能）：将功能分解为功能过程（发起者、接收者、触发事件），从绿色的 cosmic-req 产物细化而来（requires topic——每话题一条需求）。",
-    "en": "COSMIC functional-process design for one function: decomposes the function into functional processes (originator, receiver, origination event) refined from a green cosmic-req artifact (requires topic — one requirement per topic)."
+    "zh": "COSMIC 功能过程设计（针对一个功能）：给出扩写的功能描述，并将功能分解为功能过程（发起者、接收者、触发事件、主要数据组），从绿色的 cosmic-req 产物细化而来（requires topic——每话题一条需求）。",
+    "en": "COSMIC functional-process design for one function: provides an expanded functional description and decomposes the function into functional processes (originator, receiver, origination event, major data groups) refined from a green cosmic-req artifact (requires topic — one requirement per topic)."
   },
   "consumes": [
     "cosmic-req"

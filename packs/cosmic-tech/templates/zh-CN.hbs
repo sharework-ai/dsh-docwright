@@ -1,29 +1,9 @@
-# 功能点拆分表：{{funcId}}
+# 功能点拆分表：{{reqNo}}_{{reqTitle}}
 
-- 文档类型：tech（技术设计）
-- 需求索引：index {{index}}
-- 目标 CFP：{{desiredCfps}}
-
-## 数据移动时序图
-
-{{#each diagrams}}
-```mermaid
-{{this}}
-```
-{{/each}}
-
-## 功能点拆分表
-
+| 需求编号 | 需求名称 | 一级功能模块 | 二级功能模块 | 三级功能模块 | 功能用户 | 功能用户需求 | 触发事件 | 功能过程 | 子过程描述 | 数据移动类型 | 数据组 | 数据属性 | CFP | 修订标识 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 {{#each processes}}
-### {{index}}. {{name}}
-
-发起者：{{originator}}　接收者：{{receiver}}　触发事件：{{origination_event}}
-
-{{description}}
-
-| # | 数据移动 | 类型 | 数据组 | 数据属性 | CFP |
-|---|----------|------|--------|----------|-----|
 {{#each subProcesses}}
-| {{@index}} | {{description}} | {{dataMovementType}} | {{dataGroup}} | {{dataProperties}} | {{cfp}} |
+| {{../../reqNo}} | {{../../reqTitle}} | {{../../l1Name}} | {{../../l2Name}} | {{../../l3Name}} | 发起者：{{../originator}} 接收者：{{../receiver}} | {{../origination_event}} | {{../name}} | {{../name}} | {{description}} | {{dataMovementType}} | {{dataGroup}} | {{#each dataProperties}}{{#if @index}}, {{/if}}{{this}}{{/each}} | {{cfp}} | |
 {{/each}}
 {{/each}}

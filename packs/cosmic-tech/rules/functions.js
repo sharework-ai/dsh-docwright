@@ -66,10 +66,13 @@ function budgetFactors(context) {
 export const rules = [
   {
     // E303 pattern (generalized in the req pack): index/funcId/desiredCfps
-    // plus process-name coverage against the upstream func artifact.
+    // plus process-name coverage against the upstream func artifact;
+    // reqNo/reqTitle/l1Name/l2Name/l3Name carry the display context and must
+    // be copied verbatim — compared only when the upstream declares them
+    // (l2Name/l3Name follow the plan's moduleLevels and may be absent).
     id: 'tech/func-alignment',
     severity: 'error',
-    suggestion: 'index/funcId/desiredCfps 必须与上游 func 产物完全一致（三者原样复制）；上游 func 的每个功能过程都必须出现在本产物的 processes 中（同名过程，不得遗漏或改写名称）；doc_validate 复验时请传入与生成时相同的 upstream 路径。',
+    suggestion: 'index/funcId/desiredCfps 必须与上游 func 产物完全一致（原样复制），reqNo/reqTitle/l1Name/l2Name/l3Name 同样原样复制（上游声明了才复制），均不得改写；上游 func 的每个功能过程都必须出现在本产物的 processes 中（同名过程，不得遗漏或改写名称）；doc_validate 复验时请传入与生成时相同的 upstream 路径。',
     check(artifact, context) {
       if (!isObject(artifact)) return []
       const upstream = Array.isArray(context?.upstream) ? context.upstream : []
@@ -97,6 +100,14 @@ export const rules = [
       expect('index', func.index)
       expect('funcId', func.funcId)
       expect('desiredCfps', func.desiredCfps)
+      const expectPresent = (field, funcValue) => {
+        if (funcValue !== undefined) expect(field, funcValue)
+      }
+      expectPresent('reqNo', func.reqNo)
+      expectPresent('reqTitle', func.reqTitle)
+      expectPresent('l1Name', func.l1Name)
+      expectPresent('l2Name', func.l2Name)
+      expectPresent('l3Name', func.l3Name)
       const techNames = new Set(getProcesses(artifact).map(p => (isObject(p) && typeof p.name === 'string' ? p.name : '')))
       for (const [index, proc] of getProcesses(func).entries()) {
         const name = isObject(proc) && typeof proc.name === 'string' ? proc.name : ''

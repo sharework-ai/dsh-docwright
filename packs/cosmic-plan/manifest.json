@@ -1,6 +1,6 @@
 {
   "name": "cosmic-plan",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": {
     "zh": "COSMIC 功能点估算计划：给定一条需求与绿色的项目上下文，规划要新增或修改哪些模块——每个被修改的叶子模块成为一个功能，带层级化命名与 CFP 估算（消费绿色的 cosmic-context 产物；requires topic——每话题一条需求）。",
     "en": "COSMIC function-point estimation plan: given one requirement and the green project context, plan which modules to add or modify — each changed leaf module becomes one function with hierarchical names and estimated CFPs (consumes a green cosmic-context artifact; requires topic — one requirement per topic)."

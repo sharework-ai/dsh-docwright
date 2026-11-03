@@ -1,28 +1,35 @@
-# 需求分析文档：{{funcId}}
-
-- 文档类型：req（需求分析）
-- 需求索引：index {{index}}
-- 目标 CFP：{{desiredCfps}}
+# 需求分析文档：{{reqNo}}_{{reqTitle}}
 
 ## 功能描述
 
+{{#if l1Name}}
+### {{l1Name}}
+
+{{/if}}
+{{#if l2Name}}
+#### {{l2Name}}
+
+{{/if}}
+{{#if l3Name}}
+##### {{l3Name}}
+
+{{/if}}
+**功能编号**
+
+{{funcId}}
+
+**功能描述**
+
 {{funcDesc}}
 
-## 功能用户与用户故事
+**用户故事**
 
-{{#each functionalUsers}}
-### {{role}}
-
-{{description}}
-
-{{#each userStories}}- {{this}}
-{{/each}}
+{{#each (flatten (pluck functionalUsers "userStories"))}}
+{{inc @index}}. {{this}}
 {{/each}}
 
-## 业务规则
+**业务规则**
 
-| 类型 | 规则描述 |
-|------|----------|
 {{#each businessRules}}
-| {{ruleType}} | {{description}} |
+{{inc @index}}. {{description}}
 {{/each}}

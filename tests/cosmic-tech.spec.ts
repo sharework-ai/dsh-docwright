@@ -166,6 +166,11 @@ describe('cosmic-tech mutation tests (guardrail-is-real)', () => {
     expect(issueRuleIds(validateOf(tech, 'zh-CN', wrongId, undefined, funcContext(func)))).toContain('tech/func-alignment')
     const wrongCfps = mutate(tech.goldenSample, d => { d.desiredCfps = 40 })
     expect(issueRuleIds(validateOf(tech, 'zh-CN', wrongCfps, undefined, funcContext(func)))).toContain('tech/func-alignment')
+    // Display-context fields: a wrong copy (or a dropped level the upstream declares) is caught.
+    const wrongReqNo = mutate(tech.goldenSample, d => { d.reqNo = 'OTHER-002' })
+    expect(issueRuleIds(validateOf(tech, 'zh-CN', wrongReqNo, undefined, funcContext(func)))).toContain('tech/func-alignment')
+    const missingL1 = mutate(tech.goldenSample, d => { delete d.l1Name })
+    expect(issueRuleIds(validateOf(tech, 'zh-CN', missingL1, undefined, funcContext(func)))).toContain('tech/func-alignment')
     // A renamed tech process leaves an upstream func process uncovered.
     const renamed = mutate(tech.goldenSample, d => { (d.processes as Array<{ name: string }>)[0]!.name = '收藏条目' })
     expect(issueRuleIds(validateOf(tech, 'zh-CN', renamed, undefined, funcContext(func)))).toContain('tech/func-alignment')

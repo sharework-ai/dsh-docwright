@@ -177,11 +177,28 @@ describe('cosmic-func mutation tests (guardrail-is-real)', () => {
     expect(issueRuleIds(validateOf(func, 'zh-CN', wrongId, reqContext(req)))).toContain('func/req-alignment')
     const wrongCfps = mutate(func.goldenSample, d => { d.desiredCfps = 40 })
     expect(issueRuleIds(validateOf(func, 'zh-CN', wrongCfps, reqContext(req)))).toContain('func/req-alignment')
+    // Display-context fields: a wrong copy is caught, a legacy upstream without them still validates.
+    const wrongReqTitle = mutate(func.goldenSample, d => { d.reqTitle = '别的需求' })
+    expect(issueRuleIds(validateOf(func, 'zh-CN', wrongReqTitle, reqContext(req)))).toContain('func/req-alignment')
+    const legacy = structuredClone(req.goldenSample) as Record<string, unknown>
+    delete legacy.reqNo
+    delete legacy.reqTitle
+    delete legacy.l1Name
+    delete legacy.l2Name
+    expect(issueRuleIds(validateOf(func, 'zh-CN', func.goldenSample, { upstream: [legacy] }))).not.toContain('func/req-alignment')
     // No upstream in the context (e.g. doc_validate without the upstream argument): loud, not silent.
     expect(issueRuleIds(validateOf(func, 'zh-CN', func.goldenSample))).toContain('func/req-alignment')
     // Upstream that is not a req artifact: same loud failure.
     const notReq: RuleContext = { upstream: [{ docType: 'func' }] }
     expect(issueRuleIds(validateOf(func, 'zh-CN', func.goldenSample, notReq))).toContain('func/req-alignment')
+  })
+
+  it('func-desc-min-length: a too-short functional description is caught', async () => {
+    const { func, req } = await packs()
+    const draft = mutate(func.goldenSample, d => { d.funcDesc = '太短的功能描述' })
+    const issues = validateOf(func, 'zh-CN', draft, reqContext(req))
+    expect(issueRuleIds(issues)).toContain('func/func-desc-min-length')
+    expect(issues.find(i => i.ruleId === 'func/func-desc-min-length')?.severity).toBe('error')
   })
 
   it('every ERROR issue carries a suggestion across all mutations', async () => {

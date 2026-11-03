@@ -1,29 +1,9 @@
-# Function-Point Breakdown: {{funcId}}
+# Function-Point Breakdown: {{reqNo}}_{{reqTitle}}
 
-- Document type: tech (technical breakdown)
-- Requirement index: index {{index}}
-- Target CFPs: {{desiredCfps}}
-
-## Data-movement sequence diagrams
-
-{{#each diagrams}}
-```mermaid
-{{this}}
-```
-{{/each}}
-
-## Breakdown table
-
+| Requirement No. | Requirement Name | Level 1 Module | Level 2 Module | Level 3 Module | Functional Users | Functional User Requirement | Triggering Event | Process | Sub-process Description | Movement Type | Data Group | Data Properties | CFP | Revision |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 {{#each processes}}
-### {{index}}. {{name}}
-
-Originator: {{originator}}　Receiver: {{receiver}}　Origination event: {{origination_event}}
-
-{{description}}
-
-| # | Data movement | Type | Data group | Data properties | CFP |
-|---|---------------|------|------------|-----------------|-----|
 {{#each subProcesses}}
-| {{@index}} | {{description}} | {{dataMovementType}} | {{dataGroup}} | {{dataProperties}} | {{cfp}} |
+| {{../../reqNo}} | {{../../reqTitle}} | {{../../l1Name}} | {{../../l2Name}} | {{../../l3Name}} | Originator: {{../originator}} Receiver: {{../receiver}} | {{../origination_event}} | {{../name}} | {{../name}} | {{description}} | {{dataMovementType}} | {{dataGroup}} | {{#each dataProperties}}{{#if @index}}, {{/if}}{{this}}{{/each}} | {{cfp}} | |
 {{/each}}
 {{/each}}

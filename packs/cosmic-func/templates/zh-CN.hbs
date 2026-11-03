@@ -1,21 +1,33 @@
-# 概要设计文档：{{funcId}}
+# 需求解决方案：{{reqNo}}_{{reqTitle}}
 
-- 文档类型：func（概要设计）
-- 需求索引：index {{index}}
-- 目标 CFP：{{desiredCfps}}
+{{#if l1Name}}
+## {{l1Name}}
 
-## 功能时序图
+{{/if}}
+{{#if l2Name}}
+### {{l2Name}}
+
+{{/if}}
+{{#if l3Name}}
+#### {{l3Name}}
+
+{{/if}}
+**功能描述**
+
+{{funcDesc}}
+
+**功能时序图**
 
 {{#each diagrams}}
 ```mermaid
 {{this}}
 ```
+
 {{/each}}
+**功能过程清单**
 
-## 功能过程清单
-
-| # | 过程名称 | 发起者 | 接收者 | 触发事件 | 说明 |
-|---|----------|--------|--------|----------|------|
+| 序号 | 功能过程 | 发起者 | 接收者 | 触发事件 | 功能过程描述 | 主要数据组 |
+|---|---|---|---|---|---|---|
 {{#each processes}}
-| {{index}} | {{name}} | {{originator}} | {{receiver}} | {{origination_event}} | {{description}} |
+| {{index}} | {{name}} | {{originator}} | {{receiver}} | {{origination_event}} | {{description}} | {{#each dataGroups}}{{#if @index}}、{{/if}}{{this}}{{/each}} |
 {{/each}}

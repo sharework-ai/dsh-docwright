@@ -48,5 +48,14 @@
     "pattern": { "param": "functionalUserPattern" },
     "mustMatch": true,
     "suggestion": "The receiver failed the functional-user regex (effective param functionalUserPattern; by default it excludes storage-facility words like 数据库/文件存储; set the param to an empty string to disable this check): functional users are business roles (people, external systems, devices); storage is an implementation vehicle and cannot receive a process result. Name the real business receiver."
+  },
+  {
+    "id": "func/func-desc-min-length",
+    "severity": "error",
+    "given": "$",
+    "field": "funcDesc",
+    "kind": "minLength",
+    "min": 40,
+    "suggestion": "The functional description (funcDesc) is too short: the solution document's description must be one full paragraph (at least 40 characters), expanded from the upstream req artifact's funcDesc, covering core steps, key business rules, and quality attributes."
   }
 ]

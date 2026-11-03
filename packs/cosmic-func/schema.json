@@ -1,16 +1,22 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "COSMIC Func Document",
-  "description": "Functional-process design artifact migrated from cosmic-claude assets/schemas/func.json; metadata dropped (no manual-editing UX in docwright), desiredCfps added as the chain anchor copied from the upstream req artifact.",
+  "description": "Functional-process design artifact migrated from cosmic-claude assets/schemas/func.json; metadata dropped (no manual-editing UX in docwright), desiredCfps added as the chain anchor copied from the upstream req artifact, funcDesc and per-process dataGroups restored from cosmic-claude for the solution-document format.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["docType", "language", "index", "desiredCfps", "funcId", "diagrams", "processes"],
+  "required": ["docType", "language", "index", "desiredCfps", "reqNo", "reqTitle", "l1Name", "funcId", "funcDesc", "diagrams", "processes"],
   "properties": {
     "docType": { "const": "func" },
     "language": { "type": "string", "default": "zh-CN" },
     "index": { "type": "integer", "minimum": 1, "description": "1-based position of this function in the upstream plan functions array; must equal the upstream req artifact's index" },
     "desiredCfps": { "type": "integer", "minimum": 1, "description": "CFP budget copied from the upstream req artifact's desiredCfps; anchors the later tech-stage breakdown" },
+    "reqNo": { "type": "string", "minLength": 1, "description": "Requirement number copied verbatim from the upstream req artifact's reqNo (display context for the solution-document format)" },
+    "reqTitle": { "type": "string", "minLength": 1, "description": "Requirement title copied verbatim from the upstream req artifact's reqTitle (display context)" },
+    "l1Name": { "type": "string", "minLength": 1, "description": "Level 1 function name copied verbatim from the upstream req artifact's l1Name" },
+    "l2Name": { "type": "string", "minLength": 1, "description": "Level 2 function name copied verbatim from the upstream req artifact's l2Name; present only when the upstream declared it (moduleLevels >= 2)" },
+    "l3Name": { "type": "string", "minLength": 1, "description": "Level 3 function name copied verbatim from the upstream req artifact's l3Name; present only when the upstream declared it (moduleLevels = 3)" },
     "funcId": { "type": "string", "pattern": "^[A-Z0-9]{1,8}(?:-[A-Z0-9]{1,8})+$" },
+    "funcDesc": { "type": "string", "minLength": 10, "maxLength": 2000, "description": "Functional description expanded from the upstream req artifact's funcDesc into a full solution-document paragraph; minimum content length enforced by rule func/func-desc-min-length" },
     "diagrams": {
       "type": "array",
       "description": "Full mermaid diagram source strings (sequence diagrams of the functional processes)",
@@ -24,14 +30,20 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["index", "name", "description", "originator", "receiver", "origination_event"],
+        "required": ["index", "name", "description", "originator", "receiver", "origination_event", "dataGroups"],
         "properties": {
           "index": { "type": "integer", "minimum": 1, "description": "Auto-incremented 1-based process number" },
           "name": { "type": "string", "minLength": 1, "description": "Unique business-level process name (business object + action; design/technical words are rejected by rules)" },
           "description": { "type": "string", "minLength": 10, "description": "What this process does for the originating user" },
           "originator": { "type": "string", "minLength": 1, "description": "Who triggers this process (must differ from receiver)" },
           "receiver": { "type": "string", "minLength": 1, "description": "Who (system part) implements this process" },
-          "origination_event": { "type": "string", "minLength": 10, "description": "The triggering event of this process" }
+          "origination_event": { "type": "string", "minLength": 10, "description": "The triggering event of this process" },
+          "dataGroups": {
+            "type": "array",
+            "description": "Major data groups this process works on (rendered as the 主要数据组 column of the solution document); refined per-subprocess at the tech stage",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
         }
       }
     }

@@ -1,28 +1,35 @@
-# Requirements Analysis: {{funcId}}
-
-- Document type: req (requirements analysis)
-- Plan index: index {{index}}
-- Target CFP: {{desiredCfps}}
+# Requirements Analysis: {{reqNo}}_{{reqTitle}}
 
 ## Functional Description
 
+{{#if l1Name}}
+### {{l1Name}}
+
+{{/if}}
+{{#if l2Name}}
+#### {{l2Name}}
+
+{{/if}}
+{{#if l3Name}}
+##### {{l3Name}}
+
+{{/if}}
+**Function ID**
+
+{{funcId}}
+
+**Functional Description**
+
 {{funcDesc}}
 
-## Functional Users & User Stories
+**User Stories**
 
-{{#each functionalUsers}}
-### {{role}}
-
-{{description}}
-
-{{#each userStories}}- {{this}}
-{{/each}}
+{{#each (flatten (pluck functionalUsers "userStories"))}}
+{{inc @index}}. {{this}}
 {{/each}}
 
-## Business Rules
+**Business Rules**
 
-| Type | Description |
-|------|-------------|
 {{#each businessRules}}
-| {{ruleType}} | {{description}} |
+{{inc @index}}. {{description}}
 {{/each}}

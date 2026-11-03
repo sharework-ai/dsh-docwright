@@ -18,7 +18,7 @@ async function loadCosmic() {
 describe('pack loader', () => {
   it('loads the builtin cosmic-plan pack with both languages', async () => {
     const pack = await loadCosmic()
-    expect(pack.manifest.version).toBe('0.6.1')
+    expect(pack.manifest.version).toBe('0.7.0')
     expect(pack.manifest.consumes).toEqual(['cosmic-context'])
     for (const lang of ['zh-CN', 'en-US']) {
       expect(pack.prompts.get(lang)).toContain('{{materials}}')

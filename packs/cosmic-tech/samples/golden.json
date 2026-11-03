@@ -3,6 +3,10 @@
   "language": "zh-CN",
   "index": 1,
   "desiredCfps": 35,
+  "reqNo": "REQ-001-EXAMPLE",
+  "reqTitle": "商品收藏功能",
+  "l1Name": "个人收藏",
+  "l2Name": "添加收藏",
   "funcId": "KERQ-352-01",
   "diagrams": [
     "sequenceDiagram\n    autonumber\n    actor u as 注册用户\n    participant fav as 收藏服务\n    participant db as 收藏库\n    u->>fav: E 收藏请求\n    fav->>db: W 收藏记录",
