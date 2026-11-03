@@ -74,7 +74,7 @@ async function makeDeps(llm: unknown) {
 }
 
 describe('cosmic-func pack shape', () => {
-  it('declares the chain and the four function rules', async () => {
+  it('declares the chain and the five function rules', async () => {
     const { func } = await packs()
     expect(func.manifest.consumes).toEqual(['cosmic-req'])
     expect(func.manifest.languages).toEqual(['zh-CN', 'en-US'])
@@ -83,6 +83,7 @@ describe('cosmic-func pack shape', () => {
       'func/originator-receiver-distinct',
       'func/process-name-unique',
       'func/process-index-sequence',
+      'func/process-count-vs-budget',
       'func/req-alignment',
     ])
   })
@@ -167,6 +168,17 @@ describe('cosmic-func mutation tests (guardrail-is-real)', () => {
     const { func, req } = await packs()
     const draft = mutate(func.goldenSample, d => { (d.processes as Array<{ index: number }>)[2]!.index = 9 })
     expect(issueRuleIds(validateOf(func, 'zh-CN', draft, reqContext(req)))).toContain('func/process-index-sequence')
+  })
+
+  it('process-count-vs-budget: fewer processes than ceil(desiredCfps/3) is caught (tech budget would be unreachable)', async () => {
+    const { func, req } = await packs()
+    // Golden: desiredCfps 35 needs ceil(35/3)=12; cutting to 11 makes tech mathematically unreachable.
+    const draft = mutate(func.goldenSample, d => { d.processes = (d.processes as unknown[]).slice(0, 11) })
+    const issues = validateOf(func, 'zh-CN', draft, reqContext(req))
+    expect(issueRuleIds(issues)).toContain('func/process-count-vs-budget')
+    expect(issues.find(i => i.ruleId === 'func/process-count-vs-budget')?.severity).toBe('error')
+    // The full golden stays green: 14 >= 12.
+    expect(issueRuleIds(validateOf(func, 'zh-CN', func.goldenSample, reqContext(req)))).not.toContain('func/process-count-vs-budget')
   })
 
   it('req-alignment: index/funcId/desiredCfps mismatches and missing upstream are all caught', async () => {
