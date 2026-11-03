@@ -93,6 +93,33 @@ export const rules = [
     },
   },
   {
+    // Process count must be mathematically sufficient for the downstream tech
+    // stage: every process carries at most 3 CFPs (the ERX pattern), so fewer
+    // than ceil(desiredCfps/3) processes makes the CFP budget unreachable and
+    // tech/cfp-total-vs-budget can never go green (2026-11-03 real run: 8
+    // processes against a 26-CFP budget exhausted the tech repair loop).
+    id: 'func/process-count-vs-budget',
+    severity: 'error',
+    suggestion: '功能过程数量不足：每个功能过程在下游 tech 最多拆出 3 个数据移动（ERX=3 CFP），过程数少于 ceil(desiredCfps/3) 时 CFP 总预算在数学上不可达；按约 desiredCfps÷2.5 个过程重新分解功能，把粗粒度过程拆细。',
+    check(artifact) {
+      if (!isObject(artifact)) return []
+      const desired = artifact.desiredCfps
+      if (typeof desired !== 'number' || !Number.isInteger(desired) || desired < 1) return []
+      const count = getProcesses(artifact).length
+      const min = Math.ceil(desired / 3)
+      if (count < min) {
+        return [{
+          jsonPath: '$.processes',
+          message: say(artifact,
+            `功能过程数量不足：desiredCfps=${desired} 至少需要 ${min} 个过程（每过程最多 3 CFP），实际 ${count} 个`,
+            `Too few functional processes: desiredCfps=${desired} requires at least ${min} processes (at most 3 CFPs each), got ${count}`),
+          snapshot: `processes=${count}`,
+        }]
+      }
+      return []
+    },
+  },
+  {
     // E303 pattern (generalized in the req pack): index/funcId/desiredCfps
     // must align with the upstream req artifact; reqNo/reqTitle/l1Name/
     // l2Name/l3Name carry the display context and must be copied verbatim —
