@@ -178,11 +178,11 @@ try {
   }
   {
     const planMd = await markdownOf(plan.artifactPath)
-    if (!planMd.includes('# 需求分解规划书') || !planMd.includes('需求编号及标题：') || !planMd.includes('|一级功能|二级功能|三级功能|功能编号|类型|功能描述|预计CFP数量|')) {
+    if (!planMd.includes('# Requirement Breakdown Plan') || !planMd.includes('需求编号及标题：') || !planMd.includes('|一级功能|二级功能|三级功能|功能编号|类型|功能描述|预计CFP数量|')) {
       fail(`plan markdown misses the breakdown-plan markers: ${planMd.slice(0, 200)}`)
     }
     const reqMd = await markdownOf(req.artifactPath)
-    if (!reqMd.includes('# 需求分析文档：') || !reqMd.includes('**功能编号**') || !reqMd.includes('**业务规则**')) {
+    if (!reqMd.includes('# Requirements Analysis: ') || !reqMd.includes('**功能编号**') || !reqMd.includes('**业务规则**')) {
       fail(`req markdown misses the analysis-document markers: ${reqMd.slice(0, 200)}`)
     }
     console.log('e2e-real-llm: 3a. plan/req markdown carry the solution-document markers')
@@ -195,7 +195,7 @@ try {
   } as never, exec as never) as { artifactPath: string; receipt: { isValid: boolean; iterations: number } }
   if (func.receipt.isValid !== true) fail(`func not green: rounds ${func.receipt.iterations}, rules ${JSON.stringify(func.receipt.rules)}`)
   const funcMd = await markdownOf(func.artifactPath)
-  if (!funcMd.includes('# 需求解决方案：') || !funcMd.includes('**功能过程清单**') || !funcMd.includes('主要数据组')) {
+  if (!funcMd.includes('# Functional Process Design: ') || !funcMd.includes('**功能过程清单**') || !funcMd.includes('主要数据组')) {
     fail(`func markdown misses the solution-document markers: ${funcMd.slice(0, 200)}`)
   }
   console.log(`e2e-real-llm: 3b. func green in ${func.receipt.iterations} round(s) (${func.artifactPath.split('/').pop()}, solution markers OK)`)
@@ -205,7 +205,7 @@ try {
   } as never, exec as never) as { artifactPath: string; receipt: { isValid: boolean; iterations: number } }
   if (tech.receipt.isValid !== true) fail(`tech not green: rounds ${tech.receipt.iterations}, rules ${JSON.stringify(tech.receipt.rules)}`)
   const techMd = await markdownOf(tech.artifactPath)
-  if (!techMd.includes('# 功能点拆分表：') || !techMd.includes('| 需求编号 | 需求名称 | 一级功能模块 |')) {
+  if (!techMd.includes('# Function-Point Breakdown: ') || !techMd.includes('| 需求编号 | 需求名称 | 一级功能模块 |')) {
     fail(`tech markdown misses the breakdown-table markers: ${techMd.slice(0, 200)}`)
   }
   const techArtifact = JSON.parse(await (await import('node:fs/promises')).readFile(tech.artifactPath, 'utf8')) as { reqNo: string; processes: Array<{ subProcesses: unknown[] }> }

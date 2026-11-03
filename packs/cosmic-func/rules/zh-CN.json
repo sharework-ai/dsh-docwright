@@ -56,6 +56,6 @@
     "field": "funcDesc",
     "kind": "minLength",
     "min": 40,
-    "suggestion": "功能描述（funcDesc）过短：需求解决方案的功能描述须是一段完整段落（不少于 40 个字符），在上游 req 的 funcDesc 基础上扩写，覆盖核心环节、关键业务规则与质量属性。"
+    "suggestion": "功能描述（funcDesc）过短：功能过程设计文档的功能描述须是一段完整段落（不少于 40 个字符），在上游 req 的 funcDesc 基础上扩写，覆盖核心环节、关键业务规则与质量属性。"
   }
 ]
