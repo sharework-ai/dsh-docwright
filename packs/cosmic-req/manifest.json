@@ -1,6 +1,6 @@
 {
   "name": "cosmic-req",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": {
     "zh": "COSMIC 需求分析（针对计划中的一个功能）：功能描述、功能用户（角色或第三方系统）及其用户故事——后续流程分析的主要依据（哪个角色或模块做什么）——以及业务规则（消费绿色的 cosmic-plan 产物；requires topic——每话题一条需求）。",
     "en": "COSMIC requirements analysis for one plan function: functional description, functional users (roles or third-party systems) with user stories — the primary source for later flow analysis (which role or module does what) — and business rules (consumes a green cosmic-plan artifact; requires topic — one requirement per topic)."
@@ -15,7 +15,7 @@
   "params": {
     "functionalUserRoles": {
       "type": "string",
-      "default": "customer,operator,manager,business-partner,supplier,3rd-payment-service",
+      "default": "customer,operator,manager,business-partner,supplier,third-payment-service",
       "description": {
         "zh": "系统级功能用户角色的逗号分隔允许清单（rule req/functional-user-roles）；按部署覆盖",
         "en": "Comma-separated allowlist of system-level functional user roles (rule req/functional-user-roles); override per deployment"
