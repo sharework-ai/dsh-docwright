@@ -1,7 +1,7 @@
 # docwright 功能说明书（MVP）
 
 Status: CURRENT — 本文描述插件现状，与代码不一致时以代码为准。
-Repo: sharework-ai/docwright
+Repo: sharework-ai/dsh-docwright
 Updated: 2026-10-14
 
 > 本文前身是 2026-08-27 /office-hours + /autoplan 产出的设计决策文档（含 44 条决策审计、评审报告）。现已重写为 current-state 功能说明书；遵循"规格零历史"纪律，正文不含设计推演——原决策过程记录只在 git 历史中（`git log -- docs/designs/docwright-mvp.md`），进行中的设计提案见 docs/designs/ 下各 PROPOSED 文档。
