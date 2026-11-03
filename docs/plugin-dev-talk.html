@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek Harness 插件开发 — dsh-docwright 设计思路和研发过程</title>
+<style>
+  :root{
+    --bg:#eef1f5; --paper:#ffffff; --ink:#1a2233; --muted:#5b6577; --line:#e3e8ef;
+    --blue:#16407c; --accent:#2563eb; --teal:#0e7490; --green:#15803d; --red:#b91c1c;
+    --amber:#b45309; --violet:#6d28d9;
+    --code-bg:#0f172a; --code-ink:#dbe4f3;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--ink); overflow:hidden;
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",system-ui,-apple-system,sans-serif;
+  }
+  /* ---------- canvas ---------- */
+  .slide{
+    display:none; position:absolute; left:50%; top:50%;
+    width:1280px; height:720px; transform:translate(-50%,-50%);
+    background:var(--paper); border-radius:14px;
+    box-shadow:0 18px 50px rgba(20,32,60,.14),0 2px 8px rgba(20,32,60,.08);
+    padding:56px 68px 64px; flex-direction:column; overflow:hidden;
+  }
+  .slide.active{display:flex}
+  .slide::before{ /* top hairline accent */
+    content:""; position:absolute; left:0; top:0; right:0; height:5px;
+    background:linear-gradient(90deg,var(--blue),var(--accent) 55%,var(--teal));
+  }
+  .kicker{
+    font-size:13px; font-weight:700; letter-spacing:.18em; color:var(--accent);
+    text-transform:uppercase; margin-bottom:10px;
+  }
+  h2{font-size:33px; line-height:1.25; color:var(--blue); margin-bottom:22px; font-weight:800}
+  h2 small{font-size:17px; color:var(--muted); font-weight:500; margin-left:14px}
+  .body{flex:1; display:flex; flex-direction:column; min-height:0}
+  p{font-size:19px; line-height:1.55}
+  .lead{font-size:20.5px; line-height:1.6}
+  .lead b, p b{color:var(--blue)}
+  .muted{color:var(--muted)}
+  .small{font-size:15.5px}
+  .cols{display:flex; gap:26px; flex:1; min-height:0}
+  .col{flex:1; min-width:0}
+  ul.pts{list-style:none}
+  ul.pts>li{
+    position:relative; padding-left:24px; margin-bottom:11px;
+    font-size:18.5px; line-height:1.5;
+  }
+  ul.pts>li::before{
+    content:""; position:absolute; left:4px; top:.62em; width:8px; height:8px;
+    border-radius:2px; background:var(--accent); transform:rotate(45deg);
+  }
+  ul.pts ul{list-style:none; margin-top:7px}
+  ul.pts ul li{position:relative; padding-left:18px; font-size:16.5px; color:var(--muted); margin-bottom:5px; line-height:1.45}
+  ul.pts ul li::before{content:"–"; position:absolute; left:0; color:var(--accent)}
+  code.inline{
+    font-family:var(--mono); font-size:.88em; background:#eef2f8; color:var(--blue);
+    border:1px solid #dfe6f1; border-radius:6px; padding:1px 7px; white-space:nowrap;
+  }
+  /* ---------- cards ---------- */
+  .cards{display:flex; gap:20px; flex:1; min-height:0}
+  .card{
+    flex:1; background:#f8fafd; border:1px solid var(--line); border-radius:12px;
+    padding:20px 22px; display:flex; flex-direction:column;
+  }
+  .card h3{font-size:19.5px; color:var(--blue); margin-bottom:10px; font-weight:800}
+  .card p, .card li{font-size:16.5px; line-height:1.5; color:var(--ink)}
+  .card .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:30px; height:30px; border-radius:8px; background:var(--blue); color:#fff;
+    font-size:16px; font-weight:800; margin-bottom:12px;
+  }
+  .card .tag{
+    align-self:flex-start; font-size:13px; font-weight:700; letter-spacing:.06em;
+    padding:3px 10px; border-radius:999px; margin-bottom:10px;
+  }
+  .tag.red{background:#fdecec; color:var(--red)}
+  .tag.green{background:#e7f6ec; color:var(--green)}
+  .tag.blue{background:#e7eefb; color:var(--accent)}
+  .tag.amber{background:#fdf3e3; color:var(--amber)}
+  .tag.teal{background:#e3f3f7; color:var(--teal)}
+  .card ul{list-style:none}
+  .card ul li{position:relative; padding-left:16px; margin-bottom:7px}
+  .card ul li::before{content:"·"; position:absolute; left:2px; color:var(--accent); font-weight:900}
+  /* ---------- tables ---------- */
+  table{border-collapse:collapse; width:100%}
+  th,td{border:1px solid var(--line); padding:8px 13px; font-size:16px; text-align:left; vertical-align:top; line-height:1.4}
+  th{background:#f0f4fa; color:var(--blue); font-weight:800; font-size:15.5px}
+  tr:nth-child(even) td{background:#fbfcfe}
+  td code, th code{font-family:var(--mono); font-size:.9em; color:var(--teal)}
+  /* ---------- code blocks ---------- */
+  .code{
+    background:var(--code-bg); color:var(--code-ink); border-radius:10px;
+    font-family:var(--mono); font-size:15.5px; line-height:1.5;
+    padding:16px 20px; overflow:hidden; white-space:pre;
+  }
+  .code.small{font-size:14px; padding:13px 17px; line-height:1.45}
+  .code .k{color:#7dd3fc}      /* keyword */
+  .code .s{color:#fca5a5}      /* string */
+  .code .c{color:#64748b; font-style:italic} /* comment */
+  .code .n{color:#fbbf24}      /* number */
+  .code .f{color:#a5f3a5}      /* func/key/flag */
+  .code .p{color:#94a3b8}      /* prompt/punct dim */
+  .codehead{
+    font-family:var(--mono); font-size:12.5px; color:var(--muted);
+    margin-bottom:6px; letter-spacing:.04em;
+  }
+  /* ---------- flow / chain diagrams ---------- */
+  .flow{display:flex; align-items:stretch; gap:0; margin:8px 0}
+  .fnode{
+    background:#f0f4fa; border:1.5px solid #c9d6ea; border-radius:10px;
+    padding:12px 16px; text-align:center; min-width:0;
+  }
+  .fnode b{display:block; font-size:17px; color:var(--blue)}
+  .fnode span{display:block; font-size:13.5px; color:var(--muted); margin-top:3px; line-height:1.35}
+  .fnode.hl{background:#e7eefb; border-color:var(--accent)}
+  .fnode.dark{background:var(--blue); border-color:var(--blue)}
+  .fnode.dark b{color:#fff}
+  .fnode.dark span{color:#c9d9f5}
+  .farr{
+    display:flex; align-items:center; color:var(--accent); font-weight:900;
+    font-size:22px; padding:0 10px; flex:none;
+  }
+  .farr .lbl{font-size:13px; color:var(--amber); font-weight:700; margin-left:5px}
+  /* ---------- pipeline ---------- */
+  .pipe{display:flex; align-items:center; gap:6px; flex-wrap:nowrap}
+  .step{
+    background:#f0f4fa; border:1px solid #ccd7e8; border-radius:8px;
+    font-size:14.5px; padding:8px 12px; color:var(--ink); white-space:nowrap;
+  }
+  .step b{color:var(--blue)}
+  .pa{color:var(--accent); font-weight:900; font-size:16px; flex:none}
+  /* ---------- timeline ---------- */
+  .tl{display:flex; gap:22px; flex:1; min-height:0}
+  .tl .phase{flex:1; background:#f8fafd; border:1px solid var(--line); border-radius:12px; padding:18px 20px; position:relative}
+  .tl .phase::before{content:""; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:12px 0 0 12px; background:var(--accent)}
+  .tl .p2::before{background:var(--teal)}
+  .tl .p3::before{background:var(--violet)}
+  .tl h3{font-size:18px; color:var(--blue); margin-bottom:2px}
+  .tl .date{font-family:var(--mono); font-size:13px; color:var(--muted); margin-bottom:10px}
+  .tl li{font-size:15px; line-height:1.45}
+  /* ---------- misc ---------- */
+  .callout{
+    background:#eef6ff; border:1px solid #cadcf5; border-left:4px solid var(--accent);
+    border-radius:8px; padding:13px 18px; font-size:17px; line-height:1.5;
+  }
+  .callout.green{background:#eefaf2; border-color:#bfe5cb; border-left-color:var(--green)}
+  .callout.amber{background:#fdf7ea; border-color:#f0dfb6; border-left-color:var(--amber)}
+  .footnote{font-size:14px; color:var(--muted); margin-top:auto; padding-top:12px}
+  .statbar{
+    display:flex; gap:14px; margin-top:26px;
+  }
+  .stat{
+    flex:1; background:#f8fafd; border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; text-align:center;
+  }
+  .stat b{display:block; font-size:23px; color:var(--blue); font-family:var(--mono)}
+  .stat span{font-size:13.5px; color:var(--muted)}
+  /* ---------- title slide ---------- */
+  .slide.title{align-items:center; justify-content:center; text-align:center; padding:70px}
+  .slide.title::before{height:8px}
+  .title .sup{font-size:17px; letter-spacing:.35em; color:var(--accent); font-weight:700; margin-bottom:26px}
+  .title h1{font-size:52px; color:var(--blue); font-weight:900; letter-spacing:.02em; line-height:1.2}
+  .title .sub{font-size:22.5px; color:var(--ink); margin-top:20px; font-weight:600}
+  .title .sub small{color:var(--muted); font-weight:400}
+  .title .meta{margin-top:34px; font-size:16px; color:var(--muted); font-family:var(--mono)}
+  .title .statbar{width:100%; justify-content:center}
+  .title .stat{flex:0 1 auto; padding:10px 22px}
+  /* ---------- section divider ---------- */
+  .slide.section{background:linear-gradient(135deg,#12295c 0%,#16407c 55%,#0e7490 100%); color:#fff}
+  .slide.section::before{background:rgba(255,255,255,.25)}
+  .slide.section .part{font-size:16px; letter-spacing:.3em; color:#9fc3f7; font-weight:700; margin-bottom:24px}
+  .slide.section h2{color:#fff; font-size:44px; margin-bottom:18px}
+  .slide.section .lede{font-size:20px; color:#cfe0fa; line-height:1.65; max-width:900px}
+  .slide.section .items{margin-top:26px; display:flex; gap:14px; flex-wrap:wrap}
+  .slide.section .chip{
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.28);
+    border-radius:999px; padding:7px 18px; font-size:15.5px; color:#eaf2ff;
+  }
+  /* ---------- demo slide ---------- */
+  .demo-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; flex:1; min-height:0}
+  .demo{
+    background:#f8fafd; border:1px solid var(--line); border-radius:11px; padding:15px 18px;
+  }
+  .demo b{color:var(--blue); font-size:17.5px}
+  .demo .what{font-size:15.5px; color:var(--muted); margin-top:6px; line-height:1.45}
+  .demo .what em{color:var(--amber); font-style:normal; font-weight:700}
+  /* ---------- HUD ---------- */
+  #hud{
+    position:fixed; right:18px; bottom:14px; font-family:var(--mono); font-size:13px;
+    color:#3c4a63; background:rgba(255,255,255,.85); border:1px solid var(--line);
+    padding:4px 12px; border-radius:999px; z-index:50; user-select:none;
+  }
+  #progress{
+    position:fixed; left:0; bottom:0; height:3.5px; background:var(--accent);
+    width:0; z-index:60; transition:width .18s ease; border-radius:0 3px 3px 0;
+  }
+  #hint{
+    position:fixed; left:18px; bottom:14px; font-size:12.5px; color:#5b6577;
+    background:rgba(255,255,255,.85); border:1px solid var(--line); padding:4px 12px;
+    border-radius:999px; z-index:50; transition:opacity .6s;
+  }
+  #notes-view{
+    display:none; position:fixed; left:0; right:0; bottom:0; max-height:38vh; overflow:auto;
+    background:#fffef2; border-top:2px solid var(--amber); padding:16px 30px; z-index:70;
+    font-size:16px; line-height:1.55; color:#3d3320; white-space:pre-wrap;
+  }
+  body.notes #notes-view{display:block}
+  /* ---------- overview ---------- */
+  body.overview .slide{display:flex; cursor:pointer}
+  body.overview #stage{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:18px;
+    position:absolute; inset:36px 30px 30px; overflow:auto; padding:4px;
+  }
+  body.overview .slide{
+    position:relative; left:auto; top:auto; transform:scale(1);
+    width:auto; height:auto; min-height:0; padding:18px 20px; border-radius:10px;
+    font-size:11px; overflow:hidden; box-shadow:0 4px 14px rgba(20,32,60,.12);
+  }
+  body.overview .slide *{font-size:inherit !important}
+  body.overview .slide h2{font-size:13px; margin-bottom:8px}
+  body.overview .slide .kicker{font-size:9px; margin-bottom:5px}
+  body.overview .slide.current{outline:3px solid var(--accent)}
+  body.overview #hud, body.overview #hint{display:none}
+  #stage{display:contents}
+  @media print{
+    body{overflow:visible; background:#fff}
+    .slide{display:flex !important; position:relative; left:auto; top:auto; transform:none !important;
+      margin:0 auto 24px; page-break-after:always; box-shadow:0 2px 10px rgba(0,0,0,.15)}
+    #hud,#progress,#hint,#notes-view{display:none !important}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- ================= 1 · 封面 ================= -->
+<section class="slide title active">
+  <div class="sup">DEEPSEEK HARNESS 插件开发</div>
+  <h1>DeepSeek Harness 插件开发</h1>
+  <div class="sub">dsh-docwright 插件<small>（通用文档生成和校验插件）</small>设计思路和研发过程</div>
+  <div class="meta">2026-11 · github.com/sharework-ai/dsh-docwright</div>
+  <div class="statbar">
+    <div class="stat"><b>0.4.2</b><span>npm 已发布</span></div>
+    <div class="stat"><b>6</b><span>内置 COSMIC pack</span></div>
+    <div class="stat"><b>5.5k / 7.2k</b><span>源码 / 测试行数</span></div>
+    <div class="stat"><b>202</b><span>commits · 13 设计文档</span></div>
+  </div>
+</section>
+
+<!-- ================= 2 · docwright 是什么 ================= -->
+<section class="slide" data-kicker="功能概览">
+  <div class="kicker">功能概览</div>
+  <h2>docwright：把"AI 生成文档"变成受控闭环</h2>
+  <div class="body">
+    <p class="lead" style="margin-bottom:18px">
+      docwright 是 deepseek-harness（dsh）的文档生成与校验插件：AI 生成<b>结构化 JSON 文档</b> →
+      按 pack 的 schema 与领域规则<b>强制校验</b> → 不合格把问题清单<b>喂回模型重写</b>，直到全绿或明确失败；
+      每份文档随盘附带<b>机器可读的验证回执（receipt）</b>，任何人可离线复验。
+    </p>
+    <div class="cols" style="flex:none; margin-bottom:18px">
+      <div class="card"><h3>核心理念一 · JSON 为中心</h3>
+        <p>文档以结构化 JSON 表示，配合 JSON Schema——所有文档可机器校验，"看起来对"不再等于"真的对"。</p></div>
+      <div class="card"><h3>核心理念二 · 场景化配套</h3>
+        <p>按工作场景组合"生成方法 + 检查方法"：<b>pack</b> = schema + 规则 + prompt + 模板的数据包，可插拔。</p></div>
+    </div>
+    <div class="callout">
+      与 instructor / BAML / Guardrails 等结构化输出框架的差异：它们只判断<b>结构对不对</b>（字段齐不齐、类型对不对），
+      判断不了<b>内容合不合格</b>——"功能描述写满 80 字""名称禁用泛化词""估算总和落在业务区间"这类标准因文档类型而异。
+      docwright 的差异化：<b>合格标准可插拔（pack）+ 校验结论可复验（receipt）</b>。
+    </div>
+    <p class="footnote">一句话分工：换文档类型 = 新写一个 pack 目录，插件零改动；改闭环 / 校验 / 回执行为 = 改插件。</p>
+  </div>
+</section>
+
+<!-- ================= 3 · 痛点 ================= -->
+<section class="slide" data-kicker="研发背景">
+  <div class="kicker">研发背景</div>
+  <h2>文档生成的三个痛点</h2>
+  <div class="body">
+    <p class="muted" style="margin-bottom:16px">工作中需要让 AI 大量生成文档，但生成过程缺少 harness 护栏，质量不可控：</p>
+    <div class="cards">
+      <div class="card">
+        <div class="num">1</div><h3>非结构化内容</h3>
+        <ul>
+          <li>AI 直出 Markdown / Word 自由文本</li>
+          <li>质量是黑箱——无法机器校验</li>
+          <li>"看起来对" ≠ "真的对"，评审全靠人肉通读</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="num">2</div><h3>没有统一的规范</h3>
+        <ul>
+          <li>"什么算合格"散落在人脑、聊天记录、模板批注里</li>
+          <li>同一个标准，两个人执行出两种结果</li>
+          <li>规范本身没有载体、没有版本</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="num">3</div><h3>要求随时变化</h3>
+        <ul>
+          <li>文档标准、版式、预算口径频繁调整</li>
+          <li>标准硬编码在 prompt / 代码里</li>
+          <li>每次调整都是一次开发</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4 · 三支柱 ================= -->
+<section class="slide" data-kicker="研发背景">
+  <div class="kicker">研发背景 · 对症下药</div>
+  <h2>三个支柱，分别对症</h2>
+  <div class="body">
+    <div class="cards" style="margin-bottom:18px">
+      <div class="card">
+        <span class="tag blue">治痛点 2 · 3</span>
+        <h3>领域规则包 pack</h3>
+        <p>合格标准<b>数据化</b>：schema + 规则 + prompt + 模板打进可插拔数据包。<br>换文档类型不换代码，标准变化不进开发流程。</p>
+      </div>
+      <div class="card">
+        <span class="tag teal">治痛点 1</span>
+        <h3>闭环修复 repair loop</h3>
+        <p>生成 → 校验 → Issue 喂回重写 → 全绿或明确失败。<br>护栏是<b>强制的</b>，不是 prompt 里的"请自觉遵守"。</p>
+      </div>
+      <div class="card">
+        <span class="tag green">治信任问题</span>
+        <h3>可复验回执 receipt</h3>
+        <p>"全绿"从一次<b>过程</b>变成一件<b>产物</b>：机器可读、离线可复验、可追溯当时规则。</p>
+      </div>
+    </div>
+    <div class="callout green">
+      <b>边界即架构：</b>插件 = 引擎（闭环、校验执行、回执、路径安全），pack = 内容（一类文档的全部领域知识）。
+      领域概念（COSMIC、CFP……）禁止进入插件代码。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 5 · 安装 ================= -->
+<section class="slide" data-kicker="安装与使用">
+  <div class="kicker">安装与使用</div>
+  <h2>两条命令接入 dsh</h2>
+  <div class="body">
+    <div class="cols" style="flex:1">
+      <div class="col" style="display:flex; flex-direction:column">
+        <div class="codehead"># 安装（装进 profile，工具即刻可用）</div>
+        <div class="code" data-lang="bash" style="flex:1">dsh plugin add @sharework-ai/dsh-docwright   # 1. 安装
+dsh                                          # 2. 起会话
+
+# 会话里第一步（确定性 quickstart，无 API key）：
+doc_validate(artifactPath: "sample.json",
+             pack: "cosmic-plan")
+
+# → 秒级全绿回执，零 LLM 调用</div>
+      </div>
+      <div class="col" style="display:flex; flex-direction:column">
+        <div class="codehead"># cordis.patch.yml — 插件配置（no hardcoded tunables）</div>
+        <div class="code" data-lang="yaml" style="flex:1">- id: docwright
+  config:
+    provider: deepseek-official  # 宿主 LLM 路由（必填）
+    model: deepseek-chat
+    packsDir: .docwright/packs   # 本地 pack 目录
+    defaultLanguage: zh-CN
+    maxIterations: 5             # 闭环轮数默认
+    maxRoundsCeiling: 10         # 轮数硬顶（宿主运维持有）
+    confirmPolicy: standard      # none/standard/strict
+    upstreamVersionPolicy: strict</div>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:14px">
+      <b>5 个工具里 3 个零 LLM</b>（doc_packs / doc_validate / doc_chain_status）——确定性操作与模型操作分家，复验和对账不花 token；
+      配置即文档：<b>全部旋钮都是 Config 字段</b>（no hardcoded tunables），cordis.yml 一处可查。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 6 · 五个工具 ================= -->
+<section class="slide" data-kicker="安装与使用">
+  <div class="kicker">安装与使用 · 能力面</div>
+  <h2>五个工具：模型可见的全部能力</h2>
+  <div class="body">
+    <table style="margin-bottom:16px">
+      <tr><th style="width:210px">工具</th><th>作用</th><th style="width:110px">LLM</th></tr>
+      <tr><td><code>doc_packs</code></td><td>能力发现：列出已装 pack、参数清单与描述（<b>拉式渐进披露</b>：工具描述不随 pack 集合变化）</td><td>零</td></tr>
+      <tr><td><code>doc_generate</code></td><td>闭环生成：素材 / 上游 → JSON → 校验 → 修复循环 → 产物 + 回执 + Markdown 三件套</td><td>是</td></tr>
+      <tr><td><code>doc_extract_params</code></td><td>素材参数抽取：模型提 <code>{value, quote}</code>，引擎机检引文逐字存在，出处可证</td><td>是</td></tr>
+      <tr><td><code>doc_validate</code></td><td>确定性复验（按回执记录的当时参数）+ <b>seal 回签</b>：人工修正的产物重新入链</td><td>零</td></tr>
+      <tr><td><code>doc_chain_status</code></td><td>扇出覆盖账目：链上每个功能的覆盖矩阵 + orphaned 产物清单</td><td>零</td></tr>
+    </table>
+    <div class="callout">
+      调用面约定：<code class="inline">pack</code> 未知名称报错并列出可用清单（跳过发现也能自愈）；
+      <code class="inline">params</code> 声明即白名单；<code class="inline">maxRounds</code> 被宿主持有的硬顶钳制——
+      <b>用户意图经模型转述，但越权在机制上不可能</b>。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 7 · 场景链 ================= -->
+<section class="slide" data-kicker="安装与使用">
+  <div class="kicker">安装与使用 · 场景化配套</div>
+  <h2>内置示例：COSMIC 场景链（6 个 pack）</h2>
+  <div class="body">
+    <div class="flow" style="margin-bottom:14px">
+      <div class="fnode"><b>cosmic-context</b><span>项目上下文<br>模块树·角色·编号规范</span></div>
+      <div class="farr">→</div>
+      <div class="fnode"><b>cosmic-plan</b><span>变更规划<br>functions[] + CFP 估算</span></div>
+      <div class="farr">→<span class="lbl">1:N</span></div>
+      <div class="fnode"><b>cosmic-req</b><span>需求分析<br>用户故事·业务规则</span></div>
+      <div class="farr">→</div>
+      <div class="fnode"><b>cosmic-func</b><span>功能过程设计<br>发起者/接收者/事件</span></div>
+      <div class="farr">→</div>
+      <div class="fnode"><b>cosmic-tech</b><span>功能点拆分<br>数据移动 ERX/EW/EX</span></div>
+    </div>
+    <ul class="pts">
+      <li><b>1:N:N:N 扇出</b>：plan 一份；req / func / tech 与 plan 的 functions 一一对应，每功能一条平行微链</li>
+      <li><b>一个需求一个 topic</b>：产物落在 <code class="inline">&lt;topic&gt;/output/</code>，素材在 <code class="inline">&lt;topic&gt;/references/</code>；context 是 workspace 级链头（项目知识只做一次）</li>
+      <li><b>每个节点产出三件套</b>：<code class="inline">&lt;name&gt;.json</code>（产物）+ <code class="inline">&lt;name&gt;.receipt.json</code>（回执）+ <code class="inline">&lt;name&gt;.md</code>（人读渲染）</li>
+      <li><b>上下游契约</b>：下游只接受<b>带绿回执且 hash 未变</b>的上游产物；另有 <code class="inline">cosmic-context-sync</code> 把规划变更合并回项目上下文（知识随需求演化）</li>
+    </ul>
+    <p class="footnote">COSMIC = 功能点估算方法（从公司已有 cosmic-claude 原型迁移而来）；pack 是通用机制，任何文档类型都可写 pack。</p>
+  </div>
+</section>
+
+<!-- ================= 8 · 现场演示 ================= -->
+<section class="slide" data-kicker="demo">
+  <div class="kicker">demo</div>
+  <h2>现场演示</h2>
+  <div class="body">
+    <div class="demo-grid">
+      <div class="demo"><b>① 零模型冷启动（无 API key）</b>
+        <div class="what">对 pack 自带 golden 样本跑 <em>doc_validate</em> → 秒级全绿回执。<br>看回执长什么样：规则集快照、逐规则结果、as-run 参数。</div></div>
+      <div class="demo"><b>② 闭环修复</b>
+        <div class="what">素材里埋违规项 → <em>doc_generate</em> → 观察多轮修复（每轮 issue 数、评分、promptHash）→ 全绿。</div></div>
+      <div class="demo"><b>③ 确认门</b>
+        <div class="what">显式改参数（如 cfpTotal 预算）→ 返回 <em>pendingConfirmation</em> 参数表（带来源标注）→
+        <em>confirm: true</em> 才执行。</div></div>
+      <div class="demo"><b>④ 防篡改 + seal 回签</b>
+        <div class="what">手改产物 JSON → <em>doc_validate</em> hash 失配变红；修正后绿校验 →
+        <em>sealed: true</em>，人工编辑重新入链。</div></div>
+      <div class="demo" style="grid-column:1/-1"><b>⑤ 全链对账</b>
+        <div class="what"><em>doc_chain_status</em> → 覆盖矩阵：plan 的每个功能在 req / func / tech 层是否已有绿产物 + orphaned 清单。</div></div>
+    </div>
+    <p class="footnote">演示环境：本机 dsh web（docwright 0.4.2，zai / deepseek 路由）；时间不够用录屏兜底。</p>
+  </div>
+</section>
+
+<!-- ================= 9 · 章节页：插件开发 ================= -->
+<section class="slide section">
+  <div class="part">PART 2 · 怎么开发的</div>
+  <h2>dsh 插件开发</h2>
+  <div class="lede">如何让 dsh <b>发现</b>你，如何在 agent loop 中<b>发挥作用</b>，以及一个插件从零到 npm 的基本过程。</div>
+  <div class="items">
+    <span class="chip">一切皆插件</span>
+    <span class="chip">发现与装载</span>
+    <span class="chip">插件契约 name / inject / apply</span>
+    <span class="chip">工具 → agent loop</span>
+    <span class="chip">Capability Seam</span>
+    <span class="chip">开发基本过程</span>
+  </div>
+</section>
+
+<!-- ================= 10 · dsh 一切皆插件 ================= -->
+<section class="slide" data-kicker="dsh 插件开发">
+  <div class="kicker">dsh 插件开发</div>
+  <h2>dsh：一切皆插件的 agent harness</h2>
+  <div class="body">
+    <ul class="pts" style="margin-bottom:16px">
+      <li>dsh 基于 <b>vendored Cordis</b>（插件框架）：运行中的 dsh 是一棵由<b>有序配置层</b>组合出的插件树</li>
+      <li><b>无特权核心</b>：模型适配器（<code class="inline">ctx.llm</code>）、工具注册表（<code class="inline">ctx.tools</code>）、session 日志、甚至 <b>agent loop 本身</b>都是插件，均可被配置替换</li>
+      <li>扩展方式 = 在旁边挂一个插件：<b>Plugins, not loop changes</b>——新行为走扩展点，不改 agent-loop</li>
+    </ul>
+    <div class="cols">
+      <div class="col card">
+        <h3>Cordis 五要点</h3>
+        <ul>
+          <li>插件 = Service 实现</li>
+          <li>Context = 服务仓库（服务认领稳定的 <code class="inline">ctx.&lt;key&gt;</code>）</li>
+          <li><code class="inline">inject</code> 声明依赖——以服务需求表达加载顺序</li>
+          <li>类型化事件通信（<code class="inline">ctx.on</code>）</li>
+          <li>注册皆可逆效果（返回 disposer）</li>
+        </ul>
+      </div>
+      <div class="col card">
+        <h3>对插件作者意味着什么</h3>
+        <ul>
+          <li>你写的插件与官方内置插件<b>完全平级</b>——docwright 没有任何后门</li>
+          <li>能力通过 <b>seam</b>（服务接口）消费：换实现 = 换一行配置</li>
+          <li>配置错误在<b>装载期</b>响亮失败（misconfiguration fails loud），不带病进会话</li>
+          <li>配置编辑支持热替换（HMR）：卸载旧实例按 disposer 逆序清理，装载新实例</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 11 · 发现与装载 ================= -->
+<section class="slide" data-kicker="dsh 插件开发">
+  <div class="kicker">dsh 插件开发</div>
+  <h2>如何让 dsh 发现你：发现与装载</h2>
+  <div class="body">
+    <div class="cols">
+      <div class="col">
+        <div class="codehead"># 插件最终都是一条 Cordis 配置行</div>
+        <div class="code small" data-lang="yaml">- insert:
+    - id: docwright
+      name: '@sharework-ai/dsh-docwright'  <span class="c"># npm 包</span>
+      <span class="c"># name: /abs/path/src/my-plugin.ts  # 本地路径</span>
+      config: { provider: deepseek-official }</div>
+        <div class="codehead" style="margin-top:14px"># 安装命令（自动维护两份清单）</div>
+        <div class="code small" data-lang="bash">dsh plugin add @sharework-ai/dsh-docwright       <span class="c"># npm</span>
+dsh plugin --profile demo add ./my-plugin        <span class="c"># 本地 checkout</span>
+dsh plugin --profile demo add ./pkg-0.1.0.tgz    <span class="c"># tarball</span>
+dsh --profile demo --dump-config                 <span class="c"># 查看合成树</span></div>
+      </div>
+      <div class="col">
+        <ul class="pts">
+          <li><b>bundle</b> = npm 包：package.json 声明 <code class="inline">"dsh": {"bundle": {"patch": "./cordis.patch.yml"}}</code>——回答"<b>贡献什么配置层</b>"</li>
+          <li><b>profile</b> = <code class="inline">$DSH_HOME/profiles/&lt;name&gt;/</code>：声明 <code class="inline">dsh.profile.bundles</code> 数组——回答"<b>按什么顺序组合哪些 bundle</b>"</li>
+          <li>装载层序（后者按 id <b>整行覆盖</b>，不深合并）：</li>
+        </ul>
+        <div class="pipe" style="flex-wrap:wrap; margin-top:8px">
+          <span class="step"><b>bundles</b> 逐层</span><span class="pa">→</span>
+          <span class="step">profile patch</span><span class="pa">→</span>
+          <span class="step">家目录 patch</span><span class="pa">→</span>
+          <span class="step">--patch 临时层</span>
+        </div>
+        <div class="callout amber" style="margin-top:14px">
+          <b>docwright 踩过的坑：</b>bundle patch 行名必须写<b>可导入的包名</b>；重装<b>同版本</b> tarball 前要先 remove（pnpm 会跳过）；本地联调 devDependencies 用 <code class="inline">link:</code> 不用 <code class="inline">file:</code>。
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 12 · 插件契约 ================= -->
+<section class="slide" data-kicker="dsh 插件开发">
+  <div class="kicker">dsh 插件开发</div>
+  <h2>插件契约：name / inject / apply(ctx)</h2>
+  <div class="body">
+    <div class="code" data-lang="ts" style="margin-bottom:14px"><span class="k">export const</span> name = <span class="s">'docwright'</span>               <span class="c">// 诊断用</span>
+<span class="k">export const</span> inject = [<span class="s">'tools'</span>, <span class="s">'llm'</span>]      <span class="c">// 依赖的服务；未就绪则等待，运行中消失 → 自动 dispose</span>
+
+<span class="k">export function</span> <span class="f">apply</span>(ctx: Context, config: Config) {
+  <span class="k">const</span> packs = <span class="f">loadPacks</span>(config.packsDir)      <span class="c">// 加载期校验：坏 manifest → apply 抛错 → 插件启动失败（fail loud）</span>
+  <span class="k">for</span> (<span class="k">const</span> pack <span class="k">of</span> packs)
+    ctx.tools.<span class="f">register</span>(<span class="f">defineTool</span>(<span class="f">makeTool</span>(pack)))  <span class="c">// 每条注册返回 disposer；卸载 / HMR 按序 unwind</span>
+}</div>
+    <div class="cols">
+      <div class="col card">
+        <h3>Config：声明即校验</h3>
+        <ul>
+          <li>TS 接口 + <b>Schemastery schema</b>（Standard Schema）成对导出</li>
+          <li>apply 收到的是<b>校验并补默认值后</b>的配置</li>
+          <li>部署间可能不同的值必须是 Config 字段——<b>禁止硬编码 tunable</b></li>
+        </ul>
+      </div>
+      <div class="col card">
+        <h3>注册皆效果（Registrations are effects）</h3>
+        <ul>
+          <li>一切注册走 <code class="inline">ctx.effect()</code> / <code class="inline">ctx.on()</code>，均返回 disposer</li>
+          <li>插件卸载 / 热替换时自动逆序清理，<b>零残留</b></li>
+          <li>registry 需配 HMR-safety 测试（dispose 后验证清理）</li>
+        </ul>
+      </div>
+      <div class="col card">
+        <h3>加载期 fail loud</h3>
+        <ul>
+          <li>schemastery 装载期校验 config</li>
+          <li>引用的外部资源缺失 → 最早可解析点失败</li>
+          <li>docwright：坏 pack / 缺技能 guide / 默认语言不被支持 → <b>启动即报错</b></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 13 · 工具进 agent loop ================= -->
+<section class="slide" data-kicker="dsh 插件开发">
+  <div class="kicker">dsh 插件开发</div>
+  <h2>工具如何进入 agent loop</h2>
+  <div class="body">
+    <div class="code small" data-lang="ts" style="margin-bottom:12px">ctx.tools.<span class="f">register</span>(<span class="f">defineTool</span>({
+  name: <span class="s">'doc_generate'</span>,
+  description: <span class="s">'闭环生成文档…先用 doc_packs 查看可用 pack'</span>,   <span class="c">// ← 模型的"说明书"，静态文案（拉式渐进披露）</span>
+  parameters: { <span class="c">/* schemastery DSL：参数 schema，模型可见 */</span> },
+  output: { schema: <span class="c">/* 返回值 schema */</span>, render: <span class="c">/* 给模型看的渲染 */</span> },
+  execute: <span class="k">async</span> (args, signal) => docService.<span class="f">generate</span>(args),
+}))</div>
+    <div class="cols" style="flex:none; margin-bottom:14px">
+      <div class="col card"><h3>① 模型可见投影</h3>
+        <p class="small">registry 的 <code class="inline">schemas()</code> 只白名单投影 <b>name / description / parameters</b> 组成 ToolSchema[]；execute / render 等永不进请求。system-prompt 服务组装 PromptAssembly，loop 每步携带；集合变化经 <code class="inline">tools/change</code> 事件下一 step 生效。</p></div>
+      <div class="col card"><h3>② 模型发起 tool call</h3>
+        <p class="small">模型从投影出的工具清单中选择并传参——工具 description 就是模型的能力地图。docwright 把"先调 doc_packs"的邀请<b>写死</b>在 description 里，不随 pack 集合膨胀。</p></div>
+      <div class="col card"><h3>③ 执行与回填</h3>
+        <p class="small">返回值经 <code class="inline">output.render</code> 变 ContentBlock 回给模型；同时写入 <b>durable session 日志</b>——<b>模型可见 ⟺ 日志可重建</b>。</p></div>
+    </div>
+    <div class="pipe">
+      <span class="step"><b>pre-execute</b> 权限 waterfall</span><span class="pa">→</span>
+      <span class="step">ToolGuard</span><span class="pa">→</span>
+      <span class="step"><b>execute</b> 工具体</span><span class="pa">→</span>
+      <span class="step"><b>post-execute</b> 审改</span><span class="pa">→</span>
+      <span class="step">session 日志</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 14 · Capability Seam ================= -->
+<section class="slide" data-kicker="dsh 插件开发">
+  <div class="kicker">dsh 插件开发</div>
+  <h2>Capability Seam：能力的三角色切分</h2>
+  <div class="body">
+    <div class="flow" style="margin-bottom:16px">
+      <div class="fnode"><b>Service Definition</b><span>接口 + Request/Result 类型<br>类型合并进 interface Context</span></div>
+      <div class="farr">⇢</div>
+      <div class="fnode"><b>Service Provider</b><span>实现并挂载服务<br>（如本地执行 / 远程沙箱）</span></div>
+      <div class="farr">⇠</div>
+      <div class="fnode hl"><b>Consumer</b><span>inject 声明依赖并使用<br>（常见形态 = 模型工具）</span></div>
+    </div>
+    <ul class="pts" style="margin-bottom:14px">
+      <li>Provider 与 Consumer <b>互不依赖</b>——换 provider = 换 cordis.yml 一行，Definition 与工具不动</li>
+      <li>只有需要<b>独立演化</b>的角色才拆成独立的包；单角色不构成 seam</li>
+    </ul>
+    <div class="callout">
+      <b>docwright 的用法：</b>Consumer 角色——inject <code class="inline">['tools','llm']</code> 消费宿主的工具注册表与模型路由；
+      同时反向贡献：把 pack-authoring 技能注册进宿主 <b>skills registry</b>（无该服务的宿主上自动休眠）。
+      插件间协作不走 import，走 seam。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 15 · 开发基本过程 ================= -->
+<section class="slide" data-kicker="dsh 插件开发">
+  <div class="kicker">dsh 插件开发</div>
+  <h2>插件开发基本过程：从零到 npm</h2>
+  <div class="body">
+    <table style="margin-bottom:14px">
+      <tr><th style="width:70px">步骤</th><th style="width:250px">做什么</th><th>要点 / 坑</th></tr>
+      <tr><td><b>1 脚手架</b></td><td>ESM + TS strict 包</td><td><code class="inline">"type":"module"</code>；相对导入带 <code class="inline">.ts</code> 扩展名；<code class="inline">cordis.patch.yml</code>；tsc 出 lib/types + tsdown 打运行时</td></tr>
+      <tr><td><b>2 宿主联调</b></td><td>本地 link 到 dsh checkout</td><td>先 <code class="inline">pnpm run build:lib:host</code>；devDependencies 用 <code class="inline">link:</code>（<code class="inline">file:</code> 会去解析 dsh 的 <code class="inline">workspace:*</code> 内部依赖而炸）</td></tr>
+      <tr><td><b>3 测试</b></td><td>Vitest 行为测试</td><td>每文件 100% 覆盖门 + registry HMR-safety 测试；模型可见行为变更配 keyless 快照；要经<b>真实 Loader 组合</b>测试，手挂 <code class="inline">ctx.plugin()</code> 不够</td></tr>
+      <tr><td><b>4 冒烟</b></td><td>预发布检查</td><td>npm tarball → 真实 dsh 宿主 boot → 工具注册断言（<b>无 API key</b>，秒级）</td></tr>
+      <tr><td><b>5 发布</b></td><td>npm publish / tarball 分发</td><td><code class="inline">engines.dsh</code> SemVer 声明兼容范围；宿主共享的包写 peerDependencies；重装同版本 tarball 前先 remove</td></tr>
+    </table>
+    <p class="footnote">深入材料：dsh 仓库 docs/architecture.md · docs/cordis-primer.md · docs/user/develop/basic/（插件教程四篇）· docs/capability-seams.md</p>
+  </div>
+</section>
+
+<!-- ================= 16 · 章节页：关键设计 ================= -->
+<section class="slide section">
+  <div class="part">PART 3 · 关键设计</div>
+  <h2>docwright 的五个关键设计</h2>
+  <div class="lede">这些设计回答同一个问题：怎么让"AI 生成文档"的每个环节都<b>可校验、可追溯、可治理</b>。</div>
+  <div class="items">
+    <span class="chip">① pack：内容与引擎分离</span>
+    <span class="chip">② 闭环修复与打分</span>
+    <span class="chip">③ 回执与 checksum</span>
+    <span class="chip">④ 参数治理</span>
+    <span class="chip">⑤ 链契约与扇出</span>
+  </div>
+</section>
+
+<!-- ================= 17 · 设计① pack ================= -->
+<section class="slide" data-kicker="关键设计 ①">
+  <div class="kicker">关键设计 ①</div>
+  <h2>pack：内容与引擎分离<small>换文档类型 = 新 pack 目录，插件零改动</small></h2>
+  <div class="body">
+    <div class="cols">
+      <div class="col">
+        <div class="codehead">packs/&lt;name&gt;/ — 七件套</div>
+        <div class="code small" data-lang="text">manifest.json      <span class="c"># 元数据·链消费·参数声明</span>
+schema.json         <span class="c"># JSON Schema：文档长什么样</span>
+rules/&lt;lang&gt;.json   <span class="c"># 声明式规则（四族）</span>
+rules/functions.js  <span class="c"># 跨字段函数规则（可选）</span>
+prompts/&lt;lang&gt;.md   <span class="c"># 生成 prompt，{{materials}} 槽位</span>
+templates/&lt;lang&gt;.hbs <span class="c"># Markdown 渲染模板</span>
+samples/golden.json <span class="c"># 全绿母本 + 变异测试输入</span></div>
+        <p class="small muted" style="margin-top:10px">
+          声明式四族：minLength / maxLength / forbiddenKeywords / pattern；
+          规则边界可引用参数（<code class="inline">{"param":"..."}</code>，含 pattern 正则参数）。
+        </p>
+      </div>
+      <div class="col">
+        <ul class="pts">
+          <li><b>声明即白名单</b>：<code class="inline">manifest.params</code> 未声明的参数名谁都不能调</li>
+          <li><b>每条规则必须带 suggestion</b>——修复 prompt 的质量不随 pack 作者漂移（加载期强制）</li>
+          <li><b>golden 必须全绿</b>，且每个规则族配"故意损坏"变异测试——<b>抓不住损坏样本的 checker 是摆设</b></li>
+          <li><b>改规则语义必须升 version</b>：旧产物回执被 staleness 识别为过期</li>
+          <li><b>造 pack 也是插件能力</b>：运行时技能 docwright-pack-authoring（九阶段 playbook）+ <code class="inline">pack:check</code>（真实装载门 + golden 全绿验证）——AI 教 AI 造 pack</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 18 · 设计② 闭环 ================= -->
+<section class="slide" data-kicker="关键设计 ②">
+  <div class="kicker">关键设计 ②</div>
+  <h2>闭环修复：校验是强制的护栏<small>生成 → 校验 → 修复，直到全绿或明确失败</small></h2>
+  <div class="body">
+    <div class="pipe" style="margin-bottom:14px">
+      <span class="step"><b>预算预检</b><br>token 估算超限响亮报错</span><span class="pa">→</span>
+      <span class="step"><b>模型调用</b><br>ctx.llm 路由 · 失败重试 1 次</span><span class="pa">→</span>
+      <span class="step"><b>解析</b><br>剥围栏提取 JSON<br>解析失败也是 Issue</span><span class="pa">→</span>
+      <span class="step"><b>校验</b><br>ajv + 声明式 + 函数规则<br>归一为统一 Issue 格式</span><span class="pa">→</span>
+      <span class="step"><b>判定</b><br><b>全绿 = 0 条 ERROR</b><br>warning / info 不拦截</span><span class="pa">⇤</span>
+      <span style="font-size:14.5px; color:var(--muted); white-space:nowrap; padding:6px 2px">未全绿 → 下一轮</span>
+    </div>
+    <div class="cols">
+      <div class="col card">
+        <h3>统一 Issue 格式 = 闭环的粘合剂</h3>
+        <p class="small" style="font-family:var(--mono); color:var(--teal)">{ ruleId, severity, jsonPath,<br>&nbsp;&nbsp;message, snapshot, suggestion }</p>
+        <p class="small muted" style="margin-top:6px">修复 prompt、回执、报告只消费这一种格式；修复指令 = "只修列出的问题，输出完整 JSON"。</p>
+      </div>
+      <div class="col card">
+        <h3>失败语义：绝不静默采用</h3>
+        <ul>
+          <li>迭代耗尽 → 工具<b>抛错</b>（fail loud）</li>
+          <li>草稿 + <b>红回执</b>留在磁盘，供人工救援</li>
+          <li>落盘三件套均为 tmp+rename 原子写，产物先于回执——崩溃只会留下可读草稿，不会留下孤儿回执</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 19 · 打分与收敛 ================= -->
+<section class="slide" data-kicker="关键设计 ②">
+  <div class="kicker">关键设计 ②</div>
+  <h2>打分机制与收敛检测<small>分数决定"何时放弃"，全绿判定始终是 0 ERROR</small></h2>
+  <div class="body">
+    <div class="cols" style="flex:none; margin-bottom:16px">
+      <div class="col card">
+        <span class="tag blue">内置默认评分</span>
+        <h3 style="font-family:var(--mono); font-size:21px">100 − 10×error − 3×warning − 1×info</h3>
+        <p class="small">clamp 到 0-100；权重可配（Config）。e2e 实测多轮轨迹与该公式精确吻合。</p>
+      </div>
+      <div class="col card">
+        <span class="tag teal">pack 自定义评分</span>
+        <h3 style="font-family:var(--mono); font-size:19px">score(artifact, issues) => 0-100</h3>
+        <p class="small">领域自定义收敛度量（越高越好）；越界 / 崩溃 fail loud。缺省自动落到内置公式。</p>
+      </div>
+      <div class="col card">
+        <span class="tag amber">分数的用途</span>
+        <h3>收敛检测，不是质量认证</h3>
+        <p class="small">质量认证 = 0 ERROR + 回执；分数只服务于"这一轮值不值得继续烧 token"。</p>
+      </div>
+    </div>
+    <ul class="pts">
+      <li><b>三层提前终止</b>（Config <code class="inline">oscillation</code> 可调）：连续 K 轮不超过历史最优 → <code class="inline">stagnation</code>；连续 D 轮严格下降 → <code class="inline">decline</code>;指纹兜底（连续 3 轮 Issue 指纹相同）→ <code class="inline">fingerprint-repeat</code></li>
+      <li><b>终止可审计</b>：终止原因 + 每轮评分与 promptHash 写进回执——收敛过程离线可复盘</li>
+      <li>轮数解析序：<code class="inline">maxRounds</code> 参数 > pack 默认 > Config 默认（5），一律被 <code class="inline">maxRoundsCeiling</code>（10，宿主运维持有）钳制</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 20 · 回执与 checksum ================= -->
+<section class="slide" data-kicker="关键设计 ③">
+  <div class="kicker">关键设计 ③</div>
+  <h2>回执与 checksum 机制<small>"全绿"从过程变成产物</small></h2>
+  <div class="body">
+    <table style="margin-bottom:14px">
+      <tr><th style="width:220px">字段</th><th>语义</th></tr>
+      <tr><td><code>artifactHash</code></td><td>产物 canonical JSON（键排序、无空白）的 sha256——<b>hash 把合格证绑定到具体内容版本</b>，改一个字符即失配</td></tr>
+      <tr><td><code>schemaHash</code> / <code>rulesetSnapshot</code></td><td>schema 哈希 + <b>声明式规则全文 + functions.js 源码哈希</b>——pack 升级后，历史回执仍能解释"当时依据什么标准"</td></tr>
+      <tr><td><code>upstreamHashes</code></td><td>链式锚点：每个上游的 pack / packVersion / artifactHash——下游引用的上游<b>当前内容</b>一定绿过</td></tr>
+      <tr><td><code>rounds[]</code> / <code>params</code> / <code>terminationReason</code></td><td>每轮 issue 数·评分·promptHash；as-run 参数（复验按它重放）；红回执的终止原因</td></tr>
+    </table>
+    <div class="cols">
+      <div class="col card">
+        <h3>防篡改语义</h3>
+        <p class="small">生成与复验<b>共用同一个回执构造器</b>（永不漂移）；tamper-<b>evident</b> 而非 tamper-proof：误改必红，蓄意伪造产物+回执不可防。</p>
+      </div>
+      <div class="col card">
+        <h3>seal 回签：第二个发证渠道</h3>
+        <p class="small">绿校验把新回执写入 sidecar——发证从"只有生产线"扩展为"<b>生产线 + 质检站</b>"；人工 / 外部编辑的产物过校验即重新入链；红校验绝不触碰 sidecar。</p>
+      </div>
+      <div class="col card">
+        <h3>版本门与复用</h3>
+        <p class="small"><code class="inline">packVersionStale</code>：绿回执只证明旧规则 → 提示重生成。复用预检：同 pack + 绿回执 + hash + 素材清单 + 上游锚点 + 参数全对齐 → <code class="inline">reused:true</code> 零 LLM。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 21 · 参数治理 ================= -->
+<section class="slide" data-kicker="关键设计 ④">
+  <div class="kicker">关键设计 ④</div>
+  <h2>参数治理：层级与解析序<small>参数是用户意图的正道，不是散落在素材里的散文</small></h2>
+  <div class="body">
+    <div class="cols" style="flex:none; margin-bottom:14px">
+      <div class="col" style="flex:1.15">
+        <table>
+          <tr><th style="width:150px">层级</th><th>谁拥有 / 载体</th></tr>
+          <tr><td>插件 Config</td><td>部署运维 · cordis.yml</td></tr>
+          <tr><td>pack manifest</td><td>pack 作者 · 声明即白名单 + 默认值 + 门控属性</td></tr>
+          <tr><td>调用参数</td><td>用户·agent · 单次调用，写进回执沿链继承</td></tr>
+          <tr><td>引擎派生</td><td>如 <code>topicNo</code>——只能改其来源（pattern），不能关闭派生</td></tr>
+        </table>
+      </div>
+      <div class="col">
+        <ul class="pts">
+          <li><b>属性全集</b>：<code class="inline" style="white-space:normal">type / default / required / confirm / overridable / extractable / min / max / enum</code></li>
+          <li><b>装载期不变量</b>：<code class="inline">overridable ⇒ confirm</code>（可调基线必过人）；被规则引用的参数禁 overridable</li>
+          <li><b>参数划分</b>：共享参数（CFP 预算族、moduleLevels）链头声明一次沿链继承；pack 本地参数各自声明。<b>继承声明不填 default</b>——写了只是误导性死数据</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout">
+      <b>解析序</b>：显式 params &gt; <b>上游回执继承</b> &gt; <b>抽取值</b>（引文机检）&gt; 声明默认 &gt; required 缺失即 fail loud。<br>
+      <span class="muted small">对话中用户意图由 agent 转译为显式 params；materials 散文默认无权配置 pack——防止素材内容静默改写配置。</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 22 · 确认门 ================= -->
+<section class="slide" data-kicker="关键设计 ④">
+  <div class="kicker">关键设计 ④</div>
+  <h2>确认门：改参数必过人<small>执行前无人核对生效参数 = 不可接受</small></h2>
+  <div class="body">
+    <div class="code small" data-lang="text" style="margin-bottom:14px"><span class="c"># 显式改参或 confirm 参数未经上游确认时：</span>
+doc_generate(pack: "cosmic-plan", params: { cfpTotal: {value: 100, downFactor: 0.9, upFactor: 1.2} })
+  → <span class="s">pendingConfirmation</span>          <span class="c"># 结构化参数表，零 LLM 成本，不执行</span>
+      ├ cfpTotal   value=100  [0.9, 1.2]   source=explicit   漂移预判: 将按新预算生成
+      └ cfpPerFunc value=30   [15, 45]      source=pack-default
+doc_generate(…, <span class="s">confirm: true</span>)        <span class="c"># 用户确认后重发 → 执行</span></div>
+    <ul class="pts">
+      <li><b>沿链继承不再立门</b>：共享参数链头声明一次，as-run 写进上游回执，下游继承——<b>全链用户交互恰一次</b>，位置在链头</li>
+      <li><b>来源标注</b>：pack 默认 / 显式传入 / 上游继承 / 抽取引文——参数表上每个值都有出处</li>
+      <li><b>档位</b> <code class="inline">confirmPolicy</code>：none（headless/CI）/ standard（默认）/ strict（每阶段都过）</li>
+      <li><b>审计兜底</b>：谁批了什么，session log 可完整重建（模型可见 ⟺ 日志可重建）；模型未转呈就自答 <code class="inline">confirm:true</code> 属调用方违规，凭日志追责</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 23 · Mind the gap ================= -->
+<section class="slide" data-kicker="关键设计 ④">
+  <div class="kicker">关键设计 ④</div>
+  <h2>Mind the gap：生成语义与校验语义分家</h2>
+  <div class="body">
+    <div class="cols" style="margin-bottom:16px">
+      <div class="col card">
+        <span class="tag green">进 prompt</span>
+        <h3>只有 value 是生成目标</h3>
+        <p class="small">参数对象投影 <code class="inline">{value}</code> 渲染进 <code class="inline">&lt;effective-params&gt;</code>——模型会把上下文中出现的数值当作写作目标贴合。</p>
+      </div>
+      <div class="col card">
+        <span class="tag red">留在规则</span>
+        <h3>区间端点是校验容差</h3>
+        <p class="small"><code class="inline">min / max / downFactor / upFactor</code> 只活在规则与回执，经修复回路的 Issue 消息到达模型——<b>不进生成上下文</b>。</p>
+      </div>
+    </div>
+    <div class="callout amber" style="margin-bottom:14px">
+      <b>真实教训</b>：把校验带 <code class="inline">cfpPerFunc {30, 10, 100}</code> 整个写进 prompt——带太宽时违约值合法通过（1×70 的单功能规划全绿通过）；
+      带收紧后模型又<b>压缩估算凑带宽</b>而不是拆分模块。生成语义与校验语义混在一起，两头都输。
+    </div>
+    <div class="callout green">
+      <b>判断标准一句话：</b>这个数描述"<b>文档应该长什么样</b>"（进上下文），还是"<b>离目标多远必须打回</b>"（留在规则）？<br>
+      <span class="small muted">若 min/max 本身就是生成语义（"单功能不低于 10"），把它升级为独立参数的 value（cfpMin / cfpMax）。</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 24 · 素材参数读取 ================= -->
+<section class="slide" data-kicker="关键设计 ④">
+  <div class="kicker">关键设计 ④</div>
+  <h2>素材参数读取：引文机检的出处链<small>doc_extract_params——从模型不可见的推理变成可机检的证据</small></h2>
+  <div class="body">
+    <div class="code small" data-lang="text" style="margin-bottom:14px">doc_extract_params(pack: "cosmic-plan", materials: ["req.md"],
+  extractions: { cfpTotal: { value: 70, quote: <span class="s">"the expected CFPs is 70"</span> } })
+    → 引擎机检：<span class="s">quote 必须是素材逐字子串</span>（空白归一后包含）+ 值过参数 spec → 通过才入解析第三档</div>
+    <div class="cols">
+      <div class="col card">
+        <h3>notFound 是一等结果</h3>
+        <ul>
+          <li>引文不在素材中 / 模型未提出 / 素材没写 → 记 <code class="inline">notFound</code>，不报错、不代答</li>
+          <li>required 参数 notFound → <b>花费生成成本之前拦截</b>，请用户给值或认可建议值</li>
+          <li><b>素材缺值被模型代答必须防止，不以模型能力提升为豁免理由</b></li>
+        </ul>
+      </div>
+      <div class="col card">
+        <h3>缓存与复验</h3>
+        <ul>
+          <li>抽取结果落 <code class="inline">&lt;pack&gt;.extracted.json</code>（pack 版本、素材 anchors、逐参数记录）——<b>是缓存，不是契约</b></li>
+          <li>生成前对<b>当次素材</b>重验每条引文：素材变了 / 引文失配 / spec 收紧 → 丢弃落回下一档</li>
+          <li>抽取发生在链头之前、扇出之前——<b>一次抽取保护整条链</b>（值沿回执继承）</li>
+        </ul>
+      </div>
+      <div class="col card">
+        <h3>确认表上的出处列</h3>
+        <ul>
+          <li><code class="inline">source: extracted</code> 行附 quote + 引文位置——抽取值<b>以引文自证</b></li>
+          <li>建议值（suggestion）过同一 spec 校验，但<b>永不自动生效</b>——用户认可的唯一通道是显式 params</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 25 · 链契约与扇出 ================= -->
+<section class="slide" data-kicker="关键设计 ⑤">
+  <div class="kicker">关键设计 ⑤</div>
+  <h2>链契约与扇出（1:N:N:N）<small>覆盖是集合性质，归链级账目，不塞进单产物规则引擎</small></h2>
+  <div class="body">
+    <ul class="pts" style="margin-bottom:14px">
+      <li><b>upstream 六项校验</b>：可读 JSON / 有 sidecar 回执 / 回执<b>绿</b> / hash 未变 / pack 类型匹配 consumes / 版本策略（strict 拒绝 · warn 放行并告警）；其余已装 pack 的绿产物可作 <b>rider</b> 随行入 prompt（如按需携带项目 context）</li>
+      <li><b>targetIndex 必填无默认</b>：缺失即 fail loud 并列出全部候选——历史上"静默选 index 1"曾让 9 个功能只生成 1 份且校验全绿</li>
+      <li><b>引擎命名权</b>：per-function 产物 <code class="inline">&lt;PREFIX&gt;-&lt;topicNo&gt;-&lt;NN&gt;</code> 由引擎命名，显式传 artifactName 报错——<b>同名覆盖在机制上不可能发生</b>，重生成幂等</li>
+      <li><b>doc_chain_status 账目</b>：覆盖矩阵（每个 plan 功能在 req/func/tech 层是否绿）+ orphaned 清单（funcId 不属于任何 plan 功能的产物）——agent 收工呈现前必须对账</li>
+      <li><b>跨出处链实证</b>（2026-11-03 e2e 八步全绿）：packsDir 里的外部 pack 消费内置 cosmic 链——引擎<b>零改动</b>：参数沿回执继承、确认门跨出处只立一次、chain-status 自动入册</li>
+    </ul>
+    <div class="callout">
+      <b>参数漂移</b>：<code class="inline">paramDriftPolicy</code> —— regenerate（默认，质量优先）/ revalidate（确定性重验上游，零 LLM）。
+      下游显式传参与上游回执不一致 = 改参数 → 重新立门。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 26 · 研发历程 ================= -->
+<section class="slide" data-kicker="研发历程">
+  <div class="kicker">研发历程 · 来自 git 时间线（2026-08-27 → 11-03，202 commits）</div>
+  <h2>三阶段：一日冲刺 → 设计深化 → 工程化</h2>
+  <div class="body">
+    <div class="tl">
+      <div class="phase">
+        <h3>① MVP 一日冲刺</h3><div class="date">2026-08-27</div>
+        <ul class="pts">
+          <li>/office-hours + /autoplan 产出设计决策文档（44 条决策审计）</li>
+          <li>当日实现闭环 MVP（hanzeep 前身）</li>
+          <li>当日 QA 三连修：bundle patch 行名 / tarball 带 patch / types 路径</li>
+          <li class="muted">第一课："插件能被 dsh 正确发现和装载"本身就是工程</li>
+        </ul>
+      </div>
+      <div class="phase p2">
+        <h3>② 设计与实证深化</h3><div class="date">2026-10-11 ~ 10-14</div>
+        <ul class="pts">
+          <li>规格重写为 current-state 功能说明书；D1 发现 / D2 收敛 / D3 参数桥</li>
+          <li>真实 LLM e2e 打通；cosmic 链补全 + 更名 docwright（0.1.0）</li>
+          <li><b>真实 web 会话暴露四类缺口</b> → D5 参数治理 / D6 扇出契约 / D7 seal 一日落地（0.2.0）</li>
+          <li>链头 cosmic-context + workspace/topic 作用域</li>
+        </ul>
+      </div>
+      <div class="phase p3">
+        <h3>③ 治理工程化与生态</h3><div class="date">2026-10-16 ~ 11-03</div>
+        <ul class="pts">
+          <li>三参数 CFP 模型 + Mind the gap；confirmPolicy；引擎命名权</li>
+          <li>参数对象模型 → <b>参数维护 UI</b>（读 RPC + 写通道 + i18n）</li>
+          <li>extract-params 出处机制；pattern 正则参数</li>
+          <li>pack-authoring 技能 + pack:check；跨出处链实证；业务模板对齐（0.4.x）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 27 · 复盘与工程实践 ================= -->
+<section class="slide" data-kicker="研发历程">
+  <div class="kicker">研发历程 · 复盘</div>
+  <h2>三条复盘与工程实践</h2>
+  <div class="body">
+    <div class="cards" style="flex:none; margin-bottom:16px">
+      <div class="card">
+        <div class="num">1</div><h3>真实会话是最好的设计输入</h3>
+        <p class="small">参数治理四缺口全部来自一次真实 web 会话——"9 个功能只生成 1 份且校验全绿"：<b>护栏对"没发生的事"不设防</b>，覆盖必须靠集合级账目补上。</p>
+      </div>
+      <div class="card">
+        <div class="num">2</div><h3>测试要穿过宿主运行时</h3>
+        <p class="small">"测试直调 execute() 绕过 dsh 运行时校验"曾让 confirm-gate undefined bug 漏网（lossless-JSON 快照拒绝 undefined）——<b>单测绿 ≠ 真实宿主绿</b>。</p>
+      </div>
+      <div class="card">
+        <div class="num">3</div><h3>文档纪律是研发效率</h3>
+        <p class="small">规格零历史（推演进 git，正文只写现状）、one home per fact、设计文档 PROPOSED → implemented 状态机——13 份设计文档是决策资产，不是流水账。</p>
+      </div>
+    </div>
+    <div class="callout">
+      <b>质量门</b>：每文件 <b>100%</b> 行/函数/语句覆盖 · 变异测试证明护栏非摆设 · 闭环用确定性策略测试（LLM seam 注入脚本）·
+      <code class="inline">smoke:host</code> 无 key 预发布冒烟 · 真实模型只进 e2e。<br>
+      <b>dsh 约定落地</b>：no hardcoded tunables（全部旋钮是 Config 字段）· 模型可见 ⟺ 日志可重建（promptHash 入回执）。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 28 · 总结与展望 ================= -->
+<section class="slide" data-kicker="总结">
+  <div class="kicker">总结</div>
+  <h2>三个可复用的设计原则</h2>
+  <div class="body">
+    <div class="cards" style="flex:none; margin-bottom:16px">
+      <div class="card">
+        <div class="num">1</div><h3>合格标准数据化</h3>
+        <p class="small">标准是数据（pack）不是代码——变化不进开发流程；声明即白名单，版本门让历史产物自动识别为新旧标准之下。</p>
+      </div>
+      <div class="card">
+        <div class="num">2</div><h3>校验结论产物化</h3>
+        <p class="small">"合格"不是过程是产物（receipt）——可复验、可追溯当时规则、可 seal 续链；hash 把合格证绑定到具体内容版本。</p>
+      </div>
+      <div class="card">
+        <div class="num">3</div><h3>治理机制内建于工具</h3>
+        <p class="small">确认门 / 覆盖账目 / 防篡改 / 出处链都长在工具语义里——<b>靠模型自觉的护栏等于没有护栏</b>。</p>
+      </div>
+    </div>
+    <ul class="pts">
+      <li><b>展望</b>：草稿续修（红回执断点续修）· MCP 包装（宿主无关分发）· pack npm 分发 · as-run 参数值记录 · 更多场景 pack</li>
+    </ul>
+    <div class="callout green" style="margin-top:6px">
+      <b>一句话收尾：</b>让 AI 生成文档从"碰运气"变成"可验证的工程"。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 29 · 尾页 ================= -->
+<section class="slide title">
+  <h1 style="font-size:44px">谢谢 · Q&amp;A</h1>
+  <div class="sub">dsh-docwright<small> — 通用文档生成和校验插件</small></div>
+  <div class="meta">
+    github.com/sharework-ai/dsh-docwright · npm @sharework-ai/dsh-docwright<br>
+    <span style="font-size:14px">设计文档：docs/designs/（13 篇） · 功能说明书：docs/designs/docwright-mvp.md · 演示提纲：docs/plugin-dev-talk-outline.md</span>
+  </div>
+  <div class="statbar">
+    <div class="stat"><b>5</b><span>工具</span></div>
+    <div class="stat"><b>6</b><span>内置 pack</span></div>
+    <div class="stat"><b>0.4.2</b><span>npm latest</span></div>
+    <div class="stat"><b>100%</b><span>覆盖门</span></div>
+  </div>
+</section>
+
+</div><!-- /stage -->
+
+<div id="hud">1 / 29</div>
+<div id="hint">←/→ 翻页 · O 总览 · N 备注 · F 全屏 · P 打印</div>
+<div id="progress"></div>
+<div id="notes-view"></div>
+
+<script>
+(function(){
+  const W=1280,H=720;
+  const stage=document.getElementById('stage');
+  let slides=[...document.querySelectorAll('.slide')];
+  let cur=0;
+
+  // ---- fit to window ----
+  function fit(){
+    const s=Math.min(innerWidth/W, innerHeight/H)*0.965;
+    if(document.body.classList.contains('overview')) return;
+    slides.forEach(el=>el.style.transform=`translate(-50%,-50%) scale(${s})`);
+  }
+  addEventListener('resize',fit);
+
+  // ---- show ----
+  function show(i){
+    cur=Math.max(0,Math.min(slides.length-1,i));
+    slides.forEach((el,idx)=>el.classList.toggle('active',idx===cur));
+    document.getElementById('hud').textContent=(cur+1)+' / '+slides.length;
+    document.getElementById('progress').style.width=((cur+1)/slides.length*100)+'%';
+    const n=document.querySelector('aside.notes[data-for="'+(cur+1)+'"]');
+    document.getElementById('notes-view').textContent=n?n.textContent.trim():'（本页无备注）';
+    if(location.hash!=='#'+(cur+1)) history.replaceState(null,'','#'+(cur+1));
+  }
+  function next(){show(cur+1)} function prev(){show(cur-1)}
+
+  // ---- overview ----
+  function toggleOverview(force){
+    const on = force!==undefined?force:!document.body.classList.contains('overview');
+    document.body.classList.toggle('overview',on);
+    if(on){
+      slides.forEach((el,idx)=>{
+        el.style.transform='';
+        el.classList.toggle('current',idx===cur);
+        el.onclick=()=>{toggleOverview(false); show(idx)};
+      });
+    }else{
+      slides.forEach(el=>{el.onclick=null; el.classList.remove('current')});
+      fit(); show(cur);
+    }
+  }
+
+  // ---- notes ----
+  function toggleNotes(){document.body.classList.toggle('notes')}
+
+  // ---- keys ----
+  addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+    switch(e.key){
+      case 'ArrowRight': case 'ArrowDown': case ' ': case 'PageDown': case 'Enter':
+        e.preventDefault(); document.body.classList.contains('overview')?toggleOverview(false):next(); break;
+      case 'ArrowLeft': case 'ArrowUp': case 'PageUp':
+        e.preventDefault(); document.body.classList.contains('overview')?toggleOverview(false):prev(); break;
+      case 'Home': show(0); break;
+      case 'End': show(slides.length-1); break;
+      case 'o': case 'O': toggleOverview(); break;
+      case 'n': case 'N': toggleNotes(); break;
+      case 'f': case 'F':
+        document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen(); break;
+      case 'Escape':
+        if(document.body.classList.contains('overview')) toggleOverview(false);
+        else if(document.body.classList.contains('notes')) toggleNotes();
+        break;
+    }
+  });
+
+  // ---- touch swipe ----
+  let tx=null;
+  addEventListener('touchstart',e=>{tx=e.touches[0].clientX},{passive:true});
+  addEventListener('touchend',e=>{
+    if(tx===null) return;
+    const dx=e.changedTouches[0].clientX-tx; tx=null;
+    if(Math.abs(dx)>40) dx<0?next():prev();
+  },{passive:true});
+
+  // ---- click zones (ignore code blocks for copy) ----
+  addEventListener('click',e=>{
+    if(e.target.closest('.code')||e.target.closest('#hud')||e.target.closest('#hint')) return;
+    if(document.body.classList.contains('overview')) return;
+    (e.clientX<innerWidth*0.22)?prev():next();
+  });
+
+  // ---- mini syntax highlighter (single-pass alternation: no re-matching) ----
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+  const KW='export|const|let|function|return|import|from|for|of|if|interface|type|class|extends|new|async|await|this';
+  const RULES={
+    bash:[/(#[^\n]*)|('[^'\n]*'|"[^"\n]*")|(--?[A-Za-z][\w-]*)|(\bdsh\b)/g, m=>m[1]?'c':m[2]?'s':'f'],
+    yaml:[/(#[^\n]*)|('[^'\n]*'|"[^"\n]*")|(^[ \t]*[\w."-]+(?=:))/gm, m=>m[1]?'c':m[2]?'s':'f'],
+    ts:[ new RegExp('(\\/\\/[^\\n]*)|(\'[^\'\\n]*\'|`[^`]*`)|\\b('+KW+'|true|false|null|undefined)\\b|(\\b\\d+(?:\\.\\d+)?\\b)|(=&gt;)','g'),
+         m=>m[1]?'c':m[2]?'s':(m[3]||m[5])?'k':'n'],
+    json:[/("[^"\n]*"(?=[ \t]*:))|("[^"\n]*")|(\b\d+(?:\.\d+)?\b)|(\b(?:true|false|null)\b)/g, m=>m[1]?'f':m[2]?'s':m[4]?'k':'n'],
+    text:[/(#[^\n]*)|(^[ \t]*[\w.<>\/-]+(?=[ \t]{2,}))/gm, m=>m[1]?'c':'f'],
+  };
+  function hl(code,lang){
+    let out=esc(code);
+    const def=RULES[lang];
+    if(!def) return out;
+    const [re,clsOf]=def;
+    return out.replace(re,(match,...gs)=>{
+      const cls=clsOf(gs);
+      return cls?'<span class="'+cls+'">'+match+'</span>':match;
+    });
+  }
+  document.querySelectorAll('.code').forEach(el=>{
+    const lang=el.dataset.lang||'text';
+    el.innerHTML=hl(el.textContent,lang);
+  });
+
+  // ---- boot ----
+  const start=parseInt(location.hash.slice(1));
+  show(isNaN(start)?0:start-1);
+  fit();
+  setTimeout(()=>{document.getElementById('hint').style.opacity='0'},7000);
+})();
+</script>
+
+<!-- speaker notes (hidden content) -->
+<aside class="notes" style="display:none" data-for="1">开场：本分享两部分——先讲 docwright 是什么、怎么用（含现场演示），再拆开讲 dsh 插件怎么开发、docwright 的关键设计与三阶段研发过程。数字带：npm 已发布 0.4.2，6 个内置 pack，源码 5.5k / 测试 7.2k 行，202 commits、13 份设计文档。</aside>
+</body>
+</html>
