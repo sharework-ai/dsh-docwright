@@ -64,6 +64,9 @@ describe('solution-document template formats (docwright-references alignment)', 
     expect(zh).toContain('| 序号 | 功能过程 | 发起者 | 接收者 | 触发事件 | 功能过程描述 | 主要数据组 |')
     expect(zh).toContain('| 1 | 收藏商品 | 注册用户 | 收藏服务 |')
     expect(zh).toContain('收藏请求、收藏记录')
+    // Mermaid sources render verbatim (no HTML escaping inside the fence).
+    expect(zh).toContain('u->>fav: 收藏商品')
+    expect(zh).not.toContain('-&gt;')
     const en = await renderOf('cosmic-func', 'en-US')
     expect(en).toContain('# Requirement Solution: REQ-001-EXAMPLE_商品收藏功能')
     expect(en).toContain('**Functional Process List**')
