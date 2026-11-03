@@ -99,6 +99,20 @@ describe('cosmic-req pack shape', () => {  it('declares the chain and the three 
       expect(prompt).toContain('{{params}}')
     }
   })
+
+  it('the role allowlist default is format-compatible with the role pattern rule', async () => {
+    const { req } = await packs()
+    // 2026-11-03 real run: the shipped default listed '3rd-payment-service',
+    // which the role format rule (^ starts with a letter) rejects forever —
+    // the model picked it, and the two rules deadlocked the repair loop.
+    const formatRule = (req.rules.get('zh-CN') ?? []).find(r => r.id === 'req/functional-user-role-format') as { pattern: string } | undefined
+    expect(formatRule?.pattern).toBeDefined()
+    const re = new RegExp(formatRule!.pattern)
+    const allowlist = String((req.manifest.params?.functionalUserRoles as { default?: string }).default ?? '')
+      .split(',').map(role => role.trim()).filter(role => role.length > 0)
+    expect(allowlist.length).toBeGreaterThan(0)
+    for (const role of allowlist) expect(re.test(role), `allowlist role "${role}" must match ${formatRule!.pattern}`).toBe(true)
+  })
 })
 
 describe('cosmic-req golden sample', () => {
