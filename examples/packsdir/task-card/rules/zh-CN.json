@@ -1,0 +1,48 @@
+[
+  {
+    "id": "taskcard/card-id-pattern",
+    "severity": "error",
+    "given": "$",
+    "field": "cardId",
+    "kind": "pattern",
+    "pattern": "^TC-[A-Z0-9]{1,8}(?:-[A-Z0-9]{1,8})+$",
+    "mustMatch": true,
+    "suggestion": "cardId 必须是 TC-<funcId> 形式（如 TC-KERQ-352-01）：把上游 funcId 原样接到 TC- 后面，不得改写 funcId 本身。"
+  },
+  {
+    "id": "taskcard/summary-min-length",
+    "severity": "error",
+    "given": "$",
+    "field": "summary",
+    "kind": "minLength",
+    "min": 40,
+    "suggestion": "summary 是给开发者的自包含任务概述：基于上游 funcDesc 与功能过程清单提炼，写清楚建什么、给谁用、关键行为，不少于 40 个字符。"
+  },
+  {
+    "id": "taskcard/summary-forbidden",
+    "severity": "error",
+    "given": "$",
+    "field": "summary",
+    "kind": "forbiddenKeywords",
+    "keywords": ["TBD", "待定", "占位"],
+    "suggestion": "summary 不得含 TBD/待定/占位 等未定稿标记：任务卡是开发领用的依据，未定稿内容回上游阶段补齐后再出卡。"
+  },
+  {
+    "id": "taskcard/task-desc-min-length",
+    "severity": "error",
+    "given": "$.tasks[*]",
+    "field": "description",
+    "kind": "minLength",
+    "min": 8,
+    "suggestion": "每个任务的 description 要说清什么数据在谁与系统之间移动（不少于 8 个字符）：从上游数据移动描述提炼，不得只写数据组名。"
+  },
+  {
+    "id": "taskcard/acceptance-item-min-length",
+    "severity": "error",
+    "given": "$.acceptance[*]",
+    "field": "point",
+    "kind": "minLength",
+    "min": 6,
+    "suggestion": "每条验收要点必须是可验证的具体陈述（不少于 6 个字符）：从上游业务规则与过程行为推导，写明可观察的结果。"
+  }
+]

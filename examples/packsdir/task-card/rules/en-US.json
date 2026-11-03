@@ -1,0 +1,48 @@
+[
+  {
+    "id": "taskcard/card-id-pattern",
+    "severity": "error",
+    "given": "$",
+    "field": "cardId",
+    "kind": "pattern",
+    "pattern": "^TC-[A-Z0-9]{1,8}(?:-[A-Z0-9]{1,8})+$",
+    "mustMatch": true,
+    "suggestion": "cardId must be TC-<funcId> (e.g. TC-KERQ-352-01): append the upstream funcId verbatim after TC-; never rewrite the funcId itself."
+  },
+  {
+    "id": "taskcard/summary-min-length",
+    "severity": "error",
+    "given": "$",
+    "field": "summary",
+    "kind": "minLength",
+    "min": 40,
+    "suggestion": "summary is the developer's self-contained brief: distill it from the upstream funcDesc and process list — what to build, for whom, key behaviors; at least 40 characters."
+  },
+  {
+    "id": "taskcard/summary-forbidden",
+    "severity": "error",
+    "given": "$",
+    "field": "summary",
+    "kind": "forbiddenKeywords",
+    "keywords": ["TBD", "待定", "占位"],
+    "suggestion": "summary must not contain placeholder markers (TBD/待定/占位): the card is what the developer picks up — settle unfinished content upstream, then re-issue the card."
+  },
+  {
+    "id": "taskcard/task-desc-min-length",
+    "severity": "error",
+    "given": "$.tasks[*]",
+    "field": "description",
+    "kind": "minLength",
+    "min": 8,
+    "suggestion": "Each task description must state what data moves between whom and the system (at least 8 characters): distill it from the upstream movement description; never just the data-group name."
+  },
+  {
+    "id": "taskcard/acceptance-item-min-length",
+    "severity": "error",
+    "given": "$.acceptance[*]",
+    "field": "point",
+    "kind": "minLength",
+    "min": 6,
+    "suggestion": "Every acceptance point must be a verifiable, concrete statement (at least 6 characters): derive it from the upstream business rules and process behavior; state the observable result."
+  }
+]

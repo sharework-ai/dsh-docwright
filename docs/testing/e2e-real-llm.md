@@ -1,6 +1,6 @@
 # E2E: real-LLM closed loop (zai coding plan)
 
-> **2026-10-13 起本流程由 `scripts/e2e-real-llm.ts` 承载**：进程内启动真实 dsh host（llm-pi-ai zai 路由，key 仅经环境变量 `ZAI_CODING_CN_API_KEY`），断言确认门控、预算带生成、targetIndex 扇出与自动命名、seal 回签、doc_chain_status 全链对账。`ZAI_CODING_CN_API_KEY=… node --import tsx/esm scripts/e2e-real-llm.ts [--keep]`。以下手工步骤保留为历史验证记录。
+> **2026-10-13 起本流程由 `scripts/e2e-real-llm.ts` 承载**：进程内启动真实 dsh host（llm-pi-ai zai 路由，key 仅经环境变量 `ZAI_CODING_CN_API_KEY`），断言确认门控、预算带生成、targetIndex 扇出与自动命名、seal 回签、doc_chain_status 全链对账。`ZAI_CODING_CN_API_KEY=… node --import tsx/esm scripts/e2e-real-llm.ts [--keep]`。**2026-11-03 起脚本另覆盖跨出处链**（步骤 6-8）：把 `examples/packsdir/task-card` 复制进沙箱工作区 `.docwright/packs/`（真实 packsDir lane）后并入同一 pack Map，零参数消费内置 func+tech 产物——断言不立门（全继承）、自有版式、引擎命名 CARD-<topicNo>-<NN>、回执上游锚点指向内置 pack、chain-status 入册、复用命中。以下手工步骤保留为历史验证记录。
 
 
 Validated 2026-10-11/12 against `zai-coding-cn` (`glm-4.7` pre-dsh-0.2.x, `glm-5.3-flash`

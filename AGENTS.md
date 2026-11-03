@@ -7,9 +7,14 @@ docwright is a deepseek-harness (dsh) plugin: closed-loop document generation wi
 ```
 src/        plugin code (entry: index.ts; loop.ts is the core repair loop)
 packs/      built-in packs (cosmic-plan/req/func/tech; hybrid JSON rules + JS functions)
+examples/   runnable examples — packsdir/task-card is a NON-builtin pack consuming the builtin cosmic chain (see below)
 tests/      vitest; coverage gate 100% lines/functions/statements, 80% branches
 docs/       design doc + test plan
 ```
+
+## Cross-boundary chaining (packsDir pack consuming the builtin chain)
+
+A packsDir pack (`config.packsDir`, convention `<workspace>/.docwright/packs/`) consumes builtin pack artifacts like any builtin pack — nothing is builtin-gated: `consumes` resolves by name over ONE merged pack map (builtin root + packsDir roots); upstream receipts verify green+hash+version against the installed upstream pack; params declared without defaults inherit from the upstream receipts' as-run params (topicNo/topicNoPattern/targetIndex/…); the confirmation gate does not re-fire mid-chain (whole-chain-one-interaction holds across the boundary); `doc_chain_status` walks consumes edges, so packsDir packs join coverage accounting automatically. Authoring rules for this lane: `docs/designs/pack-authoring.md` (packsDir lane, `pack:check -- <root> --with packs`). Runnable example with the mechanism table: `examples/packsdir/README.md`; exercised end-to-end by `scripts/e2e-real-llm.ts` steps 6-8 against a real model.
 
 ## Commands
 

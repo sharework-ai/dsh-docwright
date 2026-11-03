@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Development Task Card",
+  "description": "A per-function hand-off card derived from the built-in COSMIC chain: one task row per upstream data movement, CFP preserved and converted to hours, plus acceptance points. Anchor fields (index/funcId/reqNo/reqTitle/l1Name) are copied from the upstream artifacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["docType", "language", "index", "funcId", "reqNo", "reqTitle", "l1Name", "cardId", "summary", "tasks", "acceptance"],
+  "properties": {
+    "docType": { "const": "task-card" },
+    "language": { "type": "string", "default": "zh-CN" },
+    "index": { "type": "integer", "minimum": 1, "description": "1-based position of this function in the upstream plan functions array; copied from the upstream artifact" },
+    "funcId": { "type": "string", "pattern": "^[A-Z0-9]{1,8}(?:-[A-Z0-9]{1,8})+$", "description": "Function id copied from the upstream artifact" },
+    "reqNo": { "type": "string", "minLength": 1, "description": "Requirement number copied from the upstream artifact" },
+    "reqTitle": { "type": "string", "minLength": 1, "description": "Requirement title copied from the upstream artifact" },
+    "l1Name": { "type": "string", "minLength": 1, "description": "Level-1 module name copied from the upstream artifact" },
+    "l2Name": { "type": "string", "description": "Level-2 module name copied from the upstream artifact when it declares one" },
+    "l3Name": { "type": "string", "description": "Level-3 module name copied from the upstream artifact when it declares one" },
+    "cardId": { "type": "string", "pattern": "^TC-[A-Z0-9]{1,8}(?:-[A-Z0-9]{1,8})+$", "description": "Card id: TC-<funcId>" },
+    "summary": { "type": "string", "minLength": 40, "description": "What this card asks the developer to build: a self-contained summary distilled from the upstream funcDesc and process list (>= 40 chars, no placeholders)" },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One row per upstream tech data movement, in upstream order — the unit of work the developer picks up",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["seq", "process", "dataGroup", "movementType", "description", "cfp", "hours"],
+        "properties": {
+          "seq": { "type": "integer", "minimum": 1, "description": "1-based task number, continuous across the whole card" },
+          "process": { "type": "string", "minLength": 1, "description": "Owning functional process name, same as the upstream tech process" },
+          "dataGroup": { "type": "string", "minLength": 1, "description": "Data group the movement operates on, same as the upstream sub-process" },
+          "movementType": { "enum": ["E", "X", "R", "W"], "description": "COSMIC data movement type: E=Entry, X=eXit, R=Read, W=Write — same as the upstream sub-process" },
+          "description": { "type": "string", "minLength": 8, "description": "What moves, distilled from the upstream movement description (>= 8 chars)" },
+          "cfp": { "type": "integer", "minimum": 1, "description": "COSMIC size of this movement, copied from the upstream sub-process" },
+          "hours": { "type": "number", "minimum": 0.5, "description": "Estimated hours = cfp × effortHoursPerCfp (effective param)" }
+        }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Concrete acceptance points a reviewer can verify, derived from the upstream business rules and process behavior",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["point"],
+        "properties": {
+          "point": { "type": "string", "minLength": 6, "description": "One verifiable statement of an observable result" }
+        }
+      }
+    }
+  }
+}

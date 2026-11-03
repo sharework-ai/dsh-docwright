@@ -1,0 +1,23 @@
+# 功能开发任务卡：{{cardId}}
+
+| 需求编号 | 需求名称 | 一级功能模块 | 功能编号 | 卡片编号 |
+| --- | --- | --- | --- | --- |
+| {{reqNo}} | {{reqTitle}} | {{l1Name}} | {{funcId}} | {{cardId}} |
+
+## 任务概述
+
+{{summary}}
+
+## 开发任务清单
+
+| # | 所属功能过程 | 数据组 | 移动类型 | 任务说明 | CFP | 预计人时 |
+| --- | --- | --- | --- | --- | --- | --- |
+{{#each tasks}}
+| {{seq}} | {{process}} | {{dataGroup}} | {{movementType}} | {{description}} | {{cfp}} | {{hours}} |
+{{/each}}
+
+## 验收要点
+
+{{#each acceptance}}
+- {{point}}
+{{/each}}
