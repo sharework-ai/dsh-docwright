@@ -16,7 +16,7 @@ async function renderOf(pack: string, lang: string): Promise<string> {
 describe('solution-document template formats (docwright-references alignment)', () => {
   it('plan renders the breakdown-plan layout in both languages', async () => {
     const zh = await renderOf('cosmic-plan', 'zh-CN')
-    expect(zh).toContain('# 需求分解规划书')
+    expect(zh).toContain('# Requirement Breakdown Plan')
     expect(zh).toContain('需求编号及标题：REQ-001-EXAMPLE_商品收藏功能')
     expect(zh).toContain('期望CFP数量：70')
     expect(zh).toContain('|一级功能|二级功能|三级功能|功能编号|类型|功能描述|预计CFP数量|')
@@ -31,7 +31,7 @@ describe('solution-document template formats (docwright-references alignment)', 
 
   it('req renders the analysis-document layout with hierarchy and numbered lists', async () => {
     const zh = await renderOf('cosmic-req', 'zh-CN')
-    expect(zh).toContain('# 需求分析文档：REQ-001-EXAMPLE_商品收藏功能')
+    expect(zh).toContain('# Requirements Analysis: REQ-001-EXAMPLE_商品收藏功能')
     expect(zh).toContain('## 功能描述')
     expect(zh).toContain('### 个人收藏')
     expect(zh).toContain('#### 添加收藏')
@@ -54,7 +54,7 @@ describe('solution-document template formats (docwright-references alignment)', 
 
   it('func renders the solution-document layout with the major-data-groups column', async () => {
     const zh = await renderOf('cosmic-func', 'zh-CN')
-    expect(zh).toContain('# 需求解决方案：REQ-001-EXAMPLE_商品收藏功能')
+    expect(zh).toContain('# Functional Process Design: REQ-001-EXAMPLE_商品收藏功能')
     expect(zh).toContain('## 个人收藏')
     expect(zh).toContain('### 添加收藏')
     expect(zh).toContain('**功能描述**')
@@ -68,7 +68,7 @@ describe('solution-document template formats (docwright-references alignment)', 
     expect(zh).toContain('u->>fav: 收藏商品')
     expect(zh).not.toContain('-&gt;')
     const en = await renderOf('cosmic-func', 'en-US')
-    expect(en).toContain('# Requirement Solution: REQ-001-EXAMPLE_商品收藏功能')
+    expect(en).toContain('# Functional Process Design: REQ-001-EXAMPLE_商品收藏功能')
     expect(en).toContain('**Functional Process List**')
     expect(en).toContain('| Major data groups |')
     expect(en).toContain('收藏请求、收藏记录')
@@ -76,7 +76,7 @@ describe('solution-document template formats (docwright-references alignment)', 
 
   it('tech renders the breakdown-table layout with one row per data movement', async () => {
     const zh = await renderOf('cosmic-tech', 'zh-CN')
-    expect(zh).toContain('# 功能点拆分表：REQ-001-EXAMPLE_商品收藏功能')
+    expect(zh).toContain('# Function-Point Breakdown: REQ-001-EXAMPLE_商品收藏功能')
     expect(zh).toContain('| 需求编号 | 需求名称 | 一级功能模块 | 二级功能模块 | 三级功能模块 | 功能用户 | 功能用户需求 | 触发事件 | 功能过程 | 子过程描述 | 数据移动类型 | 数据组 | 数据属性 | CFP | 修订标识 |')
     expect(zh).toContain('| 发起者：注册用户 接收者：收藏服务 |')
     // The golden holds 14 processes totalling 35 subprocesses: one table row each.

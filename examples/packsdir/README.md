@@ -22,7 +22,7 @@
 - **链**（阶段 5）：`consumes: ["cosmic-func", "cosmic-tech"]`——func 供给功能概述与过程清单，tech 供给逐数据移动的 CFP 账目。多上游参数合并按声明序 BFS。
 - **参数**（阶段 6）：`targetIndex`（required 无 default，寻址）、`topicNo`/`topicNoPattern`（继承，无 default——继承声明最佳实践）+ 自有部署旋钮 `effortHoursPerCfp`（default 4，CFP→人时折算）。
 - **规则**（阶段 3）：声明式 5 条（cardId 格式 / summary 长度与禁词 / 任务描述长度 / 验收要点长度）+ 函数规则 5 条——跨产物锚点对齐、任务行与上游数据移动 1:1 覆盖（多重集比对）、CFP 合计 == 上游 desiredCfps、人时折算公式、summary 措辞落地（warning）。上游缺失一律响亮报错。
-- **模板**（阶段 7）：卡片版式（概述 / 任务清单表 / 验收要点），与 tech 的"功能点拆分表"判然有别——这就是"按自己的模板生成"。
+- **模板**（阶段 7）：卡片版式（概述 / 任务清单表 / 验收要点），与 tech 的 Function-Point Breakdown 表判然有别——这就是"按自己的模板生成"。
 
 ## 使用与验证
 

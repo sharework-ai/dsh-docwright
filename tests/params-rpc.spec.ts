@@ -97,7 +97,7 @@ describe('buildParamsCatalog', () => {
     expect(catalog.groups.map(g => g.name)).not.toContain('cfpTotal')
     expect(catalog.groups.map(g => g.name)).not.toContain('topicNo')
     const plan = catalog.packs.find(p => p.name === 'cosmic-plan')!
-    expect(plan.version).toBe('0.7.0')
+    expect(plan.version).toBe('0.7.1')
     // cfpTotal (required, no default) is excluded from the plan's own list too.
     expect(plan.params.map(p => p.name)).not.toContain('cfpTotal')
     expect(plan.params.map(p => p.name)).toContain('cfpPerFunc')
