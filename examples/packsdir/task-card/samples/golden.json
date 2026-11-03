@@ -1,0 +1,340 @@
+{
+  "docType": "task-card",
+  "language": "zh-CN",
+  "index": 1,
+  "funcId": "KERQ-352-01",
+  "reqNo": "REQ-001-EXAMPLE",
+  "reqTitle": "商品收藏功能",
+  "l1Name": "个人收藏",
+  "l2Name": "添加收藏",
+  "cardId": "TC-KERQ-352-01",
+  "summary": "为本功能交付一张可直接领用的开发任务卡：围绕商品收藏场景，覆盖收藏商品、取消收藏、查询收藏列表等上游功能过程承载的行为。开发按卡上任务清单逐项完成，每项任务对应上游的一个数据移动（CFP 与上游一致），人时按部署折算系数换算，完成后按验收要点逐条核对。",
+  "tasks": [
+    {
+      "seq": 1,
+      "process": "收藏商品",
+      "dataGroup": "收藏请求",
+      "movementType": "E",
+      "description": "用户在商品详情页提交收藏请求，携带用户与商品标识",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 2,
+      "process": "收藏商品",
+      "dataGroup": "收藏记录",
+      "movementType": "W",
+      "description": "系统将本次收藏写入收藏记录，登记收藏时间与来源渠道",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 3,
+      "process": "取消收藏",
+      "dataGroup": "取消请求",
+      "movementType": "E",
+      "description": "用户在收藏列表提交取消收藏请求，指明目标商品",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 4,
+      "process": "取消收藏",
+      "dataGroup": "收藏记录",
+      "movementType": "W",
+      "description": "系统更新收藏记录状态为已取消并登记取消时间",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 5,
+      "process": "查询收藏列表",
+      "dataGroup": "列表请求",
+      "movementType": "E",
+      "description": "用户进入收藏页发起列表查询，携带分页参数",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 6,
+      "process": "查询收藏列表",
+      "dataGroup": "收藏记录",
+      "movementType": "R",
+      "description": "系统读取用户的收藏记录清单",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 7,
+      "process": "查询收藏列表",
+      "dataGroup": "收藏列表",
+      "movementType": "X",
+      "description": "系统向用户返回分页收藏列表与总数",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 8,
+      "process": "查看收藏商品详情",
+      "dataGroup": "详情请求",
+      "movementType": "E",
+      "description": "用户在收藏列表点击商品发起详情查看请求",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 9,
+      "process": "查看收藏商品详情",
+      "dataGroup": "商品档案",
+      "movementType": "R",
+      "description": "系统读取商品档案中的名称、价格与图文详情",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 10,
+      "process": "查看收藏商品详情",
+      "dataGroup": "商品详情",
+      "movementType": "X",
+      "description": "系统向用户展示商品详情页数据",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 11,
+      "process": "清理失效收藏",
+      "dataGroup": "清理请求",
+      "movementType": "E",
+      "description": "用户确认清理提示后提交失效条目清单",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 12,
+      "process": "清理失效收藏",
+      "dataGroup": "收藏记录",
+      "movementType": "W",
+      "description": "系统更新失效条目的清理状态并登记时间",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 13,
+      "process": "统计收藏数量",
+      "dataGroup": "汇总请求",
+      "movementType": "E",
+      "description": "用户查看收藏角标时发起数量汇总请求",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 14,
+      "process": "统计收藏数量",
+      "dataGroup": "收藏记录",
+      "movementType": "R",
+      "description": "系统读取有效条目与失效条目的数量记录",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 15,
+      "process": "统计收藏数量",
+      "dataGroup": "收藏数量",
+      "movementType": "X",
+      "description": "系统向用户返回收藏总数用于角标展示",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 16,
+      "process": "判断重复收藏",
+      "dataGroup": "收藏请求",
+      "movementType": "E",
+      "description": "用户提交收藏请求时系统接收查重输入",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 17,
+      "process": "判断重复收藏",
+      "dataGroup": "收藏记录",
+      "movementType": "R",
+      "description": "系统读取既有收藏记录中的已收藏标记",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 18,
+      "process": "判断重复收藏",
+      "dataGroup": "重复提示",
+      "movementType": "X",
+      "description": "系统返回是否重复的结论与友好提示",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 19,
+      "process": "推送收藏降价提醒",
+      "dataGroup": "价格变动",
+      "movementType": "E",
+      "description": "价格服务发出商品价格变动事件通知",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 20,
+      "process": "推送收藏降价提醒",
+      "dataGroup": "收藏记录",
+      "movementType": "R",
+      "description": "系统读取收藏该商品的用户清单",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 21,
+      "process": "推送收藏降价提醒",
+      "dataGroup": "降价通知",
+      "movementType": "X",
+      "description": "系统向收藏用户发出降价通知",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 22,
+      "process": "导出收藏清单",
+      "dataGroup": "导出请求",
+      "movementType": "E",
+      "description": "用户提交清单导出请求并选择文件格式",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 23,
+      "process": "导出收藏清单",
+      "dataGroup": "收藏记录",
+      "movementType": "R",
+      "description": "系统读取用户的收藏记录清单",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 24,
+      "process": "导出收藏清单",
+      "dataGroup": "导出文件",
+      "movementType": "X",
+      "description": "系统向用户返回生成的导出文件",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 25,
+      "process": "新建收藏分组",
+      "dataGroup": "分组请求",
+      "movementType": "E",
+      "description": "用户提交新建分组请求，携带分组名称",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 26,
+      "process": "新建收藏分组",
+      "dataGroup": "收藏分组",
+      "movementType": "W",
+      "description": "系统将新分组写入收藏分组记录，登记创建时间",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 27,
+      "process": "导入外部收藏",
+      "dataGroup": "导入请求",
+      "movementType": "E",
+      "description": "用户选择导入来源并提交导入请求",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 28,
+      "process": "导入外部收藏",
+      "dataGroup": "收藏记录",
+      "movementType": "W",
+      "description": "系统将导入的收藏条目写入收藏记录，登记来源",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 29,
+      "process": "恢复已取消收藏",
+      "dataGroup": "恢复请求",
+      "movementType": "E",
+      "description": "用户在回收站选择已取消条目提交恢复请求",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 30,
+      "process": "恢复已取消收藏",
+      "dataGroup": "收藏记录",
+      "movementType": "W",
+      "description": "系统将对应条目状态恢复为有效，登记恢复时间",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 31,
+      "process": "移动商品至分组",
+      "dataGroup": "移动请求",
+      "movementType": "E",
+      "description": "用户选择商品与目标分组提交移动请求",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 32,
+      "process": "移动商品至分组",
+      "dataGroup": "收藏记录",
+      "movementType": "W",
+      "description": "系统更新商品条目所属分组，登记变更时间",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 33,
+      "process": "查询收藏分组清单",
+      "dataGroup": "分组查询",
+      "movementType": "E",
+      "description": "用户进入分组管理页发起分组查询，携带分页参数",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 34,
+      "process": "查询收藏分组清单",
+      "dataGroup": "收藏分组",
+      "movementType": "R",
+      "description": "系统读取用户的收藏分组清单",
+      "cfp": 1,
+      "hours": 4
+    },
+    {
+      "seq": 35,
+      "process": "查询收藏分组清单",
+      "dataGroup": "分组列表",
+      "movementType": "X",
+      "description": "系统向用户返回分组列表与各分组条目数",
+      "cfp": 1,
+      "hours": 4
+    }
+  ],
+  "acceptance": [
+    {
+      "point": "收藏列表按收藏时间倒序展示，含商品最新价格。"
+    },
+    {
+      "point": "重复收藏同一商品时给出提示且不产生重复记录。"
+    },
+    {
+      "point": "取消收藏后列表即时更新，收藏数量统计同步变化。"
+    }
+  ]
+}

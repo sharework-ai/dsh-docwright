@@ -78,6 +78,7 @@ pack 的写入位置与文档 workspace 是两个世界——authoring 必须显
 - 目标：决定做几个 pack、链怎么连。每个 pack 独立成环（生成→校验→修复），pack 边界 = 文档产物边界，不等于业务阶段边界。
 - 链形态：consumes 声明 DAG；扇出契约 1:N:N:N（plan 整需求一份，req/func/tech 与 functions 一一对应）；每功能一条平行微链。合并/回流类动作用独立 pack（sync：consumes [context, plan]，产物是 context 新版本）。
 - 与现有 pack 的关系（authoring 前必查）：doc_packs 先查同文档类型是否已覆盖；同文档不同组织的裁剪用 packsDir 同名覆盖（DX-H3 合并语义），不 fork；跨场景共享的链级参数（编号规范 topicNoPattern、树深 moduleLevels）在链头声明一次、沿回执继承。
+- **跨出处链（packsDir pack 消费内置链）**：`consumes` 的解析空间是 loadPacks 合并后的单一 pack Map（内置根 + packsDir 根），与 pack 出处无关——packsDir pack 可以消费内置 pack 的绿产物、继承其回执 as-run 参数（下游声明同名不填 default）、分享全链一次确认门，并随 consumes 边自动进入 doc_chain_status 覆盖账目。可运行样例：`examples/packsdir/task-card`（消费 cosmic-func + cosmic-tech，零参数调用全继承）；真实模型实证：scripts/e2e-real-llm.ts 步骤 6-8。
 - 多场景共存：manifest `scenario` 标签按 scenario-chains.md 提案预留（第二个真实场景包立项时落地）。
 
 ### 阶段 6 — 参数设计（部署可变的旋钮）

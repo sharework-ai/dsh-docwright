@@ -14,6 +14,14 @@
  *       each rendered markdown must carry the solution-document markers
  *   4. an externally edited artifact revalidates green and reseals (seal)
  *   5. doc_chain_status accounts the whole chain
+ *   6. an OUTER packsDir pack (examples/packsdir/task-card, copied into the
+ *      sandbox workspace's .docwright/packs/) consumes the builtin chain's
+ *      func+tech artifacts with ZERO params — targetIndex/topicNo inherit
+ *      from the builtin receipts, the confirmation gate does NOT re-fire
+ *      (whole-chain-one-interaction across the builtin/packsDir boundary),
+ *      and the engine names the artifact CARD-<topicNo>-<NN>
+ *   7. the same call again reuses (reused: true, unchanged bytes)
+ *   8. doc_chain_status accounts the packsDir pack as a chain stage
  *
  * Prerequisites: sibling dsh checkout installed + build:lib:host-built.
  * Env: ZAI_CODING_CN_API_KEY (required — the script is a no-op without it),
@@ -25,7 +33,7 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -95,7 +103,14 @@ console.log(`e2e-real-llm: host booted (model ${MODEL})`)
 
 const { loadPacks } = await import(pathToFileURL(join(repoRoot, 'src/pack-loader.ts')).href)
 const { defineDocGenerateTool, defineDocValidateTool, defineDocChainStatusTool } = await import(pathToFileURL(join(repoRoot, 'src/tools.ts')).href)
-const packs = await loadPacks(join(repoRoot, 'packs'), {})
+// The outer-pack step runs the packsDir lane for real: the example pack is
+// copied into the sandbox workspace's .docwright/packs/ (the conventional
+// packsDir a deployment points config.packsDir at) and merged into the SAME
+// pack map — consumes resolution, upstream receipt verification, and param
+// inheritance are all name-addressed across the builtin/packsDir boundary.
+const packsDir = join(workspace, '.docwright', 'packs')
+cpSync(join(repoRoot, 'examples', 'packsdir', 'task-card'), join(packsDir, 'task-card'), { recursive: true })
+const packs = await loadPacks(join(repoRoot, 'packs'), { extra: [packsDir] })
 const config = { provider: 'zai-coding-cn', model: MODEL, workspaceRoot: workspace, maxIterations: 5, promptTokenBudget: 60_000 }
 const deps = { packs, config, ctx: hostCtx }
 const gen = defineDocGenerateTool(deps as never)
@@ -214,6 +229,55 @@ try {
   const status = await chainStatus.execute({ plan: `${TOPIC}/output/${planName}` } as never, exec as never) as { coverage: Record<string, { covered: number; total: number }>; stages: string[] }
   if (status.coverage['cosmic-req']?.covered !== 1) fail(`chain status wrong: ${JSON.stringify(status.coverage)}`)
   console.log(`e2e-real-llm: 5. chain status OK (stages ${status.stages.join(' → ')})`)
+
+  // 6. The OUTER packsDir pack consumes the builtin chain with ZERO params:
+  //    targetIndex/topicNo inherit from the builtin receipts so the gate must
+  //    NOT re-fire, and the engine names the artifact CARD-<topicNo>-<NN>.
+  const funcName = func.artifactPath.split('/').pop()!
+  const techName = tech.artifactPath.split('/').pop()!
+  const card = await gen.execute({
+    pack: 'task-card', topic: TOPIC, language: 'zh-CN', upstream: [`${TOPIC}/output/${funcName}`, `${TOPIC}/output/${techName}`],
+  } as never, exec as never) as {
+    artifactPath: string
+    reused?: boolean
+    receipt: { isValid: boolean; params?: Record<string, unknown>; upstreamHashes: Array<{ pack: string; packVersion: string; artifactHash: string }> }
+  }
+  if (card.reused === true) fail('task-card unexpectedly reused on its first call')
+  if (card.receipt.isValid !== true) fail(`task-card not green: ${JSON.stringify(card.receipt.rules)}`)
+  const cardName = card.artifactPath.split('/').pop()!
+  if (!cardName.startsWith('CARD-REQ-2088-01.')) fail(`task-card not engine-named from inherited params: ${cardName}`)
+  const cardParams = card.receipt.params ?? {}
+  if (cardParams['targetIndex'] !== 1) fail(`task-card did not inherit targetIndex from the builtin receipts: ${JSON.stringify(cardParams)}`)
+  if (cardParams['topicNo'] !== 'REQ-2088') fail(`task-card did not inherit topicNo: ${JSON.stringify(cardParams)}`)
+  if (cardParams['effortHoursPerCfp'] !== 4) fail(`task-card own default effortHoursPerCfp missing: ${JSON.stringify(cardParams)}`)
+  const anchorPacks = card.receipt.upstreamHashes.map(a => a.pack).sort()
+  if (JSON.stringify(anchorPacks) !== JSON.stringify(['cosmic-func', 'cosmic-tech'])) {
+    fail(`task-card upstream anchors wrong: ${JSON.stringify(card.receipt.upstreamHashes)}`)
+  }
+  const cardArtifact = JSON.parse(await readFileAsync(card.artifactPath, 'utf8')) as { funcId: string; tasks: Array<{ seq: number; cfp: number; hours: number }> }
+  if (cardArtifact.funcId !== firstFuncId) fail(`task-card funcId mismatch vs the chain: ${cardArtifact.funcId} vs ${firstFuncId}`)
+  const cardRows = cardArtifact.tasks.length
+  if (cardRows !== expectedMovements) fail(`task-card has ${cardRows} task rows, expected one per tech movement (${expectedMovements})`)
+  if (!cardArtifact.tasks.every(t => Math.abs(t.hours - t.cfp * 4) < 1e-9)) fail('task-card hours are not the effortHoursPerCfp conversion of cfp')
+  const cardMd = await markdownOf(card.artifactPath)
+  if (!cardMd.includes('# 功能开发任务卡：TC-') || !cardMd.includes('| # | 所属功能过程 |') || !cardMd.includes('## 验收要点')) {
+    fail(`task-card markdown misses the card markers: ${cardMd.slice(0, 200)}`)
+  }
+  console.log(`e2e-real-llm: 6. outer packsDir pack green with ZERO params (gate silent, ${cardName}, ${cardRows} rows, anchors ${anchorPacks.join('+')})`)
+
+  // 7. Reuse across the boundary: the identical call reuses (zero LLM).
+  const cardBytes = await readFileAsync(card.artifactPath, 'utf8')
+  const again = await gen.execute({
+    pack: 'task-card', topic: TOPIC, language: 'zh-CN', upstream: [`${TOPIC}/output/${funcName}`, `${TOPIC}/output/${techName}`],
+  } as never, exec as never) as { reused?: boolean; artifactPath: string }
+  if (again.reused !== true) fail(`task-card reuse did not hit: ${JSON.stringify(again).slice(0, 200)}`)
+  if (await readFileAsync(again.artifactPath, 'utf8') !== cardBytes) fail('task-card reuse returned different artifact bytes')
+  console.log(`e2e-real-llm: 7. outer pack reuse OK (${again.artifactPath.split('/').pop()}, bytes unchanged)`)
+
+  // 8. Whole-chain accounting now includes the packsDir stage.
+  const status2 = await chainStatus.execute({ plan: `${TOPIC}/output/${planName}` } as never, exec as never) as { coverage: Record<string, { covered: number; total: number }>; stages: string[] }
+  if (status2.coverage['task-card']?.covered !== 1) fail(`task-card missing from chain accounting: ${JSON.stringify(status2.coverage)}`)
+  console.log(`e2e-real-llm: 8. chain status incl. packsDir stage OK (stages ${status2.stages.join(' → ')})`)
 
   console.log('e2e-real-llm: PASS')
 } finally {

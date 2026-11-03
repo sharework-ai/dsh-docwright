@@ -1,0 +1,23 @@
+# Development Task Card: {{cardId}}
+
+| Req No | Requirement | L1 Module | Function Id | Card Id |
+| --- | --- | --- | --- | --- |
+| {{reqNo}} | {{reqTitle}} | {{l1Name}} | {{funcId}} | {{cardId}} |
+
+## Summary
+
+{{summary}}
+
+## Task List
+
+| # | Process | Data Group | Movement | Description | CFP | Est. Hours |
+| --- | --- | --- | --- | --- | --- | --- |
+{{#each tasks}}
+| {{seq}} | {{process}} | {{dataGroup}} | {{movementType}} | {{description}} | {{cfp}} | {{hours}} |
+{{/each}}
+
+## Acceptance Points
+
+{{#each acceptance}}
+- {{point}}
+{{/each}}

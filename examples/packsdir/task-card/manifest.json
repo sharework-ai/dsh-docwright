@@ -1,0 +1,55 @@
+{
+  "name": "task-card",
+  "version": "0.1.0",
+  "description": {
+    "zh": "功能开发任务卡（针对一个功能）：把内置 COSMIC 链的 func（功能过程设计）与 tech（数据移动拆分）绿产物整合为开发团队可直接领用的任务卡——任务概述、逐数据移动的任务清单（CFP 与人时折算）、验收要点。消费两个内置上游产物，参数全部沿链继承；requires topic——每话题一条需求。",
+    "en": "Development task card for one function: consolidates the built-in COSMIC chain's func (functional-process design) and tech (data-movement breakdown) green artifacts into a task card a dev team can pick up directly — task summary, one task row per data movement (CFP with hour conversion), acceptance points. Consumes two built-in upstream artifacts; all params inherit along the chain; requires topic — one requirement per topic."
+  },
+  "consumes": [
+    "cosmic-func",
+    "cosmic-tech"
+  ],
+  "languages": [
+    "zh-CN",
+    "en-US"
+  ],
+  "requiresTopic": true,
+  "reuse": true,
+  "artifactPrefix": "CARD",
+  "maxRounds": 6,
+  "params": {
+    "targetIndex": {
+      "type": "number",
+      "required": true,
+      "min": 1,
+      "description": {
+        "zh": "目标功能在上游 plan functions 数组中的 1 起始位置；无默认值——沿链从上游回执继承，独立调用时缺失即报错并列出候选",
+        "en": "1-based position of the target function in the upstream plan functions array; no default — inherited from the upstream receipt along the chain, and missing values fail loud with candidates when called standalone"
+      }
+    },
+    "topicNo": {
+      "type": "string",
+      "description": {
+        "zh": "由引擎派生：用 topicNoPattern 从话题名提取需求编号；沿链继承；决定 CARD-<topicNo>-<NN> 的产物命名",
+        "en": "Derived by the engine: requirement number extracted from the topic name via topicNoPattern; inherited along the chain; drives CARD-<topicNo>-<NN> artifact naming"
+      }
+    },
+    "topicNoPattern": {
+      "type": "string",
+      "description": {
+        "zh": "从话题名提取需求编号的正则（首个捕获组，否则整体匹配）；链头 cosmic-context 声明，沿回执继承——此处无 default",
+        "en": "Regex (first capture group, else whole match) extracting the requirement number from the topic name; declared by the chain head cosmic-context and inherited via receipts — no default here"
+      }
+    },
+    "effortHoursPerCfp": {
+      "type": "number",
+      "default": 4,
+      "min": 1,
+      "max": 24,
+      "description": {
+        "zh": "本部署的 CFP→人时折算系数：每个任务的预计人时 = cfp × effortHoursPerCfp（rule taskcard/hours-math）；部署可变，改默认值即可",
+        "en": "This deployment's CFP-to-hour conversion: each task's estimated hours = cfp × effortHoursPerCfp (rule taskcard/hours-math); deployment-varying — tune the default"
+      }
+    }
+  }
+}
