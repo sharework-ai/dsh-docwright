@@ -9,7 +9,7 @@ Source: functional spec at docs/designs/docwright-mvp.md. 本文件记录真正�
 - [x] **param-management-ui（IMPLEMENTED 2026-10-29）** — 插件级 / pack 级参数的界面管理。设计 docs/designs/param-management-ui.md（含实施修正四条：Loader id=包名 / settings.plugins.tab + plugins.bundle.config 席位 / Config 写走 configEditor / pack Map 原地热替换）。纳入判据：界面只出现有 default 的 ParamSpec 与 Config 键；统一展现 = 插件参数区块 + 跨 pack 同名聚合（生效源计算、遮蔽行指路）+ pack 平铺；四类控件映射 + 行内 description。
 
 - [ ] **scenario-chains（PROPOSAL，挂起至触发）** — 场景链两级能力发现：manifest 增必填 `scenario` 标签 + `doc_packs` 恒定分组返回，多场景共存时模型按任务域聚焦。**触发条件：第二个真实场景包立项（或内置 pack 总数越过 ~15）**，实施切分 S1/S2 见 docs/designs/scenario-chains.md。前置已落地：同 root 重名 pack 加载期 fail loud（跨 root 覆盖为 packsDir 既定语义）。
-- [ ] **E2E-real-llm** — 真实 LLM 闭环端到端。**已观测（2026-10-12）**：多轮修复路径实证（60→100 轨迹，权重 10/error 精确对账，两轮 promptHash 各异，跨 dsh 版本回执复验 hashMatches=true）；但 glm-5.3-flash 下三种违规素材均一轮全绿（模型把 pack 规则置于素材之上，护栏按设计工作），stagnation/decline 阈值（K=D=3）在真实 LLM 下不可触达，仍由确定性单测覆盖（runbook Calibration 节）。**剩余**：换更弱模型或"规则无法满足"的 pack 观测真实停滞——价值有限，可长期挂起（原脚本已被 tmp 清理，按此描述重写）
+- [ ] **E2E-real-llm** — 真实 LLM 闭环端到端。**已观测（2026-10-12）**：多轮修复路径实证（60→100 轨迹，权重 10/error 精确对账，两轮 promptHash 各异，跨 dsh 版本回执复验 hashMatches=true）；但 glm-5.3-flash 下三种违规素材均一轮全绿（模型把 pack 规则置于素材之上，护栏按设计工作），stagnation/decline 阈值（K=D=3）在真实 LLM 下不可触达，仍由确定性单测覆盖（runbook Calibration 节）。**2026-11-03 全链扩面 + 复跑 PASS（be4e378）**：脚本从未被清理（"tmp 清理"记载有误），但与工具层现状漂移四处（requiresTopic 入口响错、plan 强制上游 context、真实宿主 Cordis ctx 拒外部写、引擎命名 PREFIX-funcId）已修；扩至 func/tech 真实阶段并加四文档 markdown 版式断言（tech 行数=数据移动数，按产物 reqNo 对账）。glm-5.3-flash 全链 PASS×2：plan 1-2 轮绿（预算带内）、req/func/tech 全绿（func 展示字段一次抄对）、seal/链对账 OK；附带发现并修复 mermaid 模板 HTML 转义缺陷（`-&gt;` 污染图源码，golden 渲染测不出、真实数据暴露——func 模板改三花括号）。**剩余**：换更弱模型或"规则无法满足"的 pack 观测真实停滞——价值有限，可长期挂起
 
 ## Deferred
 
