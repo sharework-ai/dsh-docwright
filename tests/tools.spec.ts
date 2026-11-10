@@ -37,12 +37,13 @@ async function makeDeps(overrides: Record<string, unknown> = {}) {
 }
 
 describe('doc_packs tool', () => {
-  it('lists installed packs with discovery fields', async () => {
+  it('lists installed packs with discovery fields and the deployment policy', async () => {
     const deps = await makeDeps()
     const tool = defineDocPacksTool(deps)
-    const packs = await tool.execute({} as never, { signal } as never) as Array<{ name: string; version: string; description: string; languages: string[]; consumes: string[] }>
-    expect(packs).toHaveLength(6)
-    const plan = packs.find(p => p.name === 'cosmic-plan')!
+    const listing = await tool.execute({} as never, { signal } as never) as { confirmPolicy: string; packs: Array<{ name: string; version: string; description: string; languages: string[]; consumes: string[] }> }
+    expect(listing.confirmPolicy).toBe('standard')
+    expect(listing.packs).toHaveLength(6)
+    const plan = listing.packs.find(p => p.name === 'cosmic-plan')!
     expect(plan).toMatchObject({ version: '0.7.1', languages: ['zh-CN', 'en-US'], consumes: ['cosmic-context'] })
     expect(plan.description.length).toBeGreaterThan(0)
   })

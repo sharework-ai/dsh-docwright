@@ -89,6 +89,27 @@ Stages 0-2 and 4-5 are design; 3, 6, 7 produce executable assets; 8-9 are
 acceptance. Iterate freely between design and development — never skip
 acceptance.
 
+### Design sign-off gates (default: interactive)
+
+A pack is a quality contract the user will live with — the design gets the
+user's signature before any file is written. Two checkpoints:
+
+- **Gate 1 — artifact plan (end of Stage 1)**: present the docType list,
+  each artifact's granularity (single vs fan-out), reuse classification,
+  and the chain sketch. Cheap to fix now, expensive after schemas exist.
+- **Gate 2 — design contract table (end of Stage 6, before Stage 3/7
+  development writes any file)**: one table covering the schema shape
+  (fields, enums, patterns), the **naming triple** (`artifactPrefix` +
+  the `topicNoPattern` convention + the `topicNo` declaration — all three
+  or none), the param table (with confirm/required/extractable flags),
+  `consumes` edges, languages, and `scope`/`requiresTopic`. Wait for the
+  user's approval, then write the assets.
+
+If the user asks for speed ("直接做", "一次到位", "别问我"), batch the two
+gates into ONE combined table shown before writing files, and summarize the
+accepted contract in the final report — but never write pack files with no
+presented contract at all.
+
 ### Stage 0 — Know the domain
 
 Answer in writing: what documents does this scenario produce, what is the
