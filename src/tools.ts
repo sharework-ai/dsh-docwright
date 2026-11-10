@@ -155,6 +155,12 @@ export type GenerateToolResult = {
   readonly upstreamWarnings?: string[]
   /** Fan-out progress for per-function packs: this stage's green artifacts vs the reference function set. */
   readonly coverage?: CoverageProgress
+  /** The resolved files the engine anchored this generation to (file entries
+   * only; inline text is verbatim in the receipt). The authoritative input
+   * set for any content verification — under dual materials roots the
+   * topic-level file wins, and a session-cwd pre-read of the same ref can
+   * easily have read the shared one instead (real-session finding). */
+  readonly materials?: { ref: string; path: string }[]
 }
 
 /** Fan-out coverage of one stage (docs/designs/params-and-chain-contract.md). */
@@ -471,6 +477,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       + 'Call doc_packs first to see which packs are installed, then pass its name as pack. '
       + 'Returns artifactPath, markdownPath, and the validation receipt. '
       + 'Materials are paths relative to the active materials dir or inline text starting with "#!inline". The two dirs mean different things: references/ holds project reference knowledge (system architecture, module map, numbering conventions — workspace analysis packs read it), while input/ holds the user\'s per-work-item document (e.g. the requirement analysis brief); topic-scoped packs resolve refs against <topic>/<dir>/ first, then the workspace-level <workspace>/<dir>/. '
+      + 'The result carries `materials` — the resolved absolute paths the engine anchored: treat it as the authoritative input set and verify content against THOSE files, never against your own pre-reads (under dual materials roots a session-cwd read of the same ref hits the shared dir, not the topic one that won). '
       + 'Artifacts land under the output root — <topic>/output/ when topic is given (topic-scoped packs REQUIRE topic: one work item, one topic directory — e.g. a requirement analysis, a functional design, and a technical design for the same work item share one topic), <workspace>/output/ otherwise; '
       + 'reuse: a green, unchanged artifact of a reuse pack that was generated from exactly this call\'s inputs (same materials manifest — refs and content hashes — and, for chained packs, hash-matching upstream anchors and the same addressed artifact name) is returned as-is (reused: true, zero LLM); a changed or added/dropped material, a regenerated upstream, an edited artifact, an explicit non-addressing param, or force: true rebuilds it. '
       + 'Pack-declared tunables can be overridden via params; required params (no default) must be provided. '
@@ -599,6 +606,9 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       // for the receipt's manifest — the double read keeps the service
       // self-contained). An unreadable ref fails loud regardless of reuse.
       const materialEntries = await readMaterialEntries(materials, workspaceRoot, materialsRoots)
+      const materialPaths = materialEntries
+        .filter((entry): entry is typeof entry & { path: string } => entry.path !== undefined)
+        .map(entry => ({ ref: entry.ref, path: entry.path }))
       const extractionFile = await readExtractionFile(extractionFilePath(outputRoot, pack.manifest.name))
       const extracted = extractionFile !== undefined ? verifyExtraction(pack, extractionFile, materialEntries) : { values: {}, notFound: {} }
       // A re-extracted value that differs from a reusable receipt's as-run
@@ -607,7 +617,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       // the confirmation gate like any other param change.
       if (pack.manifest.reuse === true && args.force !== true && !paramOverrideDrift) {
         const reused = await findReusableArtifact(outputRoot, pack, materialAnchors(materialEntries), deterministicName, upstreamAnchors, extracted)
-        if (reused !== undefined) return { ...reused, reused: true } as unknown as DocGenerateResult
+        if (reused !== undefined) return { ...reused, reused: true, materials: materialPaths } as unknown as DocGenerateResult
       }
       // Some input must exist: materials, or the upstream artifacts of a
       // chained pack (whose text already feeds the prompt).
@@ -730,7 +740,8 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       })
       const coverage = await coverageProgress(pack, upstreamRecords, outputRoot)
       const withCoverage = coverage === undefined ? result : { ...result, coverage }
-      return (upstreamWarnings === undefined ? withCoverage : { ...withCoverage, upstreamWarnings }) as unknown as DocGenerateResult
+      const withMaterials = { ...withCoverage, materials: materialPaths }
+      return (upstreamWarnings === undefined ? withMaterials : { ...withMaterials, upstreamWarnings }) as unknown as DocGenerateResult
     },
   })
 }

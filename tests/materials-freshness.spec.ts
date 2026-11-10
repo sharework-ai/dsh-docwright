@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readMaterialEntries } from '../src/materials.ts'
 import { loadPacks } from '../src/pack-loader.ts'
 import { artifactHashOf } from '../src/receipt.ts'
 import { defineDocGenerateTool, defineDocValidateTool } from '../src/tools.ts'
@@ -47,7 +48,7 @@ async function writeFixturePack(root: string, name: string): Promise<void> {
 interface Harness {
   wsRoot: string
   packs: ReadonlyMap<string, unknown>
-  generate(materials: string[], reply?: string, extra?: Record<string, unknown>): Promise<{ reused?: boolean; artifactPath: string; receipt: { isValid: boolean; materials?: Array<{ ref: string; hash: string }> } }>
+  generate(materials: string[], reply?: string, extra?: Record<string, unknown>): Promise<{ reused?: boolean; artifactPath: string; materials?: Array<{ ref: string; path: string }>; receipt: { isValid: boolean; materials?: Array<{ ref: string; hash: string }> } }>
 }
 
 /** Workspace-scope fixture pack + workspace with a references/ dir; each generate call gets a fresh scripted LLM. */
@@ -262,5 +263,36 @@ describe('chained reuse pre-check (upstream anchors, addressing, params)', () =>
     const other = await h.generate(['context/wsart.json'], { artifactName: 'two', topic: 't1' })
     expect(other.reused).toBeUndefined()
     expect(other.artifactPath).toContain('two.json')
+  })
+})
+
+describe('resolved material paths surface in the doc_generate result', () => {
+  it('the result reports the anchored file path on generation and on reuse', async () => {
+    const h = await makeHarness()
+    await writeMaterial(h.wsRoot, 'a.md', 'A')
+    const expectedPath = join(h.wsRoot, 'references', 'a.md')
+    const first = await h.generate(['a.md'])
+    expect(first.receipt.isValid).toBe(true)
+    expect(first.materials).toEqual([{ ref: 'a.md', path: expectedPath }])
+    const second = await h.generate(['a.md'])
+    expect(second.reused).toBe(true)
+    expect(second.materials).toEqual([{ ref: 'a.md', path: expectedPath }])
+  })
+
+  it('dual roots: the topic-level file wins and its path is what the entry records', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'docwright-dual-root-'))
+    try {
+      const topicDir = join(root, 'T1 topic')
+      await mkdir(join(topicDir, 'input'), { recursive: true })
+      await mkdir(join(root, 'input'), { recursive: true })
+      await writeFile(join(topicDir, 'input', 'm.md'), 'topic-level', 'utf8')
+      await writeFile(join(root, 'input', 'm.md'), 'workspace-level', 'utf8')
+      const entries = await readMaterialEntries(['m.md'], root, [join(topicDir, 'input'), join(root, 'input')])
+      expect(entries).toHaveLength(1)
+      expect(entries[0]!.text).toBe('topic-level')
+      expect(entries[0]!.path).toBe(join(topicDir, 'input', 'm.md'))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })
