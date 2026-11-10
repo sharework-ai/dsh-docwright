@@ -195,8 +195,11 @@ out-of-range score fails loud.
   fan-out items) — **but only when `topicNo` resolves**: the chain head must
   declare `topicNoPattern` (required + default, the numbering convention
   comes from project reference materials) and downstream packs re-declare it
-  (no default) to inherit. A prefix without a `topicNoPattern` contract
-  silently degrades to timestamp names — declare both or neither.
+  to inherit (type + description only — NOT required: a required-no-default
+  re-declaration would demand the value from every caller, including golden
+  runs). A prefix without a `topicNoPattern` contract
+  silently degrades to timestamp names — declare both or neither; `pack:check`
+  fails the mismatch, so fix it when the checker goes red.
 - Reuse: defaults follow scope (workspace true / topic false). Declaring
   `reuse: true` on a topic pack requires every input class to be anchor-
   verifiable (materials manifest, upstream hashes, param drift policy).
