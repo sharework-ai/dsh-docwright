@@ -5,6 +5,8 @@ export type Translate = (key: string) => string
 export const en = {
   nav: 'Docwright params',
   title: 'Docwright parameters',
+  marketTitle: 'Docwright pack market',
+  openExternal: 'Open in new window ↗',
   intro: 'Maintains the parameter values defined in the plugin and the packs. Parameters obtained during the conversation, from materials or user input, are not managed here.',
   viewGroups: 'Parameters',
   viewPacks: 'Packs',
@@ -64,6 +66,8 @@ export const en = {
 export const zh: Record<string, string> = {
   nav: 'Docwright 参数',
   title: 'Docwright 参数',
+  marketTitle: 'Docwright pack 市场',
+  openExternal: '在新窗口打开 ↗',
   intro: '此处维护插件和包中定义的参数值，不包括那些在会话中从素材或用户输入中获得的参数。',
   viewGroups: '参数',
   viewPacks: '包',

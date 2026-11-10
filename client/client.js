@@ -97,6 +97,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		const en = {
 			nav: "Docwright params",
 			title: "Docwright parameters",
+			marketTitle: "Docwright pack market",
+			openExternal: "Open in new window ↗",
 			intro: "Maintains the parameter values defined in the plugin and the packs. Parameters obtained during the conversation, from materials or user input, are not managed here.",
 			viewGroups: "Parameters",
 			viewPacks: "Packs",
@@ -154,6 +156,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		const zh = {
 			nav: "Docwright 参数",
 			title: "Docwright 参数",
+			marketTitle: "Docwright pack 市场",
+			openExternal: "在新窗口打开 ↗",
 			intro: "此处维护插件和包中定义的参数值，不包括那些在会话中从素材或用户输入中获得的参数。",
 			viewGroups: "参数",
 			viewPacks: "包",
@@ -262,7 +266,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		const codeFont = "var(--dsh-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)";
 		/** The host's first muted gray (real theme token; the old --dsw-alias-text-*
 		* names never existed upstream and always fell through to full-strength). */
-		const secondary = "var(--dsw-alias-label-secondary, inherit)";
+		const secondary$1 = "var(--dsw-alias-label-secondary, inherit)";
 		const row = {
 			display: "flex",
 			alignItems: "center",
@@ -281,12 +285,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			fontFamily: codeFont
 		};
 		const desc = {
-			color: secondary,
+			color: secondary$1,
 			whiteSpace: "pre-wrap",
 			wordBreak: "break-word"
 		};
 		const valueStyle = { fontFamily: codeFont };
-		const muted = { color: secondary };
+		const muted = { color: secondary$1 };
 		const group = {
 			border: "0.5px solid var(--dsw-alias-border-l4, transparent)",
 			borderRadius: "var(--dsw-radius-xl, 20px)",
@@ -421,7 +425,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const { d, t } = props;
 			if (d.role === "shadowed") return (0, react.createElement)("div", { style: rowHead }, (0, react.createElement)("span", { style: {
 				...valueStyle,
-				color: secondary,
+				color: secondary$1,
 				textDecoration: "line-through"
 			} }, displayDefault(d, t)), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, fill(t("shadowedByNote"), { pack: d.shadowedBy ?? "" })));
 			return (0, react.createElement)(EditSeat, {
@@ -795,28 +799,100 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}) : null);
 		}
 		//#endregion
+		//#region src/client/MarketTab.tsx
+		/**
+		* The Plugins-page pack-market tab: the market site (dm.shrwk.com) embedded
+		* in place. The site is anonymous-readable (catalog and tarball downloads);
+		* account features keep their own Supabase session inside the frame —
+		* partitioned storage, so the frame signs in separately from the standalone
+		* site. An always-visible header offers the standalone escape hatch, which
+		* also covers deployments where the frame is refused.
+		*
+		* No CSS modules — styles are inline host theme tokens (same discipline as
+		* ParamsSection). The URL is a product constant of this bundle, mirroring
+		* dsh-market's own server URL handling.
+		*/
+		/** The pack market this tab presents. */
+		const MARKET_URL = "https://dm.shrwk.com/";
+		const fontFamily = "var(--dsw-font-family, inherit)";
+		const secondary = "var(--dsw-alias-label-secondary, inherit)";
+		const rootStyle = {
+			fontFamily,
+			display: "flex",
+			flexDirection: "column",
+			gap: "8px",
+			minHeight: "480px",
+			height: "calc(100vh - 150px)"
+		};
+		const barStyle = {
+			display: "flex",
+			alignItems: "baseline",
+			gap: "10px",
+			flex: "none"
+		};
+		const titleStyle = {
+			fontWeight: 600,
+			fontSize: "14px"
+		};
+		const linkStyle = {
+			color: secondary,
+			fontSize: "12px",
+			textDecoration: "none"
+		};
+		const frameStyle = {
+			flex: "1 1 auto",
+			width: "100%",
+			border: "0.5px solid var(--dsw-alias-border-l4, transparent)",
+			borderRadius: "var(--dsw-radius-xl, 20px)",
+			background: "var(--dsw-alias-bg-layer-1, #fff)"
+		};
+		function MarketTab(props) {
+			const t = translate(props.lang === "zh" ? zh : en);
+			return (0, react.createElement)("div", { style: rootStyle }, (0, react.createElement)("div", { style: barStyle }, (0, react.createElement)("span", { style: titleStyle }, t("marketTitle")), (0, react.createElement)("a", {
+				href: MARKET_URL,
+				target: "_blank",
+				rel: "noreferrer",
+				style: linkStyle
+			}, t("openExternal"))), (0, react.createElement)("iframe", {
+				src: MARKET_URL,
+				title: t("marketTitle"),
+				style: frameStyle
+			}));
+		}
+		//#endregion
 		//#region src/client/index.tsx
 		/**
-		* docwright params UI client half: registers the params maintenance views on
-		* the two seats the 0.1.7+ slot contract offers third-party bundles —
-		* `settings.plugins.tab` (a tab beside 通用/模型/内置插件 in the Settings
-		* dialog) and `plugins.bundle.config` (the configuration card on the
-		* bundle's own Plugins page). Both seats are reached through `slots.inject`,
-		* which waits for the slot to exist: a host that never declares one never
-		* runs its registration (dsh-market's detection pattern — no version
-		* strings). The old `settings.section` seat is NOT registered: 0.2.1's
-		* declaration table rejects it ("slot is not declared") and the section
-		* never renders.
+		* docwright UI client half: mounts the plugin's three host surfaces, each
+		* reached through `slots.inject`, which waits for the slot to exist — a host
+		* that never declares one never runs its registration (dsh-market's detection
+		* pattern — no version strings):
+		*
+		* - `settings.section` (+ `settings.section.icon`): a top-level Settings nav
+		*   entry rendering the params maintenance views (dsh-market's Settings entry
+		*   recipe; the icon id must equal the section id or the shell never draws it).
+		* - `plugins.tab`: a tab on the Plugins page's tab row (after 已安装) opening
+		*   the pack market (dm.shrwk.com) in place. Order 1 lands after the host's
+		*   own Discover tab; dsh-market's tab takes -1 to sit before it.
+		* - `plugins.bundle.config`: the configuration card on the bundle's own
+		*   Plugins page, keyed by this package's name.
+		*
+		* The 0.1.7-era `settings.plugins.tab` seat is intentionally NOT registered:
+		* the top-level section supersedes it (one settings home, like dsh-market,
+		* which dropped the inner tab too).
 		*
 		* Built by tsdown into the __ModuleLoader__ factory bundle at client/client.js;
 		* externals resolve through the loader's module table. Containment follows
 		* dsh-market's lesson: a throw inside the host's client bootstrap takes the
-		* whole app down, so each mounting is wrapped and a failure costs this
-		* section for the session, never the shell.
+		* whole app down, so each mounting is wrapped separately and a failure costs
+		* that one surface for the session, never the shell.
 		*/
 		const NS = "docwright-params";
 		/** The bundle's package name — the key `plugins.bundle.config` is contracted to. */
 		const PACKAGE_NAME = "@sharework-ai/dsh-docwright";
+		/** The settings.section id; `settings.section.icon` must register the same id. */
+		const SECTION_ID = "docwright";
+		/** The plugins.tab id. */
+		const MARKET_TAB_ID = "docwright-market";
 		/** Primitives this bundle requires that older hosts may lack. */
 		const REQUIRED_PRIMITIVES = [
 			"Button",
@@ -839,8 +915,16 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			try {
 				mountSection(ctx);
 			} catch (error) {
-				console.error("[docwright] params section failed to mount; the rest of the app is unaffected.", error);
+				console.error("[docwright] surfaces failed to mount; the rest of the app is unaffected.", error);
 			}
+		}
+		/** Register one slot cell, converting whatever disposer the host hands back
+		* into a fiber-owned cleanup (absent disposers become no-ops). */
+		function own(ctx, label, register) {
+			const off = register();
+			ctx.effect(() => () => {
+				if (typeof off === "function") off();
+			}, label);
 		}
 		function mountSection(ctx) {
 			let lang = ctx.locale.getSnapshot().active === "zh" ? "zh" : "en";
@@ -848,42 +932,83 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				lang = ctx.locale.getSnapshot().active === "zh" ? "zh" : "en";
 			});
 			const label = () => lang === "zh" ? "Docwright 参数" : "Docwright params";
+			const marketLabel = () => lang === "zh" ? "Docwright 市场" : "Docwright packs";
 			const resolveText = (value) => {
 				if (typeof ctx.locale.resolveText === "function") return ctx.locale.resolveText(value);
 				return resolveLocalized(value, lang);
 			};
-			ctx.slots.inject("settings.plugins.tab", () => {
-				const off = ctx.slots.register({
-					name: "settings.plugins.tab",
-					id: NS,
-					order: 60,
-					label,
-					locale: NS,
-					inject: () => ({ lang })
-				}, () => (0, react.createElement)(ParamsSection, {
-					lang,
-					resolveText
-				}));
-				ctx.effect(() => () => {
-					if (typeof off === "function") off();
-				}, "docwright: settings tab");
+			const params = () => (0, react.createElement)(ParamsSection, {
+				lang,
+				resolveText
 			});
-			ctx.slots.inject("plugins.bundle.config", () => {
-				const off = ctx.slots.register({
-					name: "plugins.bundle.config",
-					key: PACKAGE_NAME,
-					locale: NS,
-					inject: () => ({ lang })
-				}, (owner = {}) => owner.view === "summary" ? null : (0, react.createElement)(ParamsSection, {
-					lang,
-					resolveText
-				}));
-				ctx.effect(() => () => {
-					if (typeof off === "function") off();
-				}, "docwright: bundle config card");
-			});
+			try {
+				ctx.slots.inject("settings.section", () => {
+					own(ctx, "docwright: settings section", () => ctx.slots.register({
+						name: "settings.section",
+						id: SECTION_ID,
+						order: 45,
+						label,
+						locale: NS,
+						inject: () => ({ lang })
+					}, params));
+				});
+			} catch (error) {
+				console.error("[docwright] settings section failed to register.", error);
+			}
+			try {
+				ctx.slots.inject("settings.section.icon", () => {
+					own(ctx, "docwright: settings icon", () => ctx.slots.register({
+						name: "settings.section.icon",
+						id: SECTION_ID
+					}, (owner = {}) => (0, react.createElement)(DocwrightMark, { size: owner.size ?? 16 })));
+				});
+			} catch (error) {
+				console.error("[docwright] settings icon failed to register.", error);
+			}
+			try {
+				ctx.slots.inject("plugins.tab", () => {
+					own(ctx, "docwright: plugins market tab", () => ctx.slots.register({
+						name: "plugins.tab",
+						id: MARKET_TAB_ID,
+						order: 1,
+						label: marketLabel,
+						locale: NS,
+						inject: () => ({ lang })
+					}, () => (0, react.createElement)(MarketTab, { lang })));
+				});
+			} catch (error) {
+				console.error("[docwright] plugins market tab failed to register.", error);
+			}
+			try {
+				ctx.slots.inject("plugins.bundle.config", () => {
+					own(ctx, "docwright: bundle config card", () => ctx.slots.register({
+						name: "plugins.bundle.config",
+						key: PACKAGE_NAME,
+						locale: NS,
+						inject: () => ({ lang })
+					}, (owner = {}) => owner.view === "summary" ? null : params()));
+				});
+			} catch (error) {
+				console.error("[docwright] bundle config card failed to register.", error);
+			}
+		}
+		/** The section's nav glyph: a document sheet with a check, currentColor. */
+		function DocwrightMark(owner) {
+			const size = owner.size ?? 16;
+			return (0, react.createElement)("svg", {
+				width: size,
+				height: size,
+				viewBox: "0 0 16 16",
+				fill: "none",
+				stroke: "currentColor",
+				strokeWidth: 1.3,
+				strokeLinecap: "round",
+				strokeLinejoin: "round",
+				"aria-hidden": true
+			}, (0, react.createElement)("path", { d: "M3.5 1.5h5.8l3.2 3.2v9.8h-9z" }), (0, react.createElement)("path", { d: "M9.3 1.5v3.2h3.2" }), (0, react.createElement)("path", { d: "M5.5 8.2h5" }), (0, react.createElement)("path", { d: "M5.5 10.6l1.2 1.2 2.3-2.3" }));
 		}
 		//#endregion
+		exports.DocwrightMark = DocwrightMark;
 		exports.apply = apply;
 		exports.inject = inject;
 		exports.missingPrimitives = missingPrimitives;
