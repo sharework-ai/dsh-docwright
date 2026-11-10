@@ -26,6 +26,8 @@ npx tsc -b tsconfig.json  # typecheck only
 pnpm run smoke:host     # pre-release: pack → real dsh host boot → tool assertions (no API key)
 ```
 
+**After every dsh update** (sibling checkout fast-forwarded: `pnpm install` + `pnpm run build` there, then here): run `npx tsc -b` FIRST. Module-identity breaks surface here before anywhere else — the linked dsh packages augment `@deepseek-ai/cordis` by module name, so a vendor bump (e.g. cordis 4.1.0) with docwright resolving the same name to a different copy (npm) splits one module into two file sets and the augmentation lands on the other copy: typecheck fails with `Property 'X' does not exist on type 'Context'` while unit tests may still pass. Fix is identity alignment (devDependency `link:` to the dsh-vendored package — see `pnpm-workspace.yaml` overrides), then the normal gates.
+
 ## Conventions (inherited from deepseek-harness/AGENTS.md)
 
 - ESM everywhere; relative imports use `.ts` extensions (`allowImportingTsExtensions` + `rewriteRelativeImportExtensions`).
