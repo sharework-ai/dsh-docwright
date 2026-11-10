@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import type { DeclarativeRule, FunctionRule, Pack, PackManifest, ParamSpec, ScoreFn } from './pack.ts'
 import { isParamRef } from './pack.ts'
@@ -260,7 +261,10 @@ async function loadFunctionRules(dir: string): Promise<{ rules: readonly Functio
   }
   let mod: Record<string, unknown>
   try {
-    mod = await import(rulesPath)
+    // Dynamic import needs a URL, not a raw OS path: on Windows a bare `C:\...`
+    // specifier is parsed as protocol `c:` (and `#` in a path would act as a
+    // URL fragment on every platform).
+    mod = await import(pathToFileURL(rulesPath).href)
   } catch (error) {
     // A present-but-broken functions.js must never silently disable rules.
     throw new Error(`pack ${dir}: rules/functions.js failed to import (${(error as Error).message}); fix the module or remove the file`)
