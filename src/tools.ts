@@ -482,11 +482,11 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       materials: { type: 'array', items: { type: 'string' }, description: 'Material references: paths relative to the active materials dir (references/ for reference knowledge, input/ for the user\'s per-work-item document — packs declare which; topic-level dir wins over the workspace-level one) or #!inline text. Optional for chained packs whose upstream artifacts carry the context' },
       language: { type: 'string', description: 'Output language (default: config defaultLanguage)' },
       upstream: { type: 'array', items: { type: 'string' }, description: 'Workspace-relative paths to upstream artifacts for chained packs; each must carry a green sidecar receipt (hash-verified, and recording the installed pack version unless config upstreamVersionPolicy is "warn"). Extra green artifacts of installed packs may ride along as context (e.g. the project context), but at least one consumed-type artifact is required' },
-      artifactName: { type: 'string', description: 'Output base name, plain [A-Za-z0-9._-] basename (default: <pack>-<timestamp>); REFUSED on per-function calls — the engine names those <pack>-<funcId> from the upstream plan' },
+      artifactName: { type: 'string', description: 'Output base name, a plain filesystem basename (unicode letters allowed; no path separators, no leading dot; default: <pack>-<timestamp>); REFUSED on engine-named calls — packs declaring artifactPrefix + topicNoPattern name artifacts <PREFIX>-<topicNo> themselves' },
       topic: { type: 'string', description: 'Topic directory name — the work item\'s id plus a free description ("REQ-142 favorites" or "REQ-142-收藏夹"): relocates the output root to <topic>/output/ and the materials dir to <topic>/<materials-dir>/; REQUIRED by packs declaring requiresTopic (per-topic documents such as a requirement analysis, functional design, or technical design), ignored by workspace-scope packs. A topic entering the chain for the first time is confirm-flagged: the call returns a pendingConfirmation whose table leads with the topic row — present it to the user to confirm or correct (infer a sensible default from the inputs when the user did not name one), then re-call with confirm: true' },
       maxRounds: { type: 'number', description: 'Round cap for this call (e.g. when the user asks to try more rounds); clamped to config maxRoundsCeiling' },
       force: { type: 'boolean', description: 'Rebuild even when a reusable green artifact of this pack already exists (bypasses the reuse pre-check)' },
-      params: { type: 'object', additionalProperties: true, description: 'Overrides for pack-declared tunables (discovered via doc_packs), e.g. {"cfpTotal": {"value": 100, "downFactor": 0.9, "upFactor": 1.2}}; unknown names, out-of-range values, and missing required params fail loud; explicit params always trigger the confirmation gate' },
+      params: { type: 'object', additionalProperties: true, description: 'Overrides for pack-declared tunables (discovered via doc_packs), e.g. {"cfpTotal": {"value": 100, "downFactor": 0.9, "upFactor": 1.2}}; unknown names, out-of-range values, and missing required params fail loud; explicit params always trigger the confirmation gate; NEVER pass "topicNoPattern" (pack-declared naming convention — refused)' },
       confirm: { type: 'boolean', description: 'Execute after the pendingConfirmation param table was presented to and approved by the user' },
       confirmPolicy: { type: 'string', description: 'Per-call confirmation-gate policy overriding config confirmPolicy: "none" never gates (headless/CI; required params still fail loud), "standard" gates on param changes or unconfirmed confirm-params (default), "strict" gates every call that has a param table to show' },
     },
@@ -531,6 +531,15 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       let overrides = normalizeParams(args.params)
       const paramsProvided = overrides !== undefined && Object.keys(overrides).length > 0
       const paramsBase = mergeUpstreamParams(upstreamRecords)
+      // topicNoPattern is a pack-declared naming convention, never a caller
+      // value: a caller override lands in addressingParams (required, not
+      // confirm) so it bypasses the gate, and a pattern that fails to match
+      // the topic silently degrades engine naming to timestamps (real
+      // session: the model passed a Latin-only pattern for a CJK topic).
+      // Same class of footgun as fan-out hand-naming, which also fails loud.
+      if (overrides?.topicNoPattern !== undefined) {
+        throw new Error('doc_generate: params must not include "topicNoPattern" — it is a pack-declared naming convention (manifest), not a caller value, and an override that fails to match the topic silently degrades engine naming to timestamps; fix: drop it from params and let the pack default (or receipt inheritance) supply the pattern')
+      }
       // Derived param topicNo: extracted from the topic name via the pack's
       // topicNoPattern (explicit params.topicNo wins; the inherited value
       // also wins — downstream stages re-extract identically anyway).

@@ -55,6 +55,26 @@ describe('pack loader', () => {
     await expect(loadPacks(root, {})).rejects.toThrow(/manifest\.description/)
   })
 
+  it('fails loud when a topic-scope pack declares topicNoPattern without topicNo (derivation pair)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'docwright-derivation-pair-'))
+    const dir = join(root, 'pattern-only')
+    for (const sub of ['rules', 'prompts', 'templates', 'samples']) await mkdir(join(dir, sub), { recursive: true })
+    const manifest = (params: Record<string, unknown>, scope?: string) => JSON.stringify({
+      name: 'pattern-only', version: '1', description: { en: 'd', zh: '说明' },
+      languages: ['zh-CN'], ...(scope === undefined ? {} : { scope }), params,
+    })
+    await writeFile(join(dir, 'manifest.json'), manifest({ topicNoPattern: { type: 'string', required: true, default: '^([^\\s]+)', description: { en: 'd', zh: '说明' } } }), 'utf8')
+    await writeFile(join(dir, 'schema.json'), '{"type":"object"}', 'utf8')
+    await writeFile(join(dir, 'rules', 'zh-CN.json'), '[]', 'utf8')
+    await writeFile(join(dir, 'prompts', 'zh-CN.md'), '# p\n\n{{materials}}\n', 'utf8')
+    await writeFile(join(dir, 'templates', 'zh-CN.hbs'), 'x', 'utf8')
+    await writeFile(join(dir, 'samples', 'golden.json'), '{}', 'utf8')
+    await expect(loadPacks(root, {})).rejects.toThrow(/declares topicNoPattern on a topic-scope pack but not topicNo/)
+    // Workspace-scope packs only record the convention for downstream — pattern alone is fine there.
+    await writeFile(join(dir, 'manifest.json'), manifest({ topicNoPattern: { type: 'string', required: true, default: '^([^\\s]+)', description: { en: 'd', zh: '说明' } } }, 'workspace'), 'utf8')
+    await expect(loadPacks(root, {})).resolves.toBeDefined()
+  })
+
   it('fails loud when a rules file is not an array', async () => {
     const root = await mkdtemp(join(tmpdir(), 'docwright-root-'))
     const dir = join(root, 'broken-pack')

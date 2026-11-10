@@ -95,10 +95,18 @@ describe('review fix: doc_validate tamper evidence (hashMatches)', () => {
 describe('review fix: artifactName sanitize', () => {
   it('rejects path-shaped and traversal artifact names', () => {
     for (const bad of ['../evil', 'a/b', '/abs', '.hidden', 'a..b/../c', '']) {
-      expect(() => assertSafeArtifactName(bad), bad).toThrow(/plain basename/)
+      expect(() => assertSafeArtifactName(bad), bad).toThrow(/plain filesystem basename/)
     }
     expect(() => assertSafeArtifactName('cosmic-plan-1699')).not.toThrow()
     expect(() => assertSafeArtifactName('a.b_c-d')).not.toThrow()
+  })
+
+  it('accepts the unicode names the engine derives from topics (same safety class)', () => {
+    expect(() => assertSafeArtifactName('resume-李明')).not.toThrow()
+    expect(() => assertSafeArtifactName('resume-李明 02')).not.toThrow()
+    expect(() => assertSafeArtifactName('李明的简历')).not.toThrow()
+    expect(() => assertSafeArtifactName('.李明')).toThrow(/leading dot/)
+    expect(() => assertSafeArtifactName('李明/简历')).toThrow(/plain filesystem basename/)
   })
 })
 

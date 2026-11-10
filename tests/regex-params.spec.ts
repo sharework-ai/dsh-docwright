@@ -164,6 +164,16 @@ describe('load-time validation of pattern-referenced params', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it('a topicNoPattern param with a non-compilable default fails at load (engine-facing regex, unicode flag)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'docwright-regex-'))
+    try {
+      await packFixture(root, 'p1', [], { topicNoPattern: { type: 'string', required: true, default: '(', description: { en: 'd', zh: '说明' } } })
+      await expect(loadPacks(root, {})).rejects.toThrow(/topicNoPattern\.default does not compile as a regex/)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('real builtin packs: regex params resolve through the standard param path', () => {
