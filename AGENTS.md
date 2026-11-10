@@ -125,3 +125,32 @@ Gotchas learned the hard way:
    `reused: true` with zero LLM rounds; check the receipts on disk.
 4. Screenshot evidence optional; disk receipts are the authoritative
    assertion.
+
+**Pack-authoring e2e (two-hop routing: a "make a skill" request into a pack, then a plain usage request into the pack):**
+
+Verifies the full authoring loop a user actually drives: "帮我做一个生成X的技能" must
+route into `docwright-pack-authoring` (never a filesystem SKILL.md or a hand-written
+template), the authored pack must pass the ladder, and — after a reload — a usage
+request that never names the pack must find it via `doc_packs` and generate green.
+
+1. New session, send an authoring prompt (generic phrasing; the plugin claims no
+   specific document type anywhere):
+   `帮我做一个生成X的技能，要求包含<字段清单>。技能完成后，即帮我进行尝试`
+   Assert: the FIRST routing step is loading the `docwright-pack-authoring` skill;
+   the pack lands under `<workspace>/.docwright/packs/<name>/` (manifest, schema,
+   rules, prompts, templates, golden); `pack:check` runs green; a mutation
+   self-test exercises every rule family; the model explains the reload gate
+   (doc_generate returning `unknown pack` in-session is the loud, correct error)
+   instead of claiming the pack is usable immediately.
+2. Restart the web service (`dsh-web.sh restart`) so plugin apply re-loads
+   packsDir; sessions survive the restart — continue the SAME session.
+3. Send a usage prompt that never names the pack (second-hop routing):
+   `帮我编写一份X，<完整素材>` — Assert: `doc_packs` lists the pack; the
+   confirmation gate behaves per policy (an inferred topic row may be stated
+   inline and confirmed; param-value tables must stop and wait for the user);
+   `doc_generate` converges; the on-disk receipt under `<topic>/output/` is
+   `isValid: true` with a score of 100.
+4. Known first-run trap: a pack declaring `artifactPrefix` without a
+   `topicNoPattern` param degrades silently to timestamp names — `pack:check`
+   fails the pairing; fix by declaring the pattern at the chain head or
+   dropping the prefix.

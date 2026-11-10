@@ -102,6 +102,45 @@ describe('pack:check (authoring verification ladder, layers 1-2)', () => {
     await expect(checkPacks(await makeRoot())).rejects.toThrow(/no packs found under/)
   })
 
+  it('flags an artifactPrefix declared without a topicNoPattern param (silent timestamp degradation)', async () => {
+    const root = await makeRoot()
+    try {
+      await writeTree(join(root, 'demo-named'), packFiles({
+        name: 'demo-named',
+        rules: MIN_LENGTH_RULES,
+        golden: JSON.stringify({ title: 'a long enough title' }),
+        manifestExtras: '"artifactPrefix": "DEMO",',
+      }))
+      const report = await checkPacks(root)
+      expect(report.green).toBe(false)
+      expect(report.failures.some(f => f.includes('demo-named') && f.includes('topicNoPattern'))).toBe(true)
+      const rendered = renderPackCheckReport(report)
+      expect(rendered).toContain('silently degrades to timestamp names')
+      // Golden results still render alongside the manifest failure (fix everything in one pass).
+      expect(rendered).toMatch(/demo-named[\s\S]*zh-CN: golden GREEN/)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a prefix paired with a topicNoPattern param green (declare both)', async () => {
+    const root = await makeRoot()
+    try {
+      await writeTree(join(root, 'demo-named'), packFiles({
+        name: 'demo-named',
+        rules: MIN_LENGTH_RULES,
+        golden: JSON.stringify({ title: 'a long enough title' }),
+        manifestExtras: `"artifactPrefix": "DEMO",
+  "params": { "topicNoPattern": { "type": "string", "required": true, "default": "^([A-Za-z]+-?[0-9]+)", "description": "topic-number regex" } },`,
+      }))
+      const report = await checkPacks(root)
+      expect(report.green).toBe(true)
+      expect(report.failures).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('fails loud through the loader gate on a non-compilable regex', async () => {
     const root = await makeRoot()
     try {

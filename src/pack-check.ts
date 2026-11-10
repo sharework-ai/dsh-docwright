@@ -97,6 +97,19 @@ export async function checkPacks(root: string, options: PackCheckOptions = {}): 
   const entries: PackCheckEntry[] = []
   const failures: string[] = []
   for (const pack of packs.values()) {
+    // Prefix/pattern pairing (guide Stage 4): a declared artifactPrefix only
+    // engages when topicNo resolves, and topicNo resolves only through a
+    // topicNoPattern param — declared at the pack itself (root pack) or
+    // inherited via receipt re-declaration (downstream). A prefix without
+    // the param silently degrades to timestamp names — red now, not a
+    // surprise at generation time.
+    if (pack.manifest.artifactPrefix !== undefined && pack.manifest.params?.topicNoPattern === undefined) {
+      failures.push(
+        `${pack.manifest.name}: manifest declares artifactPrefix "${pack.manifest.artifactPrefix}" without a topicNoPattern param `
+        + '— engine naming needs a resolvable topicNo, so the prefix silently degrades to timestamp names; '
+        + 'fix: declare a topicNoPattern param (required + default at the chain head; required no-default downstream) or drop the prefix',
+      )
+    }
     const missingConsumed = pack.manifest.consumes.filter(name => !packs.has(name))
     if (missingConsumed.length > 0) {
       failures.push(`${pack.manifest.name}: consumed upstream pack(s) absent from the checked roots: ${missingConsumed.join(', ')} — golden validation needs their golden samples as upstream; fix: re-run with --with <root> pointing at a root that ships them`)
