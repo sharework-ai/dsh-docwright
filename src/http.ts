@@ -85,6 +85,12 @@ export interface WriteChannels {
   readonly updateConfig: (patch: Record<string, unknown>) => Promise<void>
   /** Set one pack param default in its manifest, re-validating at load strength, and hot-swap the pack map. */
   readonly setPackParamDefault: (pack: string, param: string, value: unknown) => Promise<void>
+  /** Pack-lane management (src/pack-manage.ts): market version standing, update, delete. Optional — hosts mount it only when a packsDir is configured. */
+  readonly packLane?: {
+    readonly checkUpdates: () => Promise<unknown>
+    readonly updatePack: (pack: string) => Promise<{ version: string }>
+    readonly deletePack: (pack: string) => Promise<void>
+  } | undefined
 }
 
 /**
@@ -92,6 +98,9 @@ export interface WriteChannels {
  * - `GET  /api/docwright/params` — the read catalog (S1).
  * - `POST /api/docwright/config` — `{ patch }` merged into the plugin's live Config via the host settings service.
  * - `POST /api/docwright/pack-param` — `{ pack, param, value }` sets one manifest default.
+ * - `GET  /api/docwright/pack-updates` — per packsDir pack standing vs the market (read; mounted with the pack lane).
+ * - `POST /api/docwright/pack-update` — `{ pack }` updates one packsDir pack from the market (verified, atomic).
+ * - `POST /api/docwright/pack-delete` — `{ pack }` deletes one packsDir pack directory.
  */
 export function mountParamsRoutes(
   webServer: WebServerLike,
@@ -171,7 +180,52 @@ export function mountParamsRoutes(
     await deps.writes!.setPackParamDefault(pack, param, value)
     return { status: 200, payload: { ok: true } }
   })
+  // The pack lane mounts only when a packsDir is configured (a deployment
+  // without one has nothing to manage; the UI hides its actions too).
+  let disposeUpdates: (() => void) | undefined
+  let disposePackUpdate: (() => void) | undefined
+  let disposePackDelete: (() => void) | undefined
+  if (deps.writes!.packLane !== undefined) {
+    const lane = deps.writes!.packLane
+    const packName = (body: unknown): string => {
+      const { pack } = body as { pack?: unknown }
+      if (typeof pack !== 'string' || pack.length === 0) {
+        throw new CodedError('invalidParamBody', 'body must be {"pack": "<name>"} with a non-empty pack name; nothing was written')
+      }
+      return pack
+    }
+    disposeUpdates = webServer.register({
+      kind: 'exact',
+      path: '/api/docwright/pack-updates',
+      handler: (request, response) => {
+        const rejected = hostRejection(deps.connection?.(), request)
+        if (rejected !== undefined) {
+          sendJson(response, rejected, errorEnvelope(new CodedError('gateRejected', `request rejected by the host gate (status ${rejected})`, { params: { status: rejected } })))
+          return
+        }
+        void lane.checkUpdates().then(
+          updates => sendJson(response, 200, { updates }),
+          error => sendJson(response, error instanceof CodedError && error.code === 'marketUnreachable' ? 200 : 422, errorEnvelope(error)),
+        )
+      },
+    })
+    // The market being down is NOT a server error: the check answers 200 with
+    // a coded envelope the UI renders inline, so a poll never spins error UI.
+    disposePackUpdate = post('/api/docwright/pack-update', async body => {
+      const pack = packName(body)
+      const version = await lane.updatePack(pack)
+      return { status: 200, payload: { ok: true, version } }
+    })
+    disposePackDelete = post('/api/docwright/pack-delete', async body => {
+      const pack = packName(body)
+      await lane.deletePack(pack)
+      return { status: 200, payload: { ok: true } }
+    })
+  }
   return () => {
+    disposePackDelete?.()
+    disposePackUpdate?.()
+    disposeUpdates?.()
     disposeParam()
     disposeConfig()
     disposeRead()

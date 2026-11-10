@@ -5,6 +5,7 @@ import { Config, type Config as DocwrightConfig } from './config.ts'
 import { mountParamsRoutes, type ConnectionLike, type WebServerLike, type WriteChannels } from './http.ts'
 import { loadPacks } from './pack-loader.ts'
 import { buildParamsPayload } from './params-rpc.ts'
+import { checkPackUpdates, deletePack, marketUrlOf, updatePack } from './pack-manage.ts'
 import { setPackParamDefault, updateConfigViaEditor, type ConfigEditorLike } from './params-writes.ts'
 import { defineDocChainStatusTool, defineDocExtractTool, defineDocGenerateTool, defineDocPacksTool, defineDocValidateTool } from './tools.ts'
 
@@ -90,14 +91,22 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       }
       return editor
     }
+    const packsDirConfigured = config.packsDir !== undefined && config.packsDir.length > 0 ? config.packsDir : undefined
     const writes: WriteChannels = {
       updateConfig: patch => updateConfigViaEditor(editorOf(), patch),
       setPackParamDefault: (pack, param, value) => setPackParamDefault({
         packs,
         builtinRoot,
-        extraPacksDir: config.packsDir !== undefined && config.packsDir.length > 0 ? config.packsDir : undefined,
+        extraPacksDir: packsDirConfigured,
         loadPacks,
       }, pack, param, value),
+      // The pack lane exists only when a packsDir is configured — without one
+      // there is nothing to manage and the routes stay unmounted.
+      packLane: packsDirConfigured === undefined ? undefined : {
+        checkUpdates: () => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }),
+        updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks }, pack) }),
+        deletePack: pack => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks }, pack),
+      },
     }
     host.effect(() => mountParamsRoutes(host.webServer, {
       payload: () => buildParamsPayload(packs, Config, config),

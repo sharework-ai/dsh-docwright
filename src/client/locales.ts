@@ -45,6 +45,17 @@ export const en = {
   factorValue: 'target {value}, tolerance x{down}-x{up}',
   shadowedNote: 'Also declared in {packs}. The source declaration governs; details in the Packs view.',
   shadowedByNote: 'managed by {pack}, not effective here',
+  // Pack lane (packsDir management): version standing + update/delete actions.
+  updateCheckFailed: 'Could not reach the pack market; showing local state only.',
+  upToDate: 'up to date',
+  updateTo: 'update to v{version}',
+  notOnMarket: 'not on the market',
+  updateBtn: 'Update',
+  confirmUpdate: 'Confirm update (overwrites local changes)',
+  deleteBtn: 'Delete',
+  confirmDelete: 'Confirm delete',
+  updatedDone: 'Updated to v{version}.',
+  deletedDone: 'Deleted.',
   // Server error codes (src/coded-error.ts): what happened / why / what to do.
   'err.gateRejected': 'The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.',
   'err.crossSiteWrite': 'Write refused: the request origin does not match the deployment host (cross-site request). Operate from the dsh web UI.',
@@ -61,6 +72,11 @@ export const en = {
   'err.manifestInvalid': 'The edited manifest failed the load-time validation; nothing was written. See the detail below.',
   'err.reloadFailed': 'The manifest was written, but reloading the packs failed. Fix or revert {path}; until the reload succeeds the running tools keep the previous configuration.',
   'err.patternParamInvalid': 'The new value for {param} is not a valid regex (it drives a validation rule); nothing was written. Fix the expression, or set the empty string to disable the check.',
+  // Pack lane error codes (src/pack-manage.ts).
+  'err.packNotManaged': 'Pack "{pack}" is not managed here: builtin packs ship with the plugin package, managed packs live under the packsDir. Nothing was written.',
+  'err.marketUnreachable': 'Could not reach the pack market; nothing was written. Retry later, or point marketUrl in cordis.yml at a reachable market.',
+  'err.integrityFailed': 'Integrity check failed for "{pack}" ({why}); nothing was written. Never force-install when the market index and the download disagree.',
+  'err.updateFailed': 'Pack "{pack}" update failed; the installed version is unchanged. See the detail below.',
 }
 
 export const zh: Record<string, string> = {
@@ -106,6 +122,17 @@ export const zh: Record<string, string> = {
   factorValue: '目标 {value}（容差 ×{down}–×{up}）',
   shadowedNote: '同名参数还声明于：{packs}（以生效源为准，详见包视图）。',
   shadowedByNote: '由 {pack} 管理，此处声明不生效',
+  // pack 管理（packsDir）：版本对比 + 更新/删除操作。
+  updateCheckFailed: '无法连接 pack 市场，仅显示本地状态。',
+  upToDate: '已是最新',
+  updateTo: '可更新到 v{version}',
+  notOnMarket: '市场未收录',
+  updateBtn: '更新',
+  confirmUpdate: '确认更新（将覆盖本地改动）',
+  deleteBtn: '删除',
+  confirmDelete: '确认删除',
+  updatedDone: '已更新到 v{version}。',
+  deletedDone: '已删除。',
   // 服务端错误码（src/coded-error.ts）：发生了什么 / 为什么 / 怎么办。
   'err.gateRejected': '请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。',
   'err.crossSiteWrite': '写入被拒绝：请求来源与部署主机不一致（跨站请求）。请从 dsh web 界面发起操作。',
@@ -122,6 +149,11 @@ export const zh: Record<string, string> = {
   'err.manifestInvalid': '修改后的 manifest 未通过装载期校验，未写入任何内容。请按下方详情修正。',
   'err.reloadFailed': 'manifest 已写入，但重新装载 pack 失败。请修复或还原 {path}；装载成功之前，运行中的工具仍使用旧配置。',
   'err.patternParamInvalid': '参数 {param} 的新值不是合法正则表达式（它驱动一条校验规则），未写入任何内容。请修正表达式，或置空字符串以停用该检查。',
+  // Pack lane error codes (src/pack-manage.ts).
+  'err.packNotManaged': 'pack「{pack}」不在此处管理范围：内置 pack 随插件发行，可管理的 pack 在 packsDir 目录下。未写入任何内容。',
+  'err.marketUnreachable': '无法连接 pack 市场，未做任何改动。可稍后重试，或在 cordis.yml 用 marketUrl 指向可达的市场。',
+  'err.integrityFailed': '「{pack}」完整性校验失败（{why}），未写入任何内容。市场索引与下载内容不一致时请勿强行安装。',
+  'err.updateFailed': 'pack「{pack}」更新失败，已装版本未变。原因见下方详情。',
 }
 
 export function translate(dict: Record<string, unknown>): Translate {

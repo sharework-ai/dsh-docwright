@@ -20,9 +20,9 @@
  */
 import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
-import { fetchParams, saveConfigPatch, savePackParam } from './api.ts'
+import { deleteManagedPack, fetchPackUpdates, fetchParams, saveConfigPatch, savePackParam, updateManagedPack } from './api.ts'
 import type { ApiError } from './api.ts'
-import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiParamDeclaration } from './api.ts'
+import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration } from './api.ts'
 import { en, fill, renderError, translate, zh } from './locales.ts'
 import type { Translate } from './locales.ts'
 import { resolveLocalized } from '../description.ts'
@@ -289,7 +289,19 @@ function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 
  * section of its own, visually distinct from the param rows it contains. */
 function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { payload, t } = props
+  // Market standing of the managed packs: one server-side fetch per view
+  // mount; unreachable market degrades to local state (an inline note, not
+  // error UI — the params views stay fully usable offline).
+  const [lane, setLane] = useState<{ state: 'loading' | 'ready' | 'unreachable'; rows: readonly UiPackUpdate[] }>({ state: 'loading', rows: [] })
+  const [laneDone, setLaneDone] = useState<string | undefined>(undefined)
+  const refreshLane = useCallback(() => {
+    fetchPackUpdates().then(rows => setLane({ state: 'ready', rows })).catch(() => setLane({ state: 'unreachable', rows: [] }))
+  }, [])
+  useEffect(() => { refreshLane() }, [refreshLane])
+  const byName = useMemo(() => new Map(lane.rows.map(u => [u.name, u])), [lane.rows])
   return h('div', null,
+    lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
+    laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
     payload.packs.map((p: UiPackEntry) => h('div', { key: p.name, style: card },
       h('div', { style: packHead },
         h('span', { style: nameStyle }, p.name),
@@ -299,10 +311,74 @@ function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | '
         p.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${p.paramDriftPolicy}`) : null),
       h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(p.description)),
       p.consumes.length > 0 ? h('div', { style: muted }, `${t('consumed')}: ${p.consumes.join(', ')}`) : null,
+      p.origin.kind === 'packsDir'
+        ? h(PackLaneActions, { pack: p, status: byName.get(p.name), laneState: lane.state, t, lang: props.lang,
+          onDone: text => { setLaneDone(text); props.onSaved(); refreshLane() } })
+        : null,
       h('div', { style: { marginTop: '6px' } },
         p.params.length === 0
           ? h('p', { style: muted }, t('empty'))
           : p.params.map(d => h(PackDeclRow, { key: d.name, d, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved }))))))
+}
+
+/** One managed pack's lane actions: market standing plus two-step
+ * update/delete. Both actions overwrite or remove a packsDir directory, so a
+ * click is always the second one — arming resets on completion and on any
+ * refresh; the update confirm names the overwrite explicitly. A server
+ * failure renders through the locale catalog (what/why/what-to-do) under the
+ * buttons; the mounted card itself never unmounts, so armed state cannot
+ * fire on a stale card. */
+function PackLaneActions(props: {
+  pack: UiPackEntry
+  status: UiPackUpdate | undefined
+  laneState: 'loading' | 'ready' | 'unreachable'
+  t: Translate
+  lang: 'zh' | 'en'
+  onDone: (doneText: string) => void
+}) {
+  const { t } = props
+  const [armed, setArmed] = useState<'update' | 'delete' | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | undefined>(undefined)
+  const run = (kind: 'update' | 'delete') => {
+    setBusy(true)
+    setError(undefined)
+    const call = kind === 'update' ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name)
+    void call.then(
+      version => props.onDone(kind === 'update' ? fill(t('updatedDone'), { version: typeof version === 'string' ? version : '' }) : t('deletedDone')),
+      cause => setError(cause instanceof Error ? cause : new Error(String(cause))),
+    ).finally(() => {
+      setBusy(false)
+      setArmed(undefined)
+    })
+  }
+  const standing = props.laneState === 'ready'
+    ? (props.status === undefined ? t('notOnMarket') : props.status.updateAvailable ? fill(t('updateTo'), { version: props.status.marketVersion ?? '' }) : t('upToDate'))
+    : null
+  const rendered = rendered_error(error, props.lang)
+  return h('div', { style: { marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' } satisfies CSSProperties },
+    standing !== null ? h('div', { style: muted }, standing) : null,
+    h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } satisfies CSSProperties },
+      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'update' ? run('update') : setArmed('update')) },
+        armed === 'update' ? t('confirmUpdate') : t('updateBtn')),
+      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
+        armed === 'delete' ? t('confirmDelete') : t('deleteBtn')),
+      busy ? h('span', { style: muted }, t('saving')) : null),
+    rendered !== undefined ? h('span', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties },
+      rendered.text,
+      rendered.detail !== undefined ? h('span', { style: { ...muted, whiteSpace: 'pre-wrap' } }, `\n${rendered.detail}`) : null) : null)
+}
+
+/** renderError under its real name (a local alias keeps the call sites short). */
+function rendered_error(error: Error | undefined, lang: 'zh' | 'en'): { text: string; detail?: string } | undefined {
+  if (error === undefined) return undefined
+  const coded = error as { code?: string; params?: Readonly<Record<string, string | number>>; detail?: string }
+  return renderError({
+    message: error.message,
+    ...(coded.code !== undefined ? { code: coded.code } : {}),
+    ...(coded.params !== undefined ? { params: coded.params } : {}),
+    ...(coded.detail !== undefined ? { detail: coded.detail } : {}),
+  }, lang)
 }
 
 /** Config form: top-level keys as rows, oscillation.* folded under Advanced. */
