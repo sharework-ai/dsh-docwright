@@ -21,12 +21,11 @@ confirmation gate for params, chain verification of upstream green artifacts,
 fan-out addressing, artifact reuse, and Markdown rendering. **The engine never
 learns your domain** — everything domain-specific lives in the pack.
 
-Routing note: users often ask for this deliverable with the words "skill" /
-"技能" ("make me a document-generation skill"). In docwright that deliverable
-**is** a pack — the pack is the skill, upgraded with validation guardrails a
-bare prompt or a filesystem SKILL.md can never provide. Do not create a
-filesystem skill, a template file, or a one-off prompt instead; author the
-pack.
+Routing note: users often ask for this deliverable as a "skill" ("make me a
+document-generation skill"). In docwright that deliverable **is** a pack —
+the pack is the skill, upgraded with validation guardrails a bare prompt or
+a filesystem SKILL.md can never provide. Do not create a filesystem skill, a
+template file, or a one-off prompt instead; author the pack.
 
 Live examples ship beside this guide: the built-in `cosmic-*` packs (a
 five-stage COSMIC estimation chain plus a context-sync pack). Read one while

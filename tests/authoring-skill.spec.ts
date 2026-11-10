@@ -59,11 +59,12 @@ describe('pack-authoring skill (docs/designs/pack-authoring.md)', () => {
       resourceBase: { kind: 'directory', path: guidesRoot },
     })
     // Catalog routing: the description claims the "make a skill" phrasing
-    // generically (no specific document type) and stays under the host's
-    // 500-char catalog truncation so every routing word survives.
-    expect(captured[0]!.description).toContain('Author document-generation skills (技能) as docwright packs')
-    expect(captured[0]!.description).toContain('帮我做一个…的技能')
+    // generically (English only; no specific document type) and stays under
+    // the host's 500-char catalog truncation so every routing word survives.
+    expect(captured[0]!.description).toContain('Author document-generation skills as docwright packs')
+    expect(captured[0]!.description).toContain('not a filesystem SKILL.md')
     expect(captured[0]!.description).not.toContain('resume')
+    expect(captured[0]!.description).not.toMatch(/[一-鿿]/)
     expect(captured[0]!.description.replace(/\s+/g, ' ').length).toBeLessThanOrEqual(500)
     expect(captured[0]!.content).toBe(guide)
   })
