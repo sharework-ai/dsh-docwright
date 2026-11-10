@@ -192,14 +192,21 @@ out-of-range score fails loud.
   `"workspace"` (project-level directory, ignores topic). `requiresTopic:
   true` pins one-work-item-per-topic. `artifactPrefix` hands naming to the
   engine (`<PREFIX>-<topicNo>` for whole-scope, `<PREFIX>-<topicNo>-<NN>` for
-  fan-out items) — **but only when `topicNo` resolves**: the chain head must
-  declare `topicNoPattern` (required + default, the numbering convention
-  comes from project reference materials) and downstream packs re-declare it
-  to inherit (type + description only — NOT required: a required-no-default
-  re-declaration would demand the value from every caller, including golden
-  runs). A prefix without a `topicNoPattern` contract
-  silently degrades to timestamp names — declare both or neither; `pack:check`
-  fails the mismatch, so fix it when the checker goes red.
+  fan-out items) — **but only when `topicNo` resolves**: the derivation
+  contract is a PAIR of params. The chain head declares `topicNoPattern`
+  (required + default, the numbering convention comes from project reference
+  materials) and `topicNo` (type + description — derived by the engine);
+  downstream packs re-declare both to inherit (no defaults: a default on a
+  re-declaration would be dead data, and a required-no-default one would
+  demand the value from every caller, including golden runs). A prefix
+  without the pair silently degrades to timestamp names — declare all or
+  none; `pack:check` fails the mismatch, and the loader rejects a
+  `topicNoPattern` without its `topicNo` on a topic-scope pack (a matching
+  topic injects the derived topicNo into params, which rejects undeclared
+  names). Never pass
+  `topicNoPattern` through doc_generate params — it is refused: the pattern
+  is the pack's standing convention, and a caller-supplied one that fails to
+  match the topic silently degrades naming.
 - Reuse: defaults follow scope (workspace true / topic false). Declaring
   `reuse: true` on a topic pack requires every input class to be anchor-
   verifiable (materials manifest, upstream hashes, param drift policy).

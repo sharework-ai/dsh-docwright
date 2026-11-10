@@ -93,11 +93,26 @@ describe('fan-out contract: targetIndex selection', () => {
     expect(out.artifactPath.endsWith('REQ-KERQ-352-01.json')).toBe(true)
   })
 
-  it('fails loud on an invalid topicNoPattern regex', async () => {
+  it('fails loud on a caller-passed topicNoPattern (pack-declared convention, gate-bypassing footgun)', async () => {
     const deps = await makeDeps([JSON.stringify((await packs()).plan.goldenSample)])
     const gen = defineDocGenerateTool(deps as never)
     await seedContext(deps as never)
-    await expect(gen.execute({ pack: 'cosmic-plan', topic: 'topic-a', materials: ['#!inline\nx'], language: 'zh-CN', upstream: ['context/context.json'], params: { cfpTotal: BUDGET, topicNoPattern: '(' }, confirm: true } as never, { signal } as never))
+    await expect(gen.execute({ pack: 'cosmic-plan', topic: 'topic-a', materials: ['#!inline\nx'], language: 'zh-CN', upstream: ['context/context.json'], params: { cfpTotal: BUDGET, topicNoPattern: '^([A-Za-z]+)$' }, confirm: true } as never, { signal } as never))
+      .rejects.toThrow(/params must not include "topicNoPattern"/)
+  })
+
+  it('fails loud on a receipt-inherited topicNoPattern that does not compile', async () => {
+    const { readFile, writeFile } = await import('node:fs/promises')
+    const deps = await makeDeps([JSON.stringify((await packs()).plan.goldenSample)])
+    const ref = await seedContext(deps as never)
+    // A stale receipt can carry an arbitrary inherited pattern (recorded
+    // before the loader validated it) — derivation must fail loud, not
+    // silently skip numbering.
+    const receiptPath = join(deps.ws, 'context', 'context.receipt.json')
+    const receipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+    receipt.params = { ...receipt.params, topicNoPattern: '(' }
+    await writeFile(receiptPath, JSON.stringify(receipt), 'utf8')
+    await expect(defineDocGenerateTool(deps as never).execute({ pack: 'cosmic-plan', topic: 'topic-a', materials: ['#!inline\nx'], language: 'zh-CN', upstream: [ref], params: { cfpTotal: BUDGET }, confirm: true } as never, { signal } as never))
       .rejects.toThrow(/topicNoPattern is not a valid regex/)
   })
 

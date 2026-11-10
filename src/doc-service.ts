@@ -143,10 +143,18 @@ export interface GenerateOutput {
   readonly summary: ReturnType<typeof summarizeArtifact>
 }
 
-/** Artifact names become filesystem basenames; reject anything path-shaped. */
+/** Artifact names become filesystem basenames; reject anything path-shaped. The
+ * safety class mirrors topic names (assertTopicName): unicode letters are fine
+ * — engine-named artifacts derive their keyword from the topic ("resume-李明"),
+ * so an ASCII-only gate here would condemn exactly the names the engine
+ * itself produces. What must never pass: path separators, leading dot, "..". */
 export function assertSafeArtifactName(name: string): void {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) || name.includes('..')) {
-    throw new Error(`artifactName must be a plain basename of [A-Za-z0-9._-] (no path separators, no leading dot); got ${JSON.stringify(name)}`)
+  if (
+    name === '' || name === '.' || name === '..' || name.startsWith('.') || name.includes('..')
+    || /[/\\\0]/.test(name) || /\s/.test(name[0]!) || name.length > 120
+    || !/^[\p{L}\p{N}][\p{L}\p{N} ._\-]*$/u.test(name)
+  ) {
+    throw new Error(`artifactName must be a plain filesystem basename: no path separators, no leading dot, no '..'; unicode letters and inner spaces allowed (1-120 chars); got ${JSON.stringify(name)}`)
   }
 }
 

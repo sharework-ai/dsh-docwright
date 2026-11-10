@@ -52,6 +52,18 @@ function assertParamSpec(raw: unknown, dir: string, name: string): ParamSpec {
   if (s.extractable !== undefined && typeof s.extractable !== 'boolean') {
     throw new Error(`${where}.extractable must be a boolean when present`)
   }
+  // Engine-facing regex param: the topic-numbering convention is compiled per
+  // doc_generate call (with the unicode flag), so a non-compilable default
+  // must fail at load, not at first generation. Caller-passed values are
+  // refused outright (doc_generate); receipt-inherited values re-throw with a
+  // clear message at derivation time.
+  if (name === 'topicNoPattern' && typeof s.default === 'string' && s.default.length > 0) {
+    try {
+      void new RegExp(s.default, 'u')
+    } catch (error) {
+      throw new Error(`${where}.default does not compile as a regex (the engine matches topic names with it, unicode flag): ${(error as Error).message}`)
+    }
+  }
   if (s.required === true) {
     // required + default is legal: a chain-necessary param whose default is
     // the standing value (always resolves, never confirm-gates on its own);
@@ -136,6 +148,14 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
   const scope = m.scope ?? 'topic'
   if (scope === 'workspace' && m.requiresTopic === true) {
     throw new Error(`pack ${dir}: manifest.requiresTopic is meaningless on a workspace-scope pack (topic is ignored there); drop it or switch scope to "topic"`)
+  }
+  // Derivation contract, enforced where it belongs (load time): on a
+  // topic-scope pack a matching topicNoPattern injects the derived topicNo
+  // INTO the call's param overrides, and param resolution rejects undeclared
+  // names — so declaring the pattern without topicNo would only crash at
+  // first matching generation (real session: resume pack, CJK topic).
+  if (scope !== 'workspace' && params?.topicNoPattern !== undefined && params.topicNo === undefined) {
+    throw new Error(`pack ${dir}: manifest.params declares topicNoPattern on a topic-scope pack but not topicNo — when the pattern matches a topic the engine injects the derived topicNo into params, which param resolution rejects as unknown; fix: also declare topicNo ({ type: "string", description: "derived by the engine from the topic name via topicNoPattern; inherited along the chain" }) or drop topicNoPattern`)
   }
   return {
     name: m.name,

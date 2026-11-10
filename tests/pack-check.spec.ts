@@ -123,7 +123,7 @@ describe('pack:check (authoring verification ladder, layers 1-2)', () => {
     }
   })
 
-  it('keeps a prefix paired with a topicNoPattern param green (declare both)', async () => {
+  it('keeps a prefix paired with the derivation params green (declare all)', async () => {
     const root = await makeRoot()
     try {
       await writeTree(join(root, 'demo-named'), packFiles({
@@ -131,7 +131,10 @@ describe('pack:check (authoring verification ladder, layers 1-2)', () => {
         rules: MIN_LENGTH_RULES,
         golden: JSON.stringify({ title: 'a long enough title' }),
         manifestExtras: `"artifactPrefix": "DEMO",
-  "params": { "topicNoPattern": { "type": "string", "required": true, "default": "^([A-Za-z]+-?[0-9]+)", "description": "topic-number regex" } },`,
+  "params": {
+    "topicNoPattern": { "type": "string", "required": true, "default": "^([A-Za-z]+-?[0-9]+)", "description": "topic-number regex" },
+    "topicNo": { "type": "string", "description": "derived by the engine from the topic name via topicNoPattern" }
+  },`,
       }))
       const report = await checkPacks(root)
       expect(report.green).toBe(true)

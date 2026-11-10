@@ -107,7 +107,8 @@ export async function checkPacks(root: string, options: PackCheckOptions = {}): 
       failures.push(
         `${pack.manifest.name}: manifest declares artifactPrefix "${pack.manifest.artifactPrefix}" without a topicNoPattern param `
         + '— engine naming needs a resolvable topicNo, so the prefix silently degrades to timestamp names; '
-        + 'fix: declare a topicNoPattern param (required + default at the chain head; required no-default downstream) or drop the prefix',
+        + 'fix: declare the derivation pair (topicNoPattern with the convention regex, plus the topicNo param the engine injects; '
+        + 'see the loader gate for the exact shapes) or drop the prefix',
       )
     }
     const missingConsumed = pack.manifest.consumes.filter(name => !packs.has(name))
