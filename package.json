@@ -1,7 +1,7 @@
 {
   "name": "@sharework-ai/dsh-docwright",
   "description": "Document generation for deepseek-harness: quality packs (schema + rules), a validation repair loop, chained scenarios, params with a confirmation gate, replayable receipts, and a pack authoring skill",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",

@@ -115,3 +115,36 @@ export async function savePackParam(pack: string, param: string, value: unknown)
     body: JSON.stringify({ pack, param, value }),
   }))
 }
+
+/** One packsDir pack's standing against the pack market. */
+export interface UiPackUpdate {
+  name: string
+  localVersion: string
+  marketVersion?: string
+  updateAvailable: boolean
+}
+
+/** Version standing of every managed pack (one server-side market fetch). */
+export async function fetchPackUpdates(): Promise<readonly UiPackUpdate[]> {
+  const body = await parse<{ updates: readonly UiPackUpdate[] }>(await fetch('/api/docwright/pack-updates', { headers: { accept: 'application/json' } }))
+  return body.updates
+}
+
+/** Update one managed pack from the market (verified download, atomic swap). */
+export async function updateManagedPack(pack: string): Promise<string> {
+  const body = await parse<{ ok: true; version: string }>(await fetch('/api/docwright/pack-update', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pack }),
+  }))
+  return body.version
+}
+
+/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). */
+export async function deleteManagedPack(pack: string): Promise<void> {
+  await parse(await fetch('/api/docwright/pack-delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pack }),
+  }))
+}

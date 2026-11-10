@@ -92,6 +92,26 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				})
 			}));
 		}
+		/** Version standing of every managed pack (one server-side market fetch). */
+		async function fetchPackUpdates() {
+			return (await parse(await fetch("/api/docwright/pack-updates", { headers: { accept: "application/json" } }))).updates;
+		}
+		/** Update one managed pack from the market (verified download, atomic swap). */
+		async function updateManagedPack(pack) {
+			return (await parse(await fetch("/api/docwright/pack-update", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ pack })
+			}))).version;
+		}
+		/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). */
+		async function deleteManagedPack(pack) {
+			await parse(await fetch("/api/docwright/pack-delete", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ pack })
+			}));
+		}
 		//#endregion
 		//#region src/client/locales.ts
 		const en = {
@@ -137,6 +157,16 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			factorValue: "target {value}, tolerance x{down}-x{up}",
 			shadowedNote: "Also declared in {packs}. The source declaration governs; details in the Packs view.",
 			shadowedByNote: "managed by {pack}, not effective here",
+			updateCheckFailed: "Could not reach the pack market; showing local state only.",
+			upToDate: "up to date",
+			updateTo: "update to v{version}",
+			notOnMarket: "not on the market",
+			updateBtn: "Update",
+			confirmUpdate: "Confirm update (overwrites local changes)",
+			deleteBtn: "Delete",
+			confirmDelete: "Confirm delete",
+			updatedDone: "Updated to v{version}.",
+			deletedDone: "Deleted.",
 			"err.gateRejected": "The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.",
 			"err.crossSiteWrite": "Write refused: the request origin does not match the deployment host (cross-site request). Operate from the dsh web UI.",
 			"err.bodyTooLarge": "The request body exceeds the {max}-byte limit; nothing was written. Reduce the request size.",
@@ -151,7 +181,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.paramVanished": "params.{param} no longer exists in the manifest (the file may have been edited concurrently); nothing was written. Refresh and retry.",
 			"err.manifestInvalid": "The edited manifest failed the load-time validation; nothing was written. See the detail below.",
 			"err.reloadFailed": "The manifest was written, but reloading the packs failed. Fix or revert {path}; until the reload succeeds the running tools keep the previous configuration.",
-			"err.patternParamInvalid": "The new value for {param} is not a valid regex (it drives a validation rule); nothing was written. Fix the expression, or set the empty string to disable the check."
+			"err.patternParamInvalid": "The new value for {param} is not a valid regex (it drives a validation rule); nothing was written. Fix the expression, or set the empty string to disable the check.",
+			"err.packNotManaged": "Pack \"{pack}\" is not managed here: builtin packs ship with the plugin package, managed packs live under the packsDir. Nothing was written.",
+			"err.marketUnreachable": "Could not reach the pack market; nothing was written. Retry later, or point marketUrl in cordis.yml at a reachable market.",
+			"err.integrityFailed": "Integrity check failed for \"{pack}\" ({why}); nothing was written. Never force-install when the market index and the download disagree.",
+			"err.updateFailed": "Pack \"{pack}\" update failed; the installed version is unchanged. See the detail below."
 		};
 		const zh = {
 			nav: "Docwright 参数",
@@ -196,6 +230,16 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			factorValue: "目标 {value}（容差 ×{down}–×{up}）",
 			shadowedNote: "同名参数还声明于：{packs}（以生效源为准，详见包视图）。",
 			shadowedByNote: "由 {pack} 管理，此处声明不生效",
+			updateCheckFailed: "无法连接 pack 市场，仅显示本地状态。",
+			upToDate: "已是最新",
+			updateTo: "可更新到 v{version}",
+			notOnMarket: "市场未收录",
+			updateBtn: "更新",
+			confirmUpdate: "确认更新（将覆盖本地改动）",
+			deleteBtn: "删除",
+			confirmDelete: "确认删除",
+			updatedDone: "已更新到 v{version}。",
+			deletedDone: "已删除。",
 			"err.gateRejected": "请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。",
 			"err.crossSiteWrite": "写入被拒绝：请求来源与部署主机不一致（跨站请求）。请从 dsh web 界面发起操作。",
 			"err.bodyTooLarge": "请求体超过 {max} 字节上限，未写入任何内容。请缩小请求内容。",
@@ -210,7 +254,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.paramVanished": "manifest 中已不存在参数 {param}（文件可能被同时编辑过），未写入任何内容。请刷新后重试。",
 			"err.manifestInvalid": "修改后的 manifest 未通过装载期校验，未写入任何内容。请按下方详情修正。",
 			"err.reloadFailed": "manifest 已写入，但重新装载 pack 失败。请修复或还原 {path}；装载成功之前，运行中的工具仍使用旧配置。",
-			"err.patternParamInvalid": "参数 {param} 的新值不是合法正则表达式（它驱动一条校验规则），未写入任何内容。请修正表达式，或置空字符串以停用该检查。"
+			"err.patternParamInvalid": "参数 {param} 的新值不是合法正则表达式（它驱动一条校验规则），未写入任何内容。请修正表达式，或置空字符串以停用该检查。",
+			"err.packNotManaged": "pack「{pack}」不在此处管理范围：内置 pack 随插件发行，可管理的 pack 在 packsDir 目录下。未写入任何内容。",
+			"err.marketUnreachable": "无法连接 pack 市场，未做任何改动。可稍后重试，或在 cordis.yml 用 marketUrl 指向可达的市场。",
+			"err.integrityFailed": "「{pack}」完整性校验失败（{why}），未写入任何内容。市场索引与下载内容不一致时请勿强行安装。",
+			"err.updateFailed": "pack「{pack}」更新失败，已装版本未变。原因见下方详情。"
 		};
 		function translate(dict) {
 			return (key) => {
@@ -591,13 +639,42 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* section of its own, visually distinct from the param rows it contains. */
 		function PacksView(props) {
 			const { payload, t } = props;
-			return (0, react.createElement)("div", null, payload.packs.map((p) => (0, react.createElement)("div", {
+			const [lane, setLane] = (0, react.useState)({
+				state: "loading",
+				rows: []
+			});
+			const [laneDone, setLaneDone] = (0, react.useState)(void 0);
+			const refreshLane = (0, react.useCallback)(() => {
+				fetchPackUpdates().then((rows) => setLane({
+					state: "ready",
+					rows
+				})).catch(() => setLane({
+					state: "unreachable",
+					rows: []
+				}));
+			}, []);
+			(0, react.useEffect)(() => {
+				refreshLane();
+			}, [refreshLane]);
+			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
+			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)("div", {
 				key: p.name,
 				style: card
 			}, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, p.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${p.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, p.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, p.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: p.origin.root })), p.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${p.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
 				...desc,
 				marginBottom: "4px"
-			} }, props.resolveText(p.description)), p.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, `${t("consumed")}: ${p.consumes.join(", ")}`) : null, (0, react.createElement)("div", { style: { marginTop: "6px" } }, p.params.length === 0 ? (0, react.createElement)("p", { style: muted }, t("empty")) : p.params.map((d) => (0, react.createElement)(PackDeclRow, {
+			} }, props.resolveText(p.description)), p.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, `${t("consumed")}: ${p.consumes.join(", ")}`) : null, p.origin.kind === "packsDir" ? (0, react.createElement)(PackLaneActions, {
+				pack: p,
+				status: byName.get(p.name),
+				laneState: lane.state,
+				t,
+				lang: props.lang,
+				onDone: (text) => {
+					setLaneDone(text);
+					props.onSaved();
+					refreshLane();
+				}
+			}) : null, (0, react.createElement)("div", { style: { marginTop: "6px" } }, p.params.length === 0 ? (0, react.createElement)("p", { style: muted }, t("empty")) : p.params.map((d) => (0, react.createElement)(PackDeclRow, {
 				key: d.name,
 				d,
 				t,
@@ -605,6 +682,66 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				resolveText: props.resolveText,
 				onSaved: props.onSaved
 			}))))));
+		}
+		/** One managed pack's lane actions: market standing plus two-step
+		* update/delete. Both actions overwrite or remove a packsDir directory, so a
+		* click is always the second one — arming resets on completion and on any
+		* refresh; the update confirm names the overwrite explicitly. A server
+		* failure renders through the locale catalog (what/why/what-to-do) under the
+		* buttons; the mounted card itself never unmounts, so armed state cannot
+		* fire on a stale card. */
+		function PackLaneActions(props) {
+			const { t } = props;
+			const [armed, setArmed] = (0, react.useState)(void 0);
+			const [busy, setBusy] = (0, react.useState)(false);
+			const [error, setError] = (0, react.useState)(void 0);
+			const run = (kind) => {
+				setBusy(true);
+				setError(void 0);
+				(kind === "update" ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name)).then((version) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof version === "string" ? version : "" }) : t("deletedDone")), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
+					setBusy(false);
+					setArmed(void 0);
+				});
+			};
+			const standing = props.laneState === "ready" ? props.status === void 0 ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
+			const rendered = rendered_error(error, props.lang);
+			return (0, react.createElement)("div", { style: {
+				marginTop: "4px",
+				display: "flex",
+				flexDirection: "column",
+				gap: "4px"
+			} }, standing !== null ? (0, react.createElement)("div", { style: muted }, standing) : null, (0, react.createElement)("div", { style: {
+				display: "flex",
+				gap: "8px",
+				alignItems: "center"
+			} }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: () => armed === "update" ? run("update") : setArmed("update")
+			}, armed === "update" ? t("confirmUpdate") : t("updateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: () => armed === "delete" ? run("delete") : setArmed("delete")
+			}, armed === "delete" ? t("confirmDelete") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null), rendered !== void 0 ? (0, react.createElement)("span", { style: {
+				color: "var(--dsw-alias-state-error-primary, crimson)",
+				whiteSpace: "pre-wrap"
+			} }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { style: {
+				...muted,
+				whiteSpace: "pre-wrap"
+			} }, `\n${rendered.detail}`) : null) : null);
+		}
+		/** renderError under its real name (a local alias keeps the call sites short). */
+		function rendered_error(error, lang) {
+			if (error === void 0) return void 0;
+			const coded = error;
+			return renderError({
+				message: error.message,
+				...coded.code !== void 0 ? { code: coded.code } : {},
+				...coded.params !== void 0 ? { params: coded.params } : {},
+				...coded.detail !== void 0 ? { detail: coded.detail } : {}
+			}, lang);
 		}
 		/** Config form: top-level keys as rows, oscillation.* folded under Advanced. */
 		function ConfigView(props) {
