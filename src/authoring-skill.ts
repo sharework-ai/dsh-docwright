@@ -36,23 +36,23 @@ export interface SkillsHostContext {
  * Skill catalog metadata (stable invitation text; the body is the guide file).
  * The description is the model-facing catalog line (≤500 chars after
  * whitespace normalization — the host truncates beyond that). Routing intent:
- * users phrase document-generator requests as "make a skill" ("帮我做一个…的
- * 技能") — claim that phrasing generically (never a specific document type)
- * and steer it away from filesystem SKILL.md authoring, while naming the
- * pack advantages that justify the detour (validated structure, params,
- * repair loop). Kept under the truncation budget so every routing word
- * survives into the rendered catalog.
+ * users phrase document-generator requests as "make a skill" — claim that
+ * phrasing generically (English only; never a specific document type) and
+ * steer it away from filesystem SKILL.md authoring, while naming the pack
+ * advantages that justify the detour (validated structure, params, repair
+ * loop). Kept under the truncation budget so every routing word survives
+ * into the rendered catalog.
  */
 export const AUTHORING_SKILL_DESCRIPTION =
-  'Author document-generation skills (技能) as docwright packs. When the user asks for a skill that produces documents '
-  + '— \'帮我做一个…的技能\' — author it here as a pack, not a filesystem SKILL.md. Packs are skills hardened for '
-  + 'structured documents: JSON schema + machine-checked rules validate fields and cross-field constraints; params '
-  + 'pass a confirmation gate; generation runs an automatic validate→repair loop with receipts and Markdown rendering. '
-  + 'For repeatable document generators.'
+  'Author document-generation skills as docwright packs. When the user asks for a skill that produces documents '
+  + '("make me a skill to generate X"), author it here as a pack, not a filesystem SKILL.md. Packs are skills '
+  + 'hardened for structured documents: JSON schema + machine-checked rules validate fields and cross-field '
+  + 'constraints; params pass a confirmation gate; generation runs an automatic validate→repair loop with receipts '
+  + 'and Markdown rendering. For repeatable document generators.'
 export const AUTHORING_SKILL_WHEN_TO_USE =
-  'Use when the user asks to create a document-producing skill (技能, "做一个…的技能") for a document type no installed pack '
-  + 'generates, or asks to create/extend a docwright pack or scenario — structured, validated, parameterized document '
-  + 'generators belong here, not in filesystem SKILL.md files.'
+  'Use when the user asks to create a document-producing skill ("make a skill to generate X") for a document type no '
+  + 'installed pack generates, or asks to create/extend a docwright pack or scenario — structured, validated, '
+  + 'parameterized document generators belong here, not in filesystem SKILL.md files.'
 
 /** Read the bundled guide; fail loud with a fix hint when absent. */
 export async function readAuthoringGuide(guidesRoot: string): Promise<string> {
