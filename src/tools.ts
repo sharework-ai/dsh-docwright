@@ -220,7 +220,7 @@ export type ValidateToolResult = {
 export function defineDocPacksTool(deps: ToolDeps) {
   return defineTool({
     name: 'doc_packs',
-    description: 'List installed document packs: name, one-line description, supported languages, and consumed upstream types. '
+    description: 'List installed document packs: name, one-line description, supported languages, and consumed upstream types, plus the deployment\'s effective confirmation-gate policy (confirmPolicy — the boundary you must respect; interaction style beyond it is yours to read from the user\'s pace). '
       + 'Call this before doc_generate to pick the right pack for the document the user wants. '
       + 'If no installed pack fits the document type the user needs — including requests phrased as "make/create a document-generation skill" — load the docwright-pack-authoring skill to author a new pack (the how-to guide ships with this plugin).',
     parameters: {},
@@ -229,7 +229,9 @@ export function defineDocPacksTool(deps: ToolDeps) {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute() {
-      return [...deps.packs.values()].map(p => ({
+      return {
+        confirmPolicy: deps.config.confirmPolicy ?? DEFAULT_CONFIRM_POLICY,
+        packs: [...deps.packs.values()].map(p => ({
         name: p.manifest.name,
         version: p.manifest.version,
         // Model face projects `en` regardless of UI locale: prompt material
@@ -247,7 +249,8 @@ export function defineDocPacksTool(deps: ToolDeps) {
           overridable: spec.overridable === true,
           extractable: spec.extractable === true,
         })),
-      }))
+      })),
+      }
     },
   })
 }
@@ -495,7 +498,8 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       force: { type: 'boolean', description: 'Rebuild even when a reusable green artifact of this pack already exists (bypasses the reuse pre-check)' },
       params: { type: 'object', additionalProperties: true, description: 'Overrides for pack-declared tunables (discovered via doc_packs), e.g. {"cfpTotal": {"value": 100, "downFactor": 0.9, "upFactor": 1.2}}; unknown names, out-of-range values, and missing required params fail loud; explicit params always trigger the confirmation gate; NEVER pass "topicNoPattern" (pack-declared naming convention — refused)' },
       confirm: { type: 'boolean', description: 'Execute after the pendingConfirmation param table was presented to and approved by the user' },
-      confirmPolicy: { type: 'string', description: 'Per-call confirmation-gate policy overriding config confirmPolicy: "none" never gates (headless/CI; required params still fail loud), "standard" gates on param changes or unconfirmed confirm-params (default), "strict" gates every call that has a param table to show' },
+      confirmPolicy: { type: 'string', description: 'Per-call confirmation-gate policy overriding config confirmPolicy: "none" never gates (headless/CI; required params still fail loud), "standard" gates on param changes or unconfirmed confirm-params (default), "strict" gates every call that has a param table to show. '
+        + 'Read the user\'s pace per request instead of fixing a style: "just generate it / don\'t ask" → pass "none" for that call (or under "standard" state inferred topic rows inline and confirm); "step by step / let me check each one" → "strict"; no stated pace → omit this arg and follow the deployment default (doc_packs reports it). The config value is a deployment boundary (CI/headless sets "none"; a strict org pins "strict") — never override it upward without the user asking for more interaction' },
     },
     output: {
       schema: { type: 'json' },
