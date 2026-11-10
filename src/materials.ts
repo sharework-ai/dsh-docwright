@@ -8,6 +8,11 @@ export interface MaterialEntry {
   readonly ref: string
   readonly hash: string
   readonly text: string
+  /** Absolute path the content was read from (file entries only; inline text has none).
+   * Surfaced in the doc_generate result so a verifying model checks the SAME
+   * file the engine anchored — under dual materials roots the winner is the
+   * topic-level one, which a session-cwd pre-read can easily miss. */
+  readonly path?: string
 }
 
 /**
@@ -127,7 +132,7 @@ export async function readMaterialEntries(
       throw await notReadable(ref, bases, root, lastError)
     }
     const text = await readFile(real, 'utf8')
-    out.push({ ref: relative(resolvedBase, real).split(sep).join('/'), hash: sha256(text), text })
+    out.push({ ref: relative(resolvedBase, real).split(sep).join('/'), hash: sha256(text), text, path: real })
   }
   return out
 }
