@@ -21,7 +21,7 @@
  * identifiers and values (param names, enum members, JSON) sit in the host
  * code face (`--dsh-font-family-code`).
  */
-import { createElement as h, Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSuiteStatus, saveConfigPatch, savePackParam, updateManagedPack, updateSuite } from './api.ts'
 import { DEPENDS_ICON_PATH, icon, SUITE_ICON_PATH } from './icons.ts'
@@ -499,25 +499,20 @@ type SuitesLane = { state: 'ok' | 'unreachable'; rows: readonly UiSuiteStatus[] 
  * has no suites or does not support them) and an unreachable market each
  * render one explanatory line — never an error wall. Every action goes
  * through the section-level refresh, so the Packs tab re-renders in sync. */
-const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }
-const thStyle: CSSProperties = { textAlign: 'left', padding: '6px 10px', color: secondary, fontWeight: 600, borderBottom: '1px solid var(--dsw-alias-border-l3, #ddd)' }
-const tdStyle: CSSProperties = { padding: '8px 10px', borderBottom: '1px solid var(--dsw-alias-border-l4, #eee)', verticalAlign: 'top' }
 
 /** Suites tab: ONE table (same font as the rest of the page — no monospace
  * member rows). Columns: suite, members (local → market), status, actions.
  * The delete confirm is a single expanded line per suite: what goes, what
  * stays (only when something is kept, with the force switch next to it). */
+/** Suites tab: one card per suite, same two-column shape as the pack cards —
+ * suite identity on the left, info (description, member packs, actions) on
+ * the right. No table, no header row; the page font throughout. */
 function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { lane, t } = props
   if (lane === undefined) return null
   if (lane.state === 'unreachable') return h('p', { style: muted }, t('suitesUnreachable'))
   if (lane.rows.length === 0) return h('p', { style: muted }, t('suitesEmpty'))
-  return h('table', { style: tableStyle },
-    h('thead', null, h('tr', null,
-      h('th', { style: thStyle }, t('colSuite')),
-      h('th', { style: thStyle }, t('colMembers')),
-      h('th', { style: thStyle }, t('actions')))),
-    h('tbody', null, lane.rows.map(s => h(SuiteRows, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved }))))
+  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
 }
 
 function memberText(m: { name: string; localVersion?: string; marketVersion?: string; missing: boolean; updateAvailable: boolean }): ReturnType<typeof h> {
@@ -531,7 +526,7 @@ function memberText(m: { name: string; localVersion?: string; marketVersion?: st
   return h('div', { key: m.name }, m.name, '@', m.localVersion, arrow)
 }
 
-function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { suite, t, resolveText } = props
   const [armedDelete, setArmedDelete] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -554,35 +549,30 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
     }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
   }
   const rendered = rendered_error(error, props.lang)
-  const actionsCell = h('td', { style: tdStyle },
-    h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } },
-      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
-      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
-        armedDelete ? t('cancel') : t('deleteBtn')),
-      busy ? h('span', { style: smallMuted }, t('saving')) : null,
-      done !== undefined && !busy ? h('span', { style: smallMuted }, done) : null))
-  const confirmRow = !armedDelete ? null : h('tr', null,
-    h('td', { colSpan: 4, style: { ...tdStyle, background: 'var(--dsw-alias-bg-subtle, rgba(127,127,127,0.06))' } },
-      h('div', null, fill(t('suiteDeleteSummary'), { packs: installed.map(m => m.name).join('、') || '—' })),
-      h('div', { style: { ...actions, marginTop: '6px' } },
-        h(Button, { size: 'sm', disabled: busy || installed.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
-        rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null)))
-  // Row 1: suite identity in column 1, the description owning columns 2-4.
-  // Row 2: the member packs. Row 3: actions. The confirm row spans all four.
-  return h(Fragment, null,
-    h('tr', null,
-      h('td', { style: tdStyle },
-        h('div', { style: { fontWeight: 600 } }, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
-        suite.incomplete ? h('div', { style: muted }, t('suiteFillHint')) : null),
-      h('td', { colSpan: 3, style: { ...tdStyle, color: secondary, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } },
-        resolveText(suite.description))),
-    h('tr', null,
-      h('td', { style: tdStyle }, h('span', { style: muted }, t('colMembers'))),
-      h('td', { colSpan: 3, style: tdStyle }, suite.members.map(memberText))),
-    h('tr', null,
-      h('td', { style: tdStyle }),
-      h('td', { colSpan: 3, style: tdStyle }, actionsCell)),
-    confirmRow)
+  const nameCol: CSSProperties = { width: '170px', flex: 'none', fontWeight: 600 }
+  return h('div', { style: { ...card, display: 'flex', gap: '14px' } satisfies CSSProperties },
+    h('div', { style: nameCol },
+      h('div', null, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
+      suite.incomplete ? h('div', { style: muted }, t('suiteFillHint')) : null),
+    h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
+      h('div', { style: { ...desc, marginBottom: '4px' } }, resolveText(suite.description)),
+      h('div', { style: { ...muted, marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } satisfies CSSProperties },
+        h('span', { title: t('colMembers'), style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
+          icon(SUITE_ICON_PATH)),
+        suite.members.map(memberText)),
+      h('div', { style: actions },
+        h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
+        h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
+          armedDelete ? t('cancel') : t('deleteBtn')),
+        busy ? h('span', { style: smallMuted }, t('saving')) : null,
+        done !== undefined && !busy ? h('span', { style: smallMuted }, done) : null,
+        rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null),
+      armedDelete
+        ? h('div', { style: { ...smallMuted, marginTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l4, transparent)', paddingTop: '6px' } satisfies CSSProperties },
+          fill(t('suiteDeleteSummary'), { packs: installed.map(m => m.name).join('、') || '—' }),
+          ' ',
+          h(Button, { size: 'sm', disabled: busy || installed.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')))
+        : null))
 }
 
 function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
