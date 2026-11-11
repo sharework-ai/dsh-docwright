@@ -486,21 +486,40 @@ type SuitesLane = { state: 'ok' | 'unreachable'; rows: readonly UiSuiteStatus[] 
  * has no suites or does not support them) and an unreachable market each
  * render one explanatory line — never an error wall. Every action goes
  * through the section-level refresh, so the Packs tab re-renders in sync. */
+const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }
+const thStyle: CSSProperties = { textAlign: 'left', padding: '6px 10px', color: secondary, fontWeight: 600, borderBottom: '1px solid var(--dsw-alias-border-l3, #ddd)' }
+const tdStyle: CSSProperties = { padding: '8px 10px', borderBottom: '1px solid var(--dsw-alias-border-l4, #eee)', verticalAlign: 'top' }
+
+/** Suites tab: ONE table (same font as the rest of the page — no monospace
+ * member rows). Columns: suite, members (local → market), status, actions.
+ * The delete confirm is a single expanded line per suite: what goes, what
+ * stays (only when something is kept, with the force switch next to it). */
 function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { lane, t } = props
   if (lane === undefined) return null
   if (lane.state === 'unreachable') return h('p', { style: muted }, t('suitesUnreachable'))
   if (lane.rows.length === 0) return h('p', { style: muted }, t('suitesEmpty'))
-  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
+  return h('table', { style: tableStyle },
+    h('thead', null, h('tr', null,
+      h('th', { style: thStyle }, t('colSuite')),
+      h('th', { style: thStyle }, t('colMembers')),
+      h('th', { style: thStyle }, t('status')),
+      h('th', { style: thStyle }, t('actions')))),
+    h('tbody', null, lane.rows.map(s => h(SuiteRows, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, onSaved: props.onSaved }))))
 }
 
-/** One suite card: identity + bilingual description + the member list (each
- * row local vs market version; a laggard is marked updatable; a member
- * missing locally reads 缺失), then the actions: 更新套件 (one click; the
- * server only touches outdated members) and the two-step delete whose
- * confirm names the two columns — members that go, and members kept because
- * packs OUTSIDE the suite consume them (force collapses the keep column). */
-function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function memberText(m: { name: string; localVersion?: string; marketVersion?: string; missing: boolean; updateAvailable: boolean }): ReturnType<typeof h> {
+  if (m.localVersion === undefined) {
+    return h('span', { key: m.name, style: { color: 'var(--dsw-alias-state-error-primary, crimson)', display: 'block' } },
+      m.name, ' — ', h('span', null, m.marketVersion === undefined ? 'missing' : m.marketVersion))
+  }
+  const arrow = m.updateAvailable && m.marketVersion !== undefined
+    ? h('span', { style: muted }, ' → ', m.marketVersion)
+    : null
+  return h('div', { key: m.name }, m.name, '@', m.localVersion, arrow)
+}
+
+function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; onSaved: () => void }) {
   const { suite, t } = props
   const [armedDelete, setArmedDelete] = useState(false)
   const [force, setForce] = useState(false)
@@ -530,49 +549,42 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
     }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
   }
   const rendered = rendered_error(error, props.lang)
-  return h('div', { style: card },
-    h('div', { style: packHead },
-      h('span', { style: nameStyle }, suite.name),
-      h(Pill, {}, `v${suite.version}`),
-      suite.category.length > 0 ? h(Pill, {}, suite.category) : null,
-      suite.incomplete ? h(Pill, {}, t('suiteIncomplete')) : null,
-      suite.updateAvailable ? h(Pill, {}, t('updateBtn')) : null),
-    h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(suite.description)),
-    suite.members.map(m => h('div', { key: m.name, style: row },
-      h('span', { style: { ...nameStyle, fontWeight: 400 } }, m.name),
-      h('span', { style: m.localVersion === undefined
-        ? { color: 'var(--dsw-alias-state-error-primary, crimson)' } satisfies CSSProperties
-        : valueStyle }, m.localVersion ?? t('suiteMemberMissing')),
-      h('span', { style: muted }, m.marketVersion === undefined ? '' : `v${m.marketVersion}`),
-      m.updateAvailable ? h(Pill, {}, fill(t('updateTo'), { version: m.marketVersion ?? '' })) : null)),
-    suite.incomplete ? h('p', { style: muted }, t('suiteFillHint')) : null,
-    h('div', { style: actions },
+  const statusBits: string[] = []
+  if (suite.incomplete) statusBits.push(t('suiteIncomplete'))
+  if (suite.updateAvailable) statusBits.push(t('updateBtn'))
+  const statusCell = h('td', { style: tdStyle }, statusBits.length > 0
+    ? h('span', { style: { color: suite.incomplete ? 'var(--dsw-alias-state-error-primary, crimson)' : undefined } }, statusBits.join(' · '))
+    : h('span', { style: muted }, t('suiteOk')))
+  const actionsCell = h('td', { style: tdStyle },
+    h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } },
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
-        armedDelete ? t('suiteDeleteConfirm') : t('deleteBtn')),
+        armedDelete ? t('cancel') : t('deleteBtn')),
       busy ? h('span', { style: muted }, t('saving')) : null,
-      done !== undefined && !busy ? h('span', { style: muted }, done) : null),
-    armedDelete
-      ? h('div', { style: { marginTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l4, transparent)', paddingTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' } satisfies CSSProperties },
-          h('div', { style: { flex: 1, minWidth: '180px' } },
-            h('div', { style: { ...nameStyle, marginBottom: '2px' } }, t('suiteDeleteColumn')),
-            deleteList.length === 0 ? h('div', { style: muted }, '—') : null,
-            deleteList.map(m => h('div', { key: m.name, style: valueStyle }, m.name))),
-          h('div', { style: { flex: 1, minWidth: '180px' } },
-            h('div', { style: { ...nameStyle, marginBottom: '2px' } }, t('suiteKeepColumn')),
-            keepList.length === 0 ? h('div', { style: muted }, '—') : null,
-            keepList.map(m => h('div', { key: m.name, style: valueStyle },
-              `${m.name} (${fill(t('suiteKeptBy'), { packs: outsideConsumers(m.name).join(', ') })})`))),
-          h('div', null,
-            h(Switch, { checked: force, onChange: (next: boolean) => setForce(next), label: t('suiteForce') }),
-            h('div', { style: actions },
-              h(Button, { size: 'sm', disabled: busy || deleteList.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
-              h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(false) }, t('cancel')))))
-      : null,
-    rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null)
+      done !== undefined && !busy ? h('span', { style: muted }, done) : null))
+  const confirmRow = !armedDelete ? null : h('tr', null,
+    h('td', { colSpan: 4, style: { ...tdStyle, background: 'var(--dsw-alias-bg-subtle, rgba(127,127,127,0.06))' } },
+      h('div', null, fill(t('suiteDeleteSummary'), { packs: deleteList.map(m => m.name).join('、') || '—' })),
+      keepList.length > 0 ? h('div', { style: muted },
+        fill(t('suiteKeepSummary'), {
+          packs: keepList.map(m => `${m.name}(${t('suiteKeptBy').replace('{packs}', outsideConsumers(m.name).join(', '))})`).join('、'),
+        }),
+        ' ',
+        h(Switch, { checked: force, onChange: (next: boolean) => setForce(next), label: t('suiteForce') })) : null,
+      h('div', { style: { ...actions, marginTop: '6px' } },
+        h(Button, { size: 'sm', disabled: busy || deleteList.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
+        rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null)))
+  return h('tbody', null,
+    h('tr', null,
+      h('td', { style: tdStyle },
+        h('div', { style: { fontWeight: 600 } }, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
+        suite.incomplete ? h('div', { style: muted }, t('suiteFillHint')) : null),
+      h('td', { style: tdStyle }, suite.members.map(memberText)),
+      statusCell,
+      actionsCell),
+    confirmRow)
 }
 
-/** Config form: top-level keys as rows, oscillation.* folded under Advanced. */
 function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { payload, t } = props
   const entries = payload.config

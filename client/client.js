@@ -901,28 +901,53 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* has no suites or does not support them) and an unreachable market each
 		* render one explanatory line — never an error wall. Every action goes
 		* through the section-level refresh, so the Packs tab re-renders in sync. */
+		const tableStyle = {
+			width: "100%",
+			borderCollapse: "collapse",
+			fontSize: "0.9rem"
+		};
+		const thStyle = {
+			textAlign: "left",
+			padding: "6px 10px",
+			color: secondary$1,
+			fontWeight: 600,
+			borderBottom: "1px solid var(--dsw-alias-border-l3, #ddd)"
+		};
+		const tdStyle = {
+			padding: "8px 10px",
+			borderBottom: "1px solid var(--dsw-alias-border-l4, #eee)",
+			verticalAlign: "top"
+		};
+		/** Suites tab: ONE table (same font as the rest of the page — no monospace
+		* member rows). Columns: suite, members (local → market), status, actions.
+		* The delete confirm is a single expanded line per suite: what goes, what
+		* stays (only when something is kept, with the force switch next to it). */
 		function SuitesView(props) {
 			const { lane, t } = props;
 			if (lane === void 0) return null;
 			if (lane.state === "unreachable") return (0, react.createElement)("p", { style: muted }, t("suitesUnreachable"));
 			if (lane.rows.length === 0) return (0, react.createElement)("p", { style: muted }, t("suitesEmpty"));
-			return (0, react.createElement)("div", null, lane.rows.map((s) => (0, react.createElement)(SuiteCard, {
+			return (0, react.createElement)("table", { style: tableStyle }, (0, react.createElement)("thead", null, (0, react.createElement)("tr", null, (0, react.createElement)("th", { style: thStyle }, t("colSuite")), (0, react.createElement)("th", { style: thStyle }, t("colMembers")), (0, react.createElement)("th", { style: thStyle }, t("status")), (0, react.createElement)("th", { style: thStyle }, t("actions")))), (0, react.createElement)("tbody", null, lane.rows.map((s) => (0, react.createElement)(SuiteRows, {
 				key: s.name,
 				suite: s,
 				packs: props.payload.packs,
 				t,
 				lang: props.lang,
-				resolveText: props.resolveText,
 				onSaved: props.onSaved
-			})));
+			}))));
 		}
-		/** One suite card: identity + bilingual description + the member list (each
-		* row local vs market version; a laggard is marked updatable; a member
-		* missing locally reads 缺失), then the actions: 更新套件 (one click; the
-		* server only touches outdated members) and the two-step delete whose
-		* confirm names the two columns — members that go, and members kept because
-		* packs OUTSIDE the suite consume them (force collapses the keep column). */
-		function SuiteCard(props) {
+		function memberText(m) {
+			if (m.localVersion === void 0) return (0, react.createElement)("span", {
+				key: m.name,
+				style: {
+					color: "var(--dsw-alias-state-error-primary, crimson)",
+					display: "block"
+				}
+			}, m.name, " — ", (0, react.createElement)("span", null, m.marketVersion === void 0 ? "missing" : m.marketVersion));
+			const arrow = m.updateAvailable && m.marketVersion !== void 0 ? (0, react.createElement)("span", { style: muted }, " → ", m.marketVersion) : null;
+			return (0, react.createElement)("div", { key: m.name }, m.name, "@", m.localVersion, arrow);
+		}
+		function SuiteRows(props) {
 			const { suite, t } = props;
 			const [armedDelete, setArmedDelete] = (0, react.useState)(false);
 			const [force, setForce] = (0, react.useState)(false);
@@ -952,16 +977,16 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
 			};
 			const rendered = rendered_error(error, props.lang);
-			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, suite.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${suite.version}`), suite.category.length > 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, suite.category) : null, suite.incomplete ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("suiteIncomplete")) : null, suite.updateAvailable ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("updateBtn")) : null), (0, react.createElement)("div", { style: {
-				...desc,
-				marginBottom: "4px"
-			} }, props.resolveText(suite.description)), suite.members.map((m) => (0, react.createElement)("div", {
-				key: m.name,
-				style: row
-			}, (0, react.createElement)("span", { style: {
-				...nameStyle,
-				fontWeight: 400
-			} }, m.name), (0, react.createElement)("span", { style: m.localVersion === void 0 ? { color: "var(--dsw-alias-state-error-primary, crimson)" } : valueStyle }, m.localVersion ?? t("suiteMemberMissing")), (0, react.createElement)("span", { style: muted }, m.marketVersion === void 0 ? "" : `v${m.marketVersion}`), m.updateAvailable ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, fill(t("updateTo"), { version: m.marketVersion ?? "" })) : null)), suite.incomplete ? (0, react.createElement)("p", { style: muted }, t("suiteFillHint")) : null, (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			const statusBits = [];
+			if (suite.incomplete) statusBits.push(t("suiteIncomplete"));
+			if (suite.updateAvailable) statusBits.push(t("updateBtn"));
+			const statusCell = (0, react.createElement)("td", { style: tdStyle }, statusBits.length > 0 ? (0, react.createElement)("span", { style: { color: suite.incomplete ? "var(--dsw-alias-state-error-primary, crimson)" : void 0 } }, statusBits.join(" · ")) : (0, react.createElement)("span", { style: muted }, t("suiteOk")));
+			const actionsCell = (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: {
+				display: "flex",
+				gap: "6px",
+				flexWrap: "wrap",
+				alignItems: "center"
+			} }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
@@ -971,50 +996,30 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => setArmedDelete((v) => !v)
-			}, armedDelete ? t("suiteDeleteConfirm") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: muted }, done) : null), armedDelete ? (0, react.createElement)("div", { style: {
-				marginTop: "6px",
-				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
-				paddingTop: "6px",
-				display: "flex",
-				gap: "16px",
-				flexWrap: "wrap"
-			} }, (0, react.createElement)("div", { style: {
-				flex: 1,
-				minWidth: "180px"
-			} }, (0, react.createElement)("div", { style: {
-				...nameStyle,
-				marginBottom: "2px"
-			} }, t("suiteDeleteColumn")), deleteList.length === 0 ? (0, react.createElement)("div", { style: muted }, "—") : null, deleteList.map((m) => (0, react.createElement)("div", {
-				key: m.name,
-				style: valueStyle
-			}, m.name))), (0, react.createElement)("div", { style: {
-				flex: 1,
-				minWidth: "180px"
-			} }, (0, react.createElement)("div", { style: {
-				...nameStyle,
-				marginBottom: "2px"
-			} }, t("suiteKeepColumn")), keepList.length === 0 ? (0, react.createElement)("div", { style: muted }, "—") : null, keepList.map((m) => (0, react.createElement)("div", {
-				key: m.name,
-				style: valueStyle
-			}, `${m.name} (${fill(t("suiteKeptBy"), { packs: outsideConsumers(m.name).join(", ") })})`))), (0, react.createElement)("div", null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Switch, {
+			}, armedDelete ? t("cancel") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: muted }, done) : null));
+			const confirmRow = !armedDelete ? null : (0, react.createElement)("tr", null, (0, react.createElement)("td", {
+				colSpan: 4,
+				style: {
+					...tdStyle,
+					background: "var(--dsw-alias-bg-subtle, rgba(127,127,127,0.06))"
+				}
+			}, (0, react.createElement)("div", null, fill(t("suiteDeleteSummary"), { packs: deleteList.map((m) => m.name).join("、") || "—" })), keepList.length > 0 ? (0, react.createElement)("div", { style: muted }, fill(t("suiteKeepSummary"), { packs: keepList.map((m) => `${m.name}(${t("suiteKeptBy").replace("{packs}", outsideConsumers(m.name).join(", "))})`).join("、") }), " ", (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Switch, {
 				checked: force,
 				onChange: (next) => setForce(next),
 				label: t("suiteForce")
-			}), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			})) : null, (0, react.createElement)("div", { style: {
+				...actions,
+				marginTop: "6px"
+			} }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				disabled: busy || deleteList.length === 0,
 				onClick: runDelete
-			}, t("suiteDeleteConfirm")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
-				size: "sm",
-				variant: "ghost",
-				disabled: busy,
-				onClick: () => setArmedDelete(false)
-			}, t("cancel"))))) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
+			}, t("suiteDeleteConfirm")), rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
 				error,
 				lang: props.lang
-			}) : null);
+			}) : null)));
+			return (0, react.createElement)("tbody", null, (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: { fontWeight: 600 } }, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("td", { style: tdStyle }, suite.members.map(memberText)), statusCell, actionsCell), confirmRow);
 		}
-		/** Config form: top-level keys as rows, oscillation.* folded under Advanced. */
 		function ConfigView(props) {
 			const { payload, t } = props;
 			const entries = payload.config;
