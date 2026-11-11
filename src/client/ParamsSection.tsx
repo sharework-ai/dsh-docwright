@@ -359,8 +359,7 @@ function PackCard(props: {
       h(Pill, {}, `v${pack.version}`),
       h(Pill, {}, pack.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
       h(Pill, {}, pack.origin.kind === 'builtin' ? t('originBuiltin') : fill(t('originPacksDir'), { root: pack.origin.root })),
-      pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null,
-      props.suites.length > 0 ? h(Pill, {}, t('suiteManagedBadge')) : null),
+      pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null),
     h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(pack.description)),
     pack.consumes.length > 0
       ? h('div', { style: muted }, t('consumed'),
@@ -370,7 +369,22 @@ function PackCard(props: {
         }, `${index > 0 ? ', ' : ''}${dep}${props.installed.has(dep) ? '' : t('missingDep')}`)))
       : null,
     props.suites.length > 0
-      ? h('div', { style: muted }, t('suitesManagedNote'), props.suites.join(', '))
+      ? h('div', { style: { marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap' } satisfies CSSProperties },
+        props.suites.map(suite => h('span', {
+          key: suite,
+          title: t('suiteManagedTip'),
+          style: {
+            // Translucent purple reads correctly on both light and dark
+            // themes (same pairing as the market's suite cards) and, being a
+            // plain background, never intercepts clicks.
+            background: 'rgba(147, 51, 234, 0.12)',
+            border: '1px solid rgba(147, 51, 234, 0.38)',
+            borderRadius: '999px',
+            padding: '1px 10px',
+            fontSize: '0.82rem',
+            whiteSpace: 'nowrap',
+          } satisfies CSSProperties,
+        }, suite)))
       : null,
     h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },

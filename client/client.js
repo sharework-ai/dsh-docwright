@@ -206,8 +206,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			viewSuites: "Suites",
 			suitesEmpty: "The market lists no suites (or this market does not support suites). Single-pack installs are unaffected.",
 			suitesUnreachable: "Could not reach the pack market; suite status is unavailable.",
-			suiteManagedBadge: "Suite-managed",
-			suitesManagedNote: "Suite-managed (installs/updates/deletes go through the suite): ",
+			suiteManagedTip: "Suite-managed — install, update, and delete go through the suite",
 			suiteIncomplete: "incomplete",
 			suiteMemberMissing: "missing",
 			suiteUpdateBtn: "Update suite",
@@ -303,8 +302,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			viewSuites: "套件",
 			suitesEmpty: "市场没有套件（或该市场不支持套件）。单个 pack 的安装不受影响。",
 			suitesUnreachable: "无法连接 pack 市场，套件状态不可用。",
-			suiteManagedBadge: "套件管理",
-			suitesManagedNote: "由套件管理（安装、更新、删除都走套件）：",
+			suiteManagedTip: "由套件管理：安装、更新、删除都走套件",
 			suiteIncomplete: "不完整",
 			suiteMemberMissing: "缺失",
 			suiteUpdateBtn: "更新套件",
@@ -782,7 +780,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		function PackCard(props) {
 			const { pack, t } = props;
 			const [paramsOpen, setParamsOpen] = (0, react.useState)(false);
-			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: pack.origin.root })), pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null, props.suites.length > 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("suiteManagedBadge")) : null), (0, react.createElement)("div", { style: {
+			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: pack.origin.root })), pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
 				...desc,
 				marginBottom: "4px"
 			} }, props.resolveText(pack.description)), pack.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, t("consumed"), pack.consumes.map((dep, index) => (0, react.createElement)("span", {
@@ -791,7 +789,23 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					color: "var(--dsw-alias-state-error-primary, crimson)",
 					whiteSpace: "pre-wrap"
 				}
-			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, props.suites.length > 0 ? (0, react.createElement)("div", { style: muted }, t("suitesManagedNote"), props.suites.join(", ")) : null, (0, react.createElement)("div", { style: {
+			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, props.suites.length > 0 ? (0, react.createElement)("div", { style: {
+				marginTop: "4px",
+				display: "flex",
+				gap: "6px",
+				flexWrap: "wrap"
+			} }, props.suites.map((suite) => (0, react.createElement)("span", {
+				key: suite,
+				title: t("suiteManagedTip"),
+				style: {
+					background: "rgba(147, 51, 234, 0.12)",
+					border: "1px solid rgba(147, 51, 234, 0.38)",
+					borderRadius: "999px",
+					padding: "1px 10px",
+					fontSize: "0.82rem",
+					whiteSpace: "nowrap"
+				}
+			}, suite))) : null, (0, react.createElement)("div", { style: {
 				marginTop: "4px",
 				display: "flex",
 				gap: "8px",
