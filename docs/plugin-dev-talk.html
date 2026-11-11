@@ -490,7 +490,7 @@ doc_validate(artifactPath: "sample.json",
         <ul>
           <li>你写的插件与官方内置插件<b>完全平级</b>——docwright 没有任何后门</li>
           <li>能力通过 <b>seam</b>（服务接口）消费：换实现 = 换一行配置</li>
-          <li>配置错误在<b>装载期</b>响亮失败（misconfiguration fails loud），不带病进会话</li>
+          <li>配置错误在<b>装载期</b>明确失败（misconfiguration fails loud），不带病进会话</li>
           <li>配置编辑支持热替换（HMR）：卸载旧实例按 disposer 逆序清理，装载新实例</li>
         </ul>
       </div>
@@ -703,7 +703,7 @@ samples/golden.json <span class="c"># 全绿母本 + 变异测试输入</span></
   <h2>闭环修复：校验是强制的护栏<small>生成 → 校验 → 修复，直到全绿或明确失败</small></h2>
   <div class="body">
     <div class="pipe" style="margin-bottom:14px">
-      <span class="step"><b>预算预检</b><br>token 估算超限响亮报错</span><span class="pa">→</span>
+      <span class="step"><b>预算预检</b><br>token 估算超限明确报错</span><span class="pa">→</span>
       <span class="step"><b>模型调用</b><br>ctx.llm 路由 · 失败重试 1 次</span><span class="pa">→</span>
       <span class="step"><b>解析</b><br>剥围栏提取 JSON<br>解析失败也是 Issue</span><span class="pa">→</span>
       <span class="step"><b>校验</b><br>ajv + 声明式 + 函数规则<br>归一为统一 Issue 格式</span><span class="pa">→</span>

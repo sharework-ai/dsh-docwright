@@ -43,14 +43,14 @@ Date: 2026-10-30
 
 - doc_packs 可见新 pack（重载生效）✅；模型读素材 → 发现 extractable reqCount → doc_extract_params 附逐字引文（"本批需求共 6 条（REQ-2026-001 至 REQ-2026-006）"）✅。
 - **确认**：pendingConfirmation 参数表呈现（topic 显式 / reqIdPattern 默认 / reqCount 抽取值带引文引文出处），模型 ask_user 转呈未自答，用户签字后执行 ✅。
-- 生成：req-analysis 绿回执（1 iteration 收敛）；req-design 以登记册为 upstream，回执 upstreamHashes 锚定 ✅；6/6 需求覆盖对账（模型自制的逐条表）✅。
+- 生成：req-analysis 合格回执（1 iteration 收敛）；req-design 以登记册为 upstream，回执 upstreamHashes 锚定 ✅；6/6 需求覆盖对账（模型自制的逐条表）✅。
 - 落盘核验（驱动者）：双回执 `isValid: true`、各 1 轮、抽取缓存 `req-analysis.extracted.json`、话题目录产物+markdown+回执齐全 ✅。
 
 ## 结论（S2 验收对照）
 
 - 真实会话经 doc_packs 邀请发现并加载技能、按九阶段产出 pack 资产 ✅（验收标准 1）。
 - packsDir lane 全流程首航成功：write-path 判读、pack:check 自读自修、变异自测、交付记录 ✅。
-- pack:check 双 pack 全绿 + 真实模型生成收敛绿产物 + 覆盖对账 ✅（验收标准 2/3 的 packsDir 版）。
+- pack:check 双 pack 全部合格 + 真实模型生成收敛合格产物 + 覆盖对账 ✅（验收标准 2/3 的 packsDir 版）。
 - 观察记录非空（O1-O7），guide 已回修 6 处 ✅（"技能被证明可优化且已优化"）。
 - 机制决策点行使情况：参数确认（confirm+extractable+确认转呈）✅、跨产物对账（引用存在 + 覆盖 + 三方一致）✅、继承（design 读 analysis 回执锚定）✅、正则参数（reqIdPattern）✅；扇出与 workspace 复用未需求化（分解判据正常工作，不强塞）——引擎扇出寻址泛化（functions[] 耦合）记为后续增强候选。
 

@@ -55,7 +55,7 @@ dsh-market（~/projects/lab/dsh-market）是 dsh web 内嵌 UI 插件的完整�
 
 | ParamSpec.type | 控件 | 约束呈现 |
 |---|---|---|
-| number | 数字输入框 | min/max 即时校验（越界红字 + 修复提示）；enum 声明时退化为下拉 |
+| number | 数字输入框 | min/max 即时校验（越界报错 + 修复提示）；enum 声明时退化为下拉 |
 | string | 单行文本输入框 | enum 声明时退化为下拉 |
 | boolean | 开关（toggle） | — |
 | enum（伴随上述类型） | 下拉选择 | 成员来自声明 |

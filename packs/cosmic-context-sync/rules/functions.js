@@ -183,7 +183,7 @@ export const rules = [
         return [{
           jsonPath: '$',
           message: say(artifact,
-            '找不到上游 plan 产物（docType="plan"）：同步必须以绿回执的旧 context 与本话题 plan 为 upstream',
+            '找不到上游 plan 产物（docType="plan"）：同步必须以合格回执的旧 context 与本话题 plan 为 upstream',
             'Upstream plan artifact not found (docType="plan"): sync requires the green old context and the topic plan as upstream'),
         }]
       }
@@ -219,7 +219,7 @@ export const rules = [
         return [{
           jsonPath: '$',
           message: say(artifact,
-            '找不到上游旧 context 产物（docType="context"）：同步必须以绿回执的旧 context 为 upstream 才能对账防丢失',
+            '找不到上游旧 context 产物（docType="context"）：同步必须以合格回执的旧 context 为 upstream 才能对账防丢失',
             'Upstream old context artifact not found (docType="context"): sync requires the green old context upstream to reconcile against losses'),
         }]
       }

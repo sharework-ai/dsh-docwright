@@ -106,12 +106,15 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				body: JSON.stringify({ pack })
 			}))).version;
 		}
-		/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). */
-		async function deleteManagedPack(pack) {
+		/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). `force` bypasses the in-use guard (the UI sends it from the second confirm click, which named the consumers). */
+		async function deleteManagedPack(pack, force = false) {
 			await parse(await fetch("/api/docwright/pack-delete", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ pack })
+				body: JSON.stringify({
+					pack,
+					force
+				})
 			}));
 		}
 		//#endregion
@@ -192,7 +195,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.marketUnreachable": "Could not reach the pack market; nothing was written. Retry later, or point marketUrl in cordis.yml at a reachable market.",
 			"err.integrityFailed": "Integrity check failed for \"{pack}\" ({why}); nothing was written. Never force-install when the market index and the download disagree.",
 			"err.updateFailed": "Pack \"{pack}\" update failed; the installed version is unchanged.",
-			"err.absentFromMarket": "Pack \"{pack}\" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly."
+			"err.absentFromMarket": "Pack \"{pack}\" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.",
+			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it."
 		};
 		const zh = {
 			nav: "Docwright 参数",
@@ -270,7 +274,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.marketUnreachable": "无法连接 pack 市场，未做任何改动。可稍后重试，或在 cordis.yml 用 marketUrl 指向可达的市场。",
 			"err.integrityFailed": "「{pack}」完整性校验失败（{why}），未写入任何内容。市场索引与下载内容不一致时请勿强行安装。",
 			"err.updateFailed": "pack「{pack}」更新失败，已装版本未变。",
-			"err.absentFromMarket": "pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。"
+			"err.absentFromMarket": "pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。",
+			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。"
 		};
 		function translate(dict) {
 			return (key) => {
@@ -750,7 +755,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const run = (kind) => {
 				setBusy(true);
 				setError(void 0);
-				(kind === "update" ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name)).then((version) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof version === "string" ? version : "" }) : t("deletedDone")), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
+				(kind === "update" ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name, props.consumers.length > 0)).then((version) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof version === "string" ? version : "" }) : t("deletedDone")), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
 					setBusy(false);
 					setArmed(void 0);
 				});

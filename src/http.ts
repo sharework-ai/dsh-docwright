@@ -89,7 +89,7 @@ export interface WriteChannels {
   readonly packLane?: {
     readonly checkUpdates: (pack?: string | undefined) => Promise<unknown>
     readonly updatePack: (pack: string) => Promise<{ version: string }>
-    readonly deletePack: (pack: string) => Promise<void>
+    readonly deletePack: (pack: string, opts?: { force?: boolean }) => Promise<void>
   } | undefined
 }
 
@@ -222,7 +222,8 @@ export function mountParamsRoutes(
     })
     disposePackDelete = post('/api/docwright/pack-delete', async body => {
       const pack = packName(body)
-      await lane.deletePack(pack)
+      const { force } = body as { force?: unknown }
+      await lane.deletePack(pack, { force: force === true })
       return { status: 200, payload: { ok: true } }
     })
   }

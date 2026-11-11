@@ -24,7 +24,7 @@ interface RuleContext {
 
 - **materials 启发式解析角色清单**（在素材文本里搜"像角色数组"的 JSON）：readMaterials 只回传文本不回传文件名，按内容猜格式脆弱且不可解释。正解：角色白名单是部署期声明，走 pack 参数（`functionalUserRoles` 逗号分隔 string；role 格式 `^[a-z][a-z0-9-]*$` 天然无逗号），声明即白名单、as-run 进回执、复验按原标准回放。
 - **E303 依赖 prompt 自觉**（把上游 plan 注入 prompt，规则只查格式）：模型守约时无感，模型失约时零拦截——链式一致性的保证必须有确定性 check 兜底。正解：`req/plan-alignment` 函数规则，index/funcId/desiredCfps 三点对齐上游 plan functions[index-1]。
-- **doc_validate 不加 upstream**（复验时跳过跨产物规则）：链式规则的复验要么报错要么静默降级，两难。正解：doc_validate 增可选 `upstream` 参数——传入则全套六项校验 + 复验跨产物规则 + 记锚点；不传则规则以 error 报"找不到上游产物"（响亮失败，错误消息引导传参）。
+- **doc_validate 不加 upstream**（复验时跳过跨产物规则）：链式规则的复验要么报错要么静默降级，两难。正解：doc_validate 增可选 `upstream` 参数——传入则全套六项校验 + 复验跨产物规则 + 记锚点；不传则规则以 error 报"找不到上游产物"（明确失败，错误消息引导传参）。
 
 ## 迁移差异（相对 cosmic-claude Req 审计）
 

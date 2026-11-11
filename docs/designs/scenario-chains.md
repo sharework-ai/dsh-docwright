@@ -72,7 +72,7 @@ manifest 增加必填字段 `scenario`（非空 kebab-case；加载期校验，m
 ## 风险与缓解
 
 - 场景 description 质量决定第一级选择质量：加载期只强制非空，质量靠 pack 作者契约（与 D1 对 pack description 的处理一致）。
-- 模型无视分组、跨场景乱选：既有 fail loud 网不变（unknown pack / upstream 绿回执校验 / docType 校验 / 三点锚定），最坏多一轮往返。
+- 模型无视分组、跨场景乱选：既有 fail loud 网不变（unknown pack / upstream 合格回执校验 / docType 校验 / 三点锚定），最坏多一轮往返。
 - 一个 pack 服务多个场景的真实需求出现时，`scenario` 单值字段不够：届时升级为独立场景清单（pack → 多场景映射），属加法演进。
 
 ## 实施触发与切分
@@ -89,7 +89,7 @@ manifest 增加必填字段 `scenario`（非空 kebab-case；加载期校验，m
 1. 缺 `scenario` 或格式非法的 manifest 加载期报错，错误含 pack 名与修复提示。
 2. `doc_packs` 返回恒定分组 shape；单场景返回单组，组内 pack 明细字段与现行为等价。
 3. 两个分属不同场景的 pack 共存装载时，`doc_packs` 分组可辨、无串组。
-4. 既有测试全绿；工具描述快照同步更新。
+4. 既有测试全部合格；工具描述快照同步更新。
 
 ## 开放问题
 

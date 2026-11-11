@@ -14,7 +14,7 @@ Branch: master | Repo: sharework-ai/dsh-docwright
 - doc_validate 对未改动产物返回绿回执；篡改产物返回红回执
 - doc_validate 版本过期信号：回执 packVersion 与安装版本不符（或缺失）→ packVersionStale=true；无回执 → null
 - consumes 链：上游红回执产物被拒绝
-- consumes 链版本过期：上游回执版本 ≠ 当前安装的上游 pack 版本 → strict 拒绝 / warn 放行并带 upstreamWarnings；consumes 声明的 pack 未安装 → 响亮失败
+- consumes 链版本过期：上游回执版本 ≠ 当前安装的上游 pack 版本 → strict 拒绝 / warn 放行并带 upstreamWarnings；consumes 声明的 pack 未安装 → 明确失败
 
 ## Edge Cases
 - 空素材列表 / 素材路径越界(../..) / 素材文件不存在或不可读

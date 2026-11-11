@@ -1,17 +1,17 @@
 # 设计：pack 工坊 —— docwright 的 pack authoring 能力
 
-Status: S1 IMPLEMENTED（2026-10-30：技能 docwright-pack-authoring + doc_packs 邀请 + pack:check 运行器 + guides/ 随包分发 + golden.params.json 约定；459 tests + 覆盖率阈值 + host-smoke 技能断言 PASS）；S2 IMPLEMENTED（2026-10-30 驱动测试完成：pm 场景 packsDir lane 全流程首航 PASS——发现链路自燃、2 pack 全绿、真实生成 e2e 全链通、观察 O1-O7 回修 guide；实证记录与协议见 pm-scenario.md 与本文"驱动测试协议"节）
+Status: S1 IMPLEMENTED（2026-10-30：技能 docwright-pack-authoring + doc_packs 邀请 + pack:check 运行器 + guides/ 随包分发 + golden.params.json 约定；459 tests + 覆盖率阈值 + host-smoke 技能断言 PASS）；S2 IMPLEMENTED（2026-10-30 驱动测试完成：pm 场景 packsDir lane 全流程首航 PASS——发现链路自燃、2 pack 全部合格、真实生成 e2e 全链通、观察 O1-O7 回修 guide；实证记录与协议见 pm-scenario.md 与本文"驱动测试协议"节）
 关联: docwright-mvp.md §4-§5（pack 契约与职责边界）、params-and-chain-contract.md 与 param-object-model.md（参数属性全集）、cosmic-context.md（场景链头与作用域）、scenario-chains.md（多场景发现，其触发条件即本设计 S2）、AGENTS.md（测试政策与真实会话实测方法）
 
 ## 问题
 
 - docwright 的能力边界就是已安装 pack 的集合。用户拿着一类新文档到来时，第一句话永远是"没有这类文档的 pack"——而当前插件的模型面只教"用"（doc_packs → doc_generate 闭环），不教"造"。模型遇到缺 pack 的任务只能拒绝或绕过。
-- 造一个 pack 是一次小型产品研发：领域分析 → 产物规划 → 规格设计 → 检查规则 → 参数设计 → 测试验收。这些知识目前散落在 mvp §4 的契约条款与 cosmic-* 系列的实施史里，没有一处面向"从零到第一个绿 pack"的过程指南。
+- 造一个 pack 是一次小型产品研发：领域分析 → 产物规划 → 规格设计 → 检查规则 → 参数设计 → 测试验收。这些知识目前散落在 mvp §4 的契约条款与 cosmic-* 系列的实施史里，没有一处面向"从零到第一个合格 pack"的过程指南。
 - 结论：pack authoring 应作为插件的一等能力进提示词面，与"生成文档"并列。承载形式 = 随包分发的 authoring playbook，注册为 dsh 运行时技能（skill capability seam 的标准用法），由 doc_packs 静态邀请引路。
 
 ## 定位
 
-- 一个 pack = 一类文档的完整质量契约：schema 说"文档长什么样"，规则说"什么算合格"，prompt 说"怎么生成"，模板说"怎么渲染"，golden 证明"全绿可达"。五者同源一致，pack authoring 就是把这五份契约与领域对齐的过程。
+- 一个 pack = 一类文档的完整质量契约：schema 说"文档长什么样"，规则说"什么算合格"，prompt 说"怎么生成"，模板说"怎么渲染"，golden 证明"全部合格可达"。五者同源一致，pack authoring 就是把这五份契约与领域对齐的过程。
 - **方法、牙齿、实证三分**：方法本体是散文（领域分析与规则设计是产品研发，不可机械化，skill 承载）；牙齿是校验（装载期校验 fail loud + `pack:check` 运行器把最廉价的两层验证梯子变成任何人一条命令可跑）；实证是 S2（用真实场景把九阶段走一遍，证明方法可 follow）。提示文档单独存在没有牙齿；牙齿缺位正是原型 cosmic-claude"摆设校验"教训的根源。
 - 引擎不动是常态：新场景 = 新 pack 目录（一个或多个），引擎零改动。确需引擎增强时单独立项并给出影响评估表（cosmic-context.md "引擎影响评估"是范式）。这是 "Plugins, not loop changes" 在 pack 层的对应物。
 
@@ -34,7 +34,7 @@ pack 的写入位置与文档 workspace 是两个世界——authoring 必须显
 
 ## Authoring 流程（九阶段）
 
-技能 body 的骨架。每阶段有目标、产出与硬契约；cosmic-* 系列作为贯穿实例（文末分解总表）。阶段分性：**0-2 与 4-5 是设计阶段**（领域分析与产物/规格决策），**3、6、7 是开发阶段**（产出可执行资产——规则 JS、参数声明、prompt/模板、golden 样本；函数规则开发是 Node 原生 JS 编程，见阶段 3），**8-9 是验收阶段**。设计与开发交替迭代（规格评审常打回开发），验收不可跳过——从设计直接跳到验收必然红在装载期校验或 golden。
+技能 body 的骨架。每阶段有目标、产出与硬契约；cosmic-* 系列作为贯穿实例（文末分解总表）。阶段分性：**0-2 与 4-5 是设计阶段**（领域分析与产物/规格决策），**3、6、7 是开发阶段**（产出可执行资产——规则 JS、参数声明、prompt/模板、golden 样本；函数规则开发是 Node 原生 JS 编程，见阶段 3），**8-9 是验收阶段**。设计与开发交替迭代（规格评审常打回开发），验收不可跳过——从设计直接跳到验收必然在装载期校验或 golden 处不合格。
 
 ### 阶段 0 — 场景盘点（know the domain）
 
@@ -62,14 +62,14 @@ pack 的写入位置与文档 workspace 是两个世界——authoring 必须显
 - severity 分配：error = 必须阻断（结构破坏、锚点断裂、预算越界、唯一性冲突）；warning = 质量瑕疵（超长描述、警示词）；info = 风格建议。规则数量克制：一条参数化规则可以蕴含一族（tech/movement-pattern 一条蕴含原型七条）。
 - 硬契约：每条规则必须带 `suggestion` 且写成修复指令而非问题描述（修复回路质量的决定因素）；每条规则必须可变异——造不出"故意损坏样本"的规则无法证明护栏真实（mvp §4.4）。
 - 参数化：数值边界与正则源可引用 pack 参数（`{ "param": "..." }`）——规则阈值是领域约定还是部署偏好，authoring 时就要判定（func/tech 检查规则正则参数化先例：默认等价原检查、置空停用）。
-- 跨产物规则：扇出锚点对账（req 三点对齐 index/funcId/desiredCfps）是函数规则 + context.upstream 的标准用法；上游缺失一律响亮报错，不静默跳过。
+- 跨产物规则：扇出锚点对账（req 三点对齐 index/funcId/desiredCfps）是函数规则 + context.upstream 的标准用法；上游缺失一律明确报错，不静默跳过。
 - **开发形态（Node 原生，零新环境）**：函数规则就是 `rules/functions.js`——Node `import()` 直载的普通 ESM JavaScript，无构建步骤、无 TypeScript、无 npm 依赖、无 import 语句（自包含辅助函数内置在文件里）；引擎按内容 sha256 快照进回执，规则必须是**纯函数**（输出只依赖 artifact 与 context，禁 I/O、禁时钟/随机/环境变量），保证"模型可见 ⟺ 日志可重建"。作者不需要引入任何 docwright 之外的工具链——写 JS、跑 `pack:check`、（仓库 lane）跑 vitest，全部是 Node。
-- **打分制（统一推荐模式，默认即推荐）**：收敛评分是三层策略（pack score > 内置严重度评分 > 指纹兜底），**内置默认就是统一扣分制**：`100 − 10×error − 3×warning − 1×info`（clamp 0-100；权重经 config `oscillation.defaultScore` 可调）。pack **不导出 score 即自动获得**这套模式——内置六 pack 全部未导出，即默认模式足以承载领域收敛检测。仅当领域权重确有差异（某类 warning 在该领域近乎致命）才从 functions.js 导出自定义 `score(artifact, issues) => 0-100`；score 只驱动提前终止，**绿的定义永远是 0 error**，导出崩溃或越界即响亮报错（引擎包装）。authoring 默认决策：先不导出，跑真实生成观察到收敛不灵敏再考虑。
+- **打分制（统一推荐模式，默认即推荐）**：收敛评分是三层策略（pack score > 内置严重度评分 > 指纹兜底），**内置默认就是统一扣分制**：`100 − 10×error − 3×warning − 1×info`（clamp 0-100；权重经 config `oscillation.defaultScore` 可调）。pack **不导出 score 即自动获得**这套模式——内置六 pack 全部未导出，即默认模式足以承载领域收敛检测。仅当领域权重确有差异（某类 warning 在该领域近乎致命）才从 functions.js 导出自定义 `score(artifact, issues) => 0-100`；score 只驱动提前终止，**合格的定义永远是 0 error**，导出崩溃或越界即明确报错（引擎包装）。authoring 默认决策：先不导出，跑真实生成观察到收敛不灵敏再考虑。
 
 ### 阶段 4 — 输入输出分类（素材 / 上游 / 产物 / 可复用）
 
 - 素材（materials）：prompt `{{materials}}` 槽注入的参考文本。按语义分目录——`materialsRoot` 声明：`references`（项目参考知识，跨事项共享）vs `input`（一次工作事项的用户输入，plan 声明 input）。语义分离不得混用。
-- 上游（upstream）：链式依赖走 `consumes`（必选，工具层强校验绿回执）；可选背景走 rider（调用方经 upstream 数组按需携带已安装 pack 的绿产物）。判断标准：缺了它就无法生成 → consumes；有了更好、没有也能假定 → rider 或 assumptions 显式登记。
+- 上游（upstream）：链式依赖走 `consumes`（必选，工具层强校验合格回执）；可选背景走 rider（调用方经 upstream 数组按需携带已安装 pack 的合格产物）。判断标准：缺了它就无法生成 → consumes；有了更好、没有也能假定 → rider 或 assumptions 显式登记。
 - 产物（artifacts）：`scope` 定目录——`topic`（默认，`<topic>/output/`）vs `workspace`（`context/`）；`requiresTopic` 钉死"一个工作事项一个 topic"；`artifactPrefix` 把 per-function 命名权交给引擎（`<PREFIX>-<topicNo>-<NN>`）。
 - 复用（reuse）：默认按 scope 语义（workspace true / topic false）；topic pack 声明 `reuse: true` 的前提是全部输入类可对账（materials 清单、upstream 锚点、params 漂移策略）——req/func/tech 先例。动作型 pack（sync）显式 `reuse: false`。
 
@@ -78,7 +78,7 @@ pack 的写入位置与文档 workspace 是两个世界——authoring 必须显
 - 目标：决定做几个 pack、链怎么连。每个 pack 独立成环（生成→校验→修复），pack 边界 = 文档产物边界，不等于业务阶段边界。
 - 链形态：consumes 声明 DAG；扇出契约 1:N:N:N（plan 整需求一份，req/func/tech 与 functions 一一对应）；每功能一条平行微链。合并/回流类动作用独立 pack（sync：consumes [context, plan]，产物是 context 新版本）。
 - 与现有 pack 的关系（authoring 前必查）：doc_packs 先查同文档类型是否已覆盖；同文档不同组织的裁剪用 packsDir 同名覆盖（DX-H3 合并语义），不 fork；跨场景共享的链级参数（编号规范 topicNoPattern、树深 moduleLevels）在链头声明一次、沿回执继承。
-- **跨出处链（packsDir pack 消费内置链）**：`consumes` 的解析空间是 loadPacks 合并后的单一 pack Map（内置根 + packsDir 根），与 pack 出处无关——packsDir pack 可以消费内置 pack 的绿产物、继承其回执 as-run 参数（下游声明同名不填 default）、分享全链一次确认，并随 consumes 边自动进入 doc_chain_status 覆盖账目。可运行样例：`examples/packsdir/task-card`（消费 cosmic-func + cosmic-tech，零参数调用全继承）；真实模型实证：scripts/e2e-real-llm.ts 步骤 6-8。
+- **跨出处链（packsDir pack 消费内置链）**：`consumes` 的解析空间是 loadPacks 合并后的单一 pack Map（内置根 + packsDir 根），与 pack 出处无关——packsDir pack 可以消费内置 pack 的合格产物、继承其回执 as-run 参数（下游声明同名不填 default）、分享全链一次确认，并随 consumes 边自动进入 doc_chain_status 覆盖账目。可运行样例：`examples/packsdir/task-card`（消费 cosmic-func + cosmic-tech，零参数调用全继承）；真实模型实证：scripts/e2e-real-llm.ts 步骤 6-8。
 - 多场景共存：manifest `scenario` 标签按 scenario-chains.md 提案预留（第二个真实场景包立项时落地）。
 
 ### 阶段 6 — 参数设计（部署可变的旋钮）
@@ -97,21 +97,21 @@ pack 的写入位置与文档 workspace 是两个世界——authoring 必须显
 
 ### 阶段 8 — 验证梯子（六层，由贱到贵）
 
-1. **装载期校验**：`loadPacks` 对新目录全绿（manifest/rules/prompt/语言覆盖全部 fail-loud 断言通过）。写完即验，零成本。
-2. **golden 全绿**：samples/golden.json 是手工打造的合规样本，须同时过 schema 与全部规则、双语各验一次。required 且无 default 的参数（如 cfpTotal）在 golden 验证时无值可用——可选资产 `samples/golden.params.json`（专供 golden 验证的参数表）提供，缺失时按声明 default 验证；该文件只服务验证，不参与生成。
+1. **装载期校验**：`loadPacks` 对新目录全部合格（manifest/rules/prompt/语言覆盖全部 fail-loud 断言通过）。写完即验，零成本。
+2. **golden 全部合格**：samples/golden.json 是手工打造的合规样本，须同时过 schema 与全部规则、双语各验一次。required 且无 default 的参数（如 cfpTotal）在 golden 验证时无值可用——可选资产 `samples/golden.params.json`（专供 golden 验证的参数表）提供，缺失时按声明 default 验证；该文件只服务验证，不参与生成。
 3. **变异测试**：每条规则族至少一种"故意损坏"变异，断言 checker 全部抓住（内置 pack 由测试套件强制，外部 pack 为约定契约）。
 4. **确定性闭环**：scripted LlmPort（损坏 JSON 按脚本注入）走 doc_generate 修复回路，断言收敛、回执字段、终止语义。
 5. **宿主冒烟**：`pnpm run smoke:host`——pack 进 tarball → 真实 dsh 宿主 boot → 工具注册断言（无模型调用）。
 6. **真实 e2e**：e2e-real-llm 脚本或 dsh web 真实会话——验证模型在真实 prompt 下能否收敛、确认/复用/扇出契约是否按设计工作。
 
-第 1-2 层由 `pack:check` 运行器承载（见实施切分 S1）：`pnpm run pack:check -- <dir>` 对目标目录跑装载期校验 + schema 编译 + 逐语言 golden 全绿，复用 `loadPacks` 与 `getDocService`，零第二套校验逻辑。authoring 会话中每完成一个资产就跑一次，红即修，不积压到最后。
+第 1-2 层由 `pack:check` 运行器承载（见实施切分 S1）：`pnpm run pack:check -- <dir>` 对目标目录跑装载期校验 + schema 编译 + 逐语言 golden 全部合格，复用 `loadPacks` 与 `getDocService`，零第二套校验逻辑。authoring 会话中每完成一个资产就跑一次，不合格即修，不积压到最后。
 
 **guide 自包含要求**：验证方法（含 `pack:check` 用法与真实 e2e 的可复现步骤——CLI profile 装载 packsDir、dsh web 重启生效、确认/复用的观察点）必须全文并入技能 guide。仓库侧文件（AGENTS.md、docs/testing/*）在插件被安装到 dsh 后不可达、不可引用——guide 是已安装形态下作者的唯一随包知识源（`guides/` 随 npm 分发）。仓库 README/AGENTS 引用 guide 反向成立（仓库有包没有的才进仓库文档）。
 
 ### 阶段 9 — 入册
 
 - version 从 0.1.0 起；description 双语（en 一行是 doc_packs 的模型面，风格对齐 cosmic 六 pack：说清"生成什么、消费什么、粒度"）；README/说明书 §4.x 增节；TODOS.md 记账。
-- 仓库纪律：`feat/<slug>` 分支，测试全绿 + 覆盖率阈值 + typecheck + build 后 `--no-ff` 合并；引擎若有增强，影响评估表随设计文档先行。
+- 仓库纪律：`feat/<slug>` 分支，测试全部合格 + 覆盖率阈值 + typecheck + build 后 `--no-ff` 合并；引擎若有增强，影响评估表随设计文档先行。
 
 ## cosmic 系列分解总表（authoring 实例档案）
 
@@ -128,15 +128,15 @@ pack 的写入位置与文档 workspace 是两个世界——authoring 必须显
 
 ## 实施切分
 
-- **S1 技能承载与牙齿**：guides/pack-authoring.md（九阶段 playbook 英文全文）+ index.ts 可选注入注册技能 + doc_packs 描述邀请文案 + **pack:check 运行器**（`scripts/pack-check.ts`，`pnpm run pack:check -- <dir>`：loadPacks 装载期校验 → ajv 编译各 pack schema → 逐语言 golden 过 schema + 全部规则全绿；报告每 pack 规则清单/严重度分布/参数表作为 authoring 体检单）+ 公开出口（index.ts 补 re-export `loadPacks` / `assertManifest`，外部作者可编程复用同一校验）+ 测试（运行器对内置六 pack 全绿、对损坏目录逐断言红；技能注册断言进 host-smoke；guide 缺失 fail loud）。
-- **S2 实证 pack**：以 product-management 为场景（需求分析与跟踪 → 概要设计文档；参考仓库 `~/projects/lab/product-management/`，Codeup `mosip/product-management`），由 agent 按技能走完九阶段产出绿 pack（全验证梯子 + 真实 e2e）。该仓库是现成的设计输入：22 份 section schema（glossary/systems/modules/roles/epics/user stories/DDP 追溯矩阵等）、req-* 技能流水线（detect 预检测 → analyze 多模型分析 → consolidate 合并 → validate 校验）、docx/markdown 导出器、grm/cms 两个真实工作区样例。**范围原则：S2 以验证 authoring 方法为准，不以原型功能对齐为准**——DDP track 等 pack 允许与原型有明显出入（砍掉多模型合并、裁剪 section、简化对账规则），按"最小可证分解"取舍：恰好让九阶段的每个机制决策点（链头/扇出/参数/跨产物对账/复用）各被行使一次，多余的对齐工作不做。原型仓库的角色是素材与形状参照（section schema 作规则与 golden 的设计原料、grm/cms 样例作测试素材），不是要对齐的规格。S2 的第一项工作就是用阶段 1/5 的分解判据决定 pack 家族形态（素材 = 原始需求 `input/`；候选独立产物：项目级 context（systems/modules/roles，workspace 级可复用）、epic/user-story 级产物、追溯对账矩阵——分解结论出自 authoring 过程而非预先钉死）。兼作 scenario-chains.md 的触发条件（第二个真实场景包）。
+- **S1 技能承载与牙齿**：guides/pack-authoring.md（九阶段 playbook 英文全文）+ index.ts 可选注入注册技能 + doc_packs 描述邀请文案 + **pack:check 运行器**（`scripts/pack-check.ts`，`pnpm run pack:check -- <dir>`：loadPacks 装载期校验 → ajv 编译各 pack schema → 逐语言 golden 过 schema + 全部规则全部合格；报告每 pack 规则清单/严重度分布/参数表作为 authoring 体检单）+ 公开出口（index.ts 补 re-export `loadPacks` / `assertManifest`，外部作者可编程复用同一校验）+ 测试（运行器对内置六 pack 全部合格、对损坏目录逐断言报错；技能注册断言进 host-smoke；guide 缺失 fail loud）。
+- **S2 实证 pack**：以 product-management 为场景（需求分析与跟踪 → 概要设计文档；参考仓库 `~/projects/lab/product-management/`，Codeup `mosip/product-management`），由 agent 按技能走完九阶段产出合格 pack（全验证梯子 + 真实 e2e）。该仓库是现成的设计输入：22 份 section schema（glossary/systems/modules/roles/epics/user stories/DDP 追溯矩阵等）、req-* 技能流水线（detect 预检测 → analyze 多模型分析 → consolidate 合并 → validate 校验）、docx/markdown 导出器、grm/cms 两个真实工作区样例。**范围原则：S2 以验证 authoring 方法为准，不以原型功能对齐为准**——DDP track 等 pack 允许与原型有明显出入（砍掉多模型合并、裁剪 section、简化对账规则），按"最小可证分解"取舍：恰好让九阶段的每个机制决策点（链头/扇出/参数/跨产物对账/复用）各被行使一次，多余的对齐工作不做。原型仓库的角色是素材与形状参照（section schema 作规则与 golden 的设计原料、grm/cms 样例作测试素材），不是要对齐的规格。S2 的第一项工作就是用阶段 1/5 的分解判据决定 pack 家族形态（素材 = 原始需求 `input/`；候选独立产物：项目级 context（systems/modules/roles，workspace 级可复用）、epic/user-story 级产物、追溯对账矩阵——分解结论出自 authoring 过程而非预先钉死）。兼作 scenario-chains.md 的触发条件（第二个真实场景包）。
 
 ## 验收标准（草案）
 
 1. 真实会话中：模型面对未覆盖的文档类型时，经 doc_packs 邀请能发现并加载 docwright-pack-authoring 技能，按九阶段产出 pack 资产。
-2. `pnpm run pack:check -- <dir>`：内置六 pack 全绿；损坏目录（坏 manifest/坏正则/golden 违规/缺槽位）逐断言红且报错含修复提示。
+2. `pnpm run pack:check -- <dir>`：内置六 pack 全部合格；损坏目录（坏 manifest/坏正则/golden 违规/缺槽位）逐断言报错且含修复提示。
 3. host-smoke 断言技能已注册；guides 文件缺失时 apply fail loud，错误含修复提示。
-4. S2 实证 pack 家族：六层验证梯子全绿；变异测试抓住全部规则损坏；真实模型 e2e 收敛绿产物；**机制决策点清单逐项打勾**（链头、扇出、参数确认、跨产物对账、复用——DDP 追溯候选正落在"跨产物对账"点上）；分解结论（几个 pack、链形态、对账型产物成 pack 还是消费侧规则）有设计记录。单个 pack 的具体规则集与验收细则出自其自身的设计记录（该 pack 阶段 0-3 的产出），不预先钉死。
+4. S2 实证 pack 家族：六层验证梯子全部合格；变异测试抓住全部规则损坏；真实模型 e2e 收敛合格产物；**机制决策点清单逐项打勾**（链头、扇出、参数确认、跨产物对账、复用——DDP 追溯候选正落在"跨产物对账"点上）；分解结论（几个 pack、链形态、对账型产物成 pack 还是消费侧规则）有设计记录。单个 pack 的具体规则集与验收细则出自其自身的设计记录（该 pack 阶段 0-3 的产出），不预先钉死。
 5. 既有测试零回归，覆盖率阈值不降；引擎 src/ 零改动（S1 的 index.ts 接线与 scripts/ 运行器除外）。
 
 ## 非目标
@@ -171,9 +171,9 @@ pack 的写入位置与文档 workspace 是两个世界——authoring 必须显
 
 - **R1 意图（观察点：doc_packs → 技能邀请 → 加载技能的发现链路是否自燃）**：
   「我需要一类新的文档生成能力：需求分析与跟踪场景——输入一批需求（一份需求文档），经过分析与规划，最终产出概要设计文档，并且要能跟踪每条需求是否被设计覆盖。现有 pack 里没有这类文档。参考原型在 ~/projects/lab/product-management（可以读它的 README、src/schemas 和 grm 样例了解这个场景长什么样）。请帮我把这个场景做成 docwright 的 pack。」
-- **R2+ 交互纪律**：驱动者不代写资产、不预授分解结论；只做——确认参数/拆答阶段问题、代跑 `pnpm run pack:check -- <workspace>/.docwright/packs --with packs`（在 docwright checkout 下）并原样回贴输出、pack 全绿后代重启宿主（`dsh-web.sh restart`）、指出会话明显偏离 guide 的行为（引用 guide 原文，不代做）。
+- **R2+ 交互纪律**：驱动者不代写资产、不预授分解结论；只做——确认参数/拆答阶段问题、代跑 `pnpm run pack:check -- <workspace>/.docwright/packs --with packs`（在 docwright checkout 下）并原样回贴输出、pack 全部合格后代重启宿主（`dsh-web.sh restart`）、指出会话明显偏离 guide 的行为（引用 guide 原文，不代做）。
 - **观察点清单（每轮对照记录进 pm-scenario.md）**：发现链路自燃性；九阶段推进是否被 guide 充分指引（缺步骤/缺示例/缺判据处即缺口）；pack:check 输出能否被会话自主读懂并修复；lane 选择与写入路径是否符合 write-path 节；参数设计是否自发经确认；验证梯子是否被跳步。
-- **终局验收**：pack 家族 pack:check 全绿 + 真实模型经 doc_generate 收敛绿产物；观察记录非空且 guide 已回修（技能被证明可优化且已优化）。
+- **终局验收**：pack 家族 pack:check 全部合格 + 真实模型经 doc_generate 收敛合格产物；观察记录非空且 guide 已回修（技能被证明可优化且已优化）。
 
 ## 开放问题
 

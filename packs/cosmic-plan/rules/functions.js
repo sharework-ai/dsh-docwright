@@ -233,7 +233,7 @@ export const rules = [
     // of the full code chain is a v2 item.
     id: 'plan/context-alignment',
     severity: 'error',
-    suggestion: '以绿回执的 cosmic-context 产物为 upstream 重新生成：修改类功能的模块名（l2Name）必须已存在于 context 模块树；新增类功能的模块名不得与已有模块重名；doc_validate 复验需传入相同 upstream 路径。',
+    suggestion: '以合格回执的 cosmic-context 产物为 upstream 重新生成：修改类功能的模块名（l2Name）必须已存在于 context 模块树；新增类功能的模块名不得与已有模块重名；doc_validate 复验需传入相同 upstream 路径。',
     check(artifact, context) {
       if (!isObject(artifact)) return []
       const upstream = Array.isArray(context?.upstream) ? context.upstream : []
@@ -242,7 +242,7 @@ export const rules = [
         return [{
           jsonPath: '$',
           message: say(artifact,
-            '找不到上游 context 产物（docType="context"）：生成时必须以绿回执的 cosmic-context 产物为 upstream；doc_validate 复验需传入相同 upstream 路径',
+            '找不到上游 context 产物（docType="context"）：生成时必须以合格回执的 cosmic-context 产物为 upstream；doc_validate 复验需传入相同 upstream 路径',
             'Upstream context artifact not found (docType="context"): generate with a green cosmic-context artifact as upstream; pass the same upstream paths when revalidating with doc_validate'),
         }]
       }

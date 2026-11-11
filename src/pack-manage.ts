@@ -462,9 +462,19 @@ export async function deletePack(deps: {
   readonly builtinRoot: string
   readonly packsDir?: string | undefined
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
-}, name: string): Promise<void> {
+}, name: string, opts: { force?: boolean } = {}): Promise<void> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) {
     throw new CodedError('packNotManaged', `pack "${name}" is not managed here: no packsDir is configured, and builtin packs ship with the plugin package; nothing was written`, { params: { pack: name } })
+  }
+  // Deleting a pack other installed packs consume breaks their chains (their
+  // next generation loses the upstream stage). Refuse unless the caller
+  // explicitly forces it; the UI's second confirm click is that force.
+  const consumers = [...deps.packs.values()]
+    .filter(p => p.manifest.name !== name && p.manifest.consumes.includes(name))
+    .map(p => p.manifest.name)
+    .sort()
+  if (consumers.length > 0 && opts.force !== true) {
+    throw new CodedError('packInUse', `pack "${name}" is consumed by installed packs (${consumers.join(', ')}); deleting it breaks their chains. Re-call with force: true to delete anyway, or keep it`, { params: { pack: name, consumers: consumers.join(', ') } })
   }
   const dir = await resolveManagedPackDir(deps.packsDir, name)
   await rm(dir, { recursive: true, force: true })

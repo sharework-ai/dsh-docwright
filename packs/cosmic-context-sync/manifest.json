@@ -1,8 +1,8 @@
 {
   "name": "cosmic-context-sync",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": {
-    "zh": "把一个话题的绿色 cosmic-plan 产物中规划（新增或修改）的模块同步回工作区级项目上下文，产出刷新后的绿色上下文；计划阶段通过后即可使用（工作区级；上游传入绿色上下文与话题计划）。",
+    "zh": "把一个话题的合格 cosmic-plan 产物中规划（新增或修改）的模块同步回工作区级项目上下文，产出刷新后的合格的上下文；计划阶段通过后即可使用（工作区级；上游传入合格的上下文与话题计划）。",
     "en": "Sync the modules planned in one topic's green cosmic-plan artifact (added or modified) back into the workspace-level project context, producing a refreshed green context; usable once the plan stage passes (workspace scope; pass the green context and topic plan as upstream)."
   },
   "consumes": [

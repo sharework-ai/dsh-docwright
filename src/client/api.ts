@@ -144,11 +144,11 @@ export async function updateManagedPack(pack: string): Promise<string> {
   return body.version
 }
 
-/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). */
-export async function deleteManagedPack(pack: string): Promise<void> {
+/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). `force` bypasses the in-use guard (the UI sends it from the second confirm click, which named the consumers). */
+export async function deleteManagedPack(pack: string, force = false): Promise<void> {
   await parse(await fetch('/api/docwright/pack-delete', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ pack }),
+    body: JSON.stringify({ pack, force }),
   }))
 }

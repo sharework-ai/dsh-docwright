@@ -27,7 +27,7 @@
 
 **`required` 的两种组合**（语义完全不同，界面必须区分呈现）：
 
-- **纯 required**（无 `default`，如 `cfpTotal`、`targetIndex`）：值必须来自调用方显式传参或上游回执继承；两者皆无 → 响亮报错（`missing required pack param`），缺失项进确认表的 `missingRequired`。
+- **纯 required**（无 `default`，如 `cfpTotal`、`targetIndex`）：值必须来自调用方显式传参或上游回执继承；两者皆无 → 明确报错（`missing required pack param`），缺失项进确认表的 `missingRequired`。
 - **required + default**（如 context 的 `topicNoPattern`）：链级必备契约参数——默认值即现役值，永远可解析、永不因自身缺值而要求确认；required 标记表达"该参数是链契约的一部分，不可缺位"。
 
 **值校验三路统一**：显式值、上游回执继承值、声明 default 在解析时走同一个 `assertValueMatches`（type / enum / min-max 全查；回执值违规同样报错，错误文案标注 `(receipt-recorded)`）。未知参数名一律拒绝（白名单原则，错误列出可用名）。
@@ -102,7 +102,7 @@
 | packsDir | — | 额外 pack 目录（同名覆盖内置） |
 | defaultLanguage | 首个 pack 首语言 | 输出语言缺省 |
 | maxIterations / maxRoundsCeiling | 5 / 10 | 修复轮数上限 / 硬顶（tool arg > pack default > config，clamp 到 ceiling） |
-| promptTokenBudget | 60000 | 单轮 prompt 预算，超限响亮报错 |
+| promptTokenBudget | 60000 | 单轮 prompt 预算，超限明确报错 |
 | oscillation.{mode,stagnantRounds,decliningRounds,maxRepeats,epsilon,defaultScore} | auto/3/3/3/0/{10,3,1} | 收敛终止调参（green 恒为 0 错误，终止只提前退出） |
 
 ## 7. 面向界面管理的客观事实（设计输入，非设计）
@@ -117,7 +117,7 @@
 | 改 manifest default | 下次生成起 | 已产物不变；不升版本则旧回执照常复用 |
 | 改 manifest 结构（增删参数/改 type/确认属性） | 下次生成起 | **应升 packVersion**——版本校验使旧回执不可复用，强制按新契约重生成 |
 | 调用级传值 | 单次 | 沿回执继承；受漂移策略约束 |
-| 改回执 | **没有这个操作**——回执只能经 `doc_validate` 绿色 seal 重签（内容改变 hash 才重签），参数记录不单独可改 |
+| 改回执 | **没有这个操作**——回执只能经 `doc_validate` 合格 seal 重签（内容改变 hash 才重签），参数记录不单独可改 |
 
 **界面必须遵守的不变量**：白名单（不能创建未声明参数的值）；值校验三路统一（界面上改 default 也要过 min-max/enum 校验）；Mind the gap（object 参数只有 `value` 是生成目标，端点是校验容差——界面上两者必须视觉区分）；`overridable ⇒ confirm`（可调基线必须经用户确认，装载期不变量，界面同受约束；被规则边界引用的参数不可 `overridable`）；纯 required 缺值只能问人；确认权属于用户（agent 转呈受"不得自答"约束，**界面由本人操作，天然满足**——这是 UI 相对 agent 通道的本质优势）；结构性 manifest 改动必须伴随版本升级。
 

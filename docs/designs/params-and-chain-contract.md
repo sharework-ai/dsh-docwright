@@ -8,9 +8,9 @@ Status: implemented（2026-10-13 定稿并当日落地：D5 参数治理 / D6 �
 
 真实 web 会话（session-b4ff21a7，收藏夹 COSMIC 全链）暴露四类缺口：
 
-- **参数通道缺失**：用户硬约束（单功能 ≤15 CFP、总量 ≥90）只能进 materials 散文，与模板写死的"推荐 20-50"竞争注意力，两次生成违约且校验全绿——护栏对用户约束不设防。
+- **参数通道缺失**：用户硬约束（单功能 ≤15 CFP、总量 ≥90）只能进 materials 散文，与模板写死的"推荐 20-50"竞争注意力，两次生成违约且校验全部合格——护栏对用户约束不设防。
 - **确认缺失**：执行前无人核对生效参数；参数是否存在、取值多少，调用方与用户均不可见。
-- **扇出无契约**：req/func/tech 为 per-function 粒度，但 `index` 静默默认"未指明选 index 1"，9 个功能只生成 1 份且校验全绿；覆盖（每个 plan 功能都有对应产物）是集合性质，规则引擎逐产物校验天然表达不了，收工时无人对账。
+- **扇出无契约**：req/func/tech 为 per-function 粒度，但 `index` 静默默认"未指明选 index 1"，9 个功能只生成 1 份且校验全部合格；覆盖（每个 plan 功能都有对应产物）是集合性质，规则引擎逐产物校验天然表达不了，收工时无人对账。
 - **外部编辑死路**：手工/人工修改产物后 hash 与回执失配，`doc_validate` 通过也不回写 sidecar，重新认证的唯一手段是整体重跑生成，摧毁外部修改。
 
 ## 共享参数
@@ -34,7 +34,7 @@ Status: implemented（2026-10-13 定稿并当日落地：D5 参数治理 / D6 �
 
 参数对象里只有 `value` 是生成目标，渲染进 prompt 的 `<effective-params>`（`{value, min, max}` 投影为 `{value}`）；`min`/`max`/`downFactor`/`upFactor` 等区间端点是校验容差，只活在规则与回执里，经修复回路的 issue 消息到达模型（渲染投影见 `src/prompt.ts` generationParams）。
 
-为什么：模型会把上下文中出现的数值当作写作目标贴合。校验带入词有两种失败——带太宽时违约值合法通过（历史案例：`cfpPerFunc {30,10,100}` 入词，1×70 的单功能规划全绿通过）；带收紧后模型会压缩估算凑带宽而不是拆分模块。生成语义与校验语义必须分家。
+为什么：模型会把上下文中出现的数值当作写作目标贴合。校验带入词有两种失败——带太宽时违约值合法通过（历史案例：`cfpPerFunc {30,10,100}` 入词，1×70 的单功能规划全部通过）；带收紧后模型会压缩估算凑带宽而不是拆分模块。生成语义与校验语义必须分家。
 
 若某个 min/max 本身就是生成语义（如"单功能不低于 10、不超过 70"），把它升级为独立参数的 `value`（`cfpMin`/`cfpMax`），而不是把外层参数的校验端点暴露进上下文。判断标准一句话：**这个数描述"文档应该长什么样"（进上下文），还是"离目标多远必须打回"（留在规则）？**
 
@@ -98,7 +98,7 @@ Status: implemented（2026-10-13 定稿并当日落地：D5 参数治理 / D6 �
 pack 级参数 `paramDriftPolicy`：
 
 - `"regenerate"`（**默认**）：参数漂移即要求重新生成上游产物，fail loud 并指明变更的参数。质量优先。
-- `"revalidate"`：按新参数对上游产物做确定性重验（规则引擎，零 LLM），绿则链继续并记录漂移，红则 fail loud 列出未通过的具体规则。产物昂贵、漂移确证无害的 pack 可选此档。
+- `"revalidate"`：按新参数对上游产物做确定性重验（规则引擎，零 LLM），合格则链继续并记录漂移，不合格则 fail loud 列出未通过的具体规则。产物昂贵、漂移确证无害的 pack 可选此档。
 
 确认表的参数漂移影响预判行在用户确认前给出后果（严格档："确认后将重新生成上游"；宽松档："新参数下重验 ✅ 仍合规 / ❌ 将重新生成"）。
 
@@ -108,14 +108,14 @@ pack 级参数 `paramDriftPolicy`：
 
 ## seal——回执回签
 
-不变式：凡被下游引用的产物，其当前内容一定以绿色状态通过过校验；hash 把合格证绑定到具体内容版本，不是缓存。`doc_validate` 对当前内容完整校验，**绿色时把新回执写入 sidecar**——发证渠道从"只有生产线（doc_generate）"扩展为"生产线 + 质检站（doc_validate）"。防伪性质不变：过不了校验就补不了证，改坏的产物照样进不了下游。人工/外部编辑由此获得续链通道。
+不变式：凡被下游引用的产物，其当前内容一定以合格状态通过过校验；hash 把合格证绑定到具体内容版本，不是缓存。`doc_validate` 对当前内容完整校验，**合格时把新回执写入 sidecar**——发证渠道从"只有生产线（doc_generate）"扩展为"生产线 + 质检站（doc_validate）"。防伪性质不变：过不了校验就补不了证，改坏的产物照样进不了下游。人工/外部编辑由此获得续链通道。
 
 ## 链扇出契约（1:N:N:N）
 
 plan 整需求一份；req/func/tech 与 plan 的 functions **一一对应，份数相等**；每个功能一条平行微链 req→func→tech，无树形组合扇出。
 
 - `targetIndex`（req/func/tech）**必填参数**，无默认；缺失即 fail loud，错误信息列出上游全部候选（index、funcId、l2Name）。prompt 中"未指明时选 index 1"删除。
-- **命名契约**：声明了 `artifactPrefix` 的 pack 命名权全在引擎（整需求产物 `<PREFIX>-<topicNo>`、per-function 产物 `<PREFIX>-<topicNo>-<NN>`），显式传 `artifactName` 响亮报错；per-function 产物命名权在引擎，（真实会话手起名撞车、一份产物被静默覆盖），同名覆盖在机制上不可能发生，重生成幂等。声明了 `artifactPrefix`（REQ/FUNC/TECH/PLAN）的 pack，产物名 = `<PREFIX>-<topicNo>-<NN>`（NN = targetIndex 两位右对齐）；未声明的保持 `<pack>-<funcId>`。
+- **命名契约**：声明了 `artifactPrefix` 的 pack 命名权全在引擎（整需求产物 `<PREFIX>-<topicNo>`、per-function 产物 `<PREFIX>-<topicNo>-<NN>`），显式传 `artifactName` 明确报错；per-function 产物命名权在引擎，（真实会话手起名撞车、一份产物被静默覆盖），同名覆盖在机制上不可能发生，重生成幂等。声明了 `artifactPrefix`（REQ/FUNC/TECH/PLAN）的 pack，产物名 = `<PREFIX>-<topicNo>-<NN>`（NN = targetIndex 两位右对齐）；未声明的保持 `<pack>-<funcId>`。
 - **funcId 编号**：funcId = `<topicNo>-<序号>`（规则 plan/func-id-numbering）——topicNo 由引擎按参数 `topicNoPattern`（默认提取 topic 名中字母开头、截至数字段，如 `KERQ-352-favorites` → `KERQ-352`）从 topic 名提取并注入派生参数；pattern 声明在链头 cosmic-context（confirm: true，链头参数表可见、随回执全链继承——编号规范属项目级知识，应源于项目参考素材）；序号两位右对齐（01-99，100 起无引导零）且等于功能在 plan 数组中的位置。提取不到编号时优雅降级（规则跳过、命名回退 `<pack>-<funcId>`）。funcId 不再承载模块编号链——一个模块可承载多个功能，模块对账改按模块名（l2Name，规则 plan/context-alignment）。
 - 锚定规则（三点对齐 index/funcId/desiredCfps）保持不变，逐产物照常校验。
 

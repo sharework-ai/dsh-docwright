@@ -84,7 +84,7 @@ describe('pack:check (authoring verification ladder, layers 1-2)', () => {
       for (const language of entry.languages) expect(language.errors).toBe(0)
     }
     const plan = report.packs.find(entry => entry.pack === 'cosmic-plan') as PackCheckEntry
-    expect(plan.version).toBe('0.7.1')
+    expect(plan.version).toBe('0.7.2')
     expect(plan.scope).toBe('topic')
     expect(plan.consumes).toEqual(['cosmic-context'])
     expect(plan.declarativeRules).toBeGreaterThan(0)
@@ -93,7 +93,7 @@ describe('pack:check (authoring verification ladder, layers 1-2)', () => {
     const cfpTotal = plan.params.find(param => param.name === 'cfpTotal')
     expect(cfpTotal).toMatchObject({ type: 'object', required: true, hasDefault: false, confirm: true, extractable: true })
     const rendered = renderPackCheckReport(report)
-    expect(rendered).toContain('cosmic-plan@0.7.1')
+    expect(rendered).toContain('cosmic-plan@0.7.2')
     expect(rendered).toContain('score=builtin-default')
     expect(rendered).toMatch(/pack:check: PASS — 6 pack\(s\) green/)
   })

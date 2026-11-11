@@ -47,7 +47,7 @@ describe('doc_packs tool', () => {
     expect(listing.confirmPolicy).toBe('standard')
     expect(listing.packs).toHaveLength(6)
     const plan = listing.packs.find(p => p.name === 'cosmic-plan')!
-    expect(plan).toMatchObject({ version: '0.7.1', languages: ['zh-CN', 'en-US'], consumes: ['cosmic-context'] })
+    expect(plan).toMatchObject({ version: '0.7.2', languages: ['zh-CN', 'en-US'], consumes: ['cosmic-context'] })
     expect(plan.description.length).toBeGreaterThan(0)
   })
 

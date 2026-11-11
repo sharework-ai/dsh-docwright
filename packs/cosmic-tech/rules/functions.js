@@ -81,7 +81,7 @@ export const rules = [
         return [{
           jsonPath: '$',
           message: say(artifact,
-            '找不到上游 func 产物（docType="func"）：生成时必须以绿回执的 func 产物为 upstream；doc_validate 复验需传入相同 upstream 路径',
+            '找不到上游 func 产物（docType="func"）：生成时必须以合格回执的 func 产物为 upstream；doc_validate 复验需传入相同 upstream 路径',
             'Upstream func artifact not found (docType="func"): generate with a green func artifact as upstream; pass the same upstream paths when revalidating with doc_validate'),
         }]
       }

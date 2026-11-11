@@ -542,3 +542,35 @@ describe('checkPackUpdates per-pack scope', () => {
     }
   })
 })
+
+describe('deletePack in-use guard', () => {
+  it('refuses to delete a pack other installed packs consume unless forced', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    // Give the installed 'ext' a consumer: a local pack that consumes it.
+    const consumerDir = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-consumer-')), 'consumer', '1')
+    const manifestPath = join(consumerDir, 'manifest.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, consumes: ['ext'] }), 'utf8')
+    const { cp } = await import('node:fs/promises')
+    await cp(consumerDir, join(fx.packsDir, 'consumer'), { recursive: true })
+    // Reload so the map sees the consumer.
+    const reloaded = await fx.deps.loadPacks(fx.deps.builtinRoot, { extra: [fx.packsDir] })
+    fx.deps.packs.clear()
+    for (const [n, p] of reloaded) fx.deps.packs.set(n, p)
+    await expect(deletePack(fx.deps, 'ext')).rejects.toThrow(/is consumed by installed packs \(consumer\).*force: true/)
+    // The guard fires before any disk change.
+    expect(fx.deps.packs.has('ext')).toBe(true)
+    await deletePack(fx.deps, 'ext', { force: true })
+    expect(fx.deps.packs.has('ext')).toBe(false)
+  })
+})
+
+describe('checkPackUpdates per-pack scope: failure path', () => {
+  it('maps a per-pack network failure to marketUnreachable', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    fx.deps.marketUrl = 'http://127.0.0.1:1'
+    await expect(checkPackUpdates(fx.deps, 'ext')).rejects.toThrow(/could not check "ext" against the pack market/)
+  })
+})

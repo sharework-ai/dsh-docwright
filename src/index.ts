@@ -112,7 +112,7 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       packLane: packsDirConfigured === undefined ? undefined : {
         checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }, pack),
         updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks }, pack) }),
-        deletePack: pack => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks }, pack),
+        deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks }, pack, opts),
       },
     }
     host.effect(() => mountParamsRoutes(host.webServer, {

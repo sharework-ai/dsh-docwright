@@ -383,7 +383,7 @@ function PackLaneActions(props: {
   const run = (kind: 'update' | 'delete') => {
     setBusy(true)
     setError(undefined)
-    const call = kind === 'update' ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name)
+    const call = kind === 'update' ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name, props.consumers.length > 0)
     void call.then(
       version => props.onDone(kind === 'update' ? fill(t('updatedDone'), { version: typeof version === 'string' ? version : '' }) : t('deletedDone')),
       cause => setError(cause instanceof Error ? cause : new Error(String(cause))),

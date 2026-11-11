@@ -1,8 +1,8 @@
 {
   "name": "cosmic-tech",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": {
-    "zh": "COSMIC 技术分解：把每个功能过程分解为 2-3 个子过程——数据移动（E/X/R/W）——并给出精确 CFP 计数与计划估算核对（不得低于计划值），产出 Function-Point Breakdown 表版式所需的展示上下文字段，从绿色的 cosmic-func 产物细化而来（requires topic——每话题一条需求）。",
+    "zh": "COSMIC 技术分解：把每个功能过程分解为 2-3 个子过程——数据移动（E/X/R/W）——并给出精确 CFP 计数与计划估算核对（不得低于计划值），产出 Function-Point Breakdown 表版式所需的展示上下文字段，从合格的 cosmic-func 产物细化而来（requires topic——每话题一条需求）。",
     "en": "COSMIC technical breakdown: decomposes each functional process into 2-3 subprocesses — data movements (E/X/R/W) — with exact CFP counts checked against the plan estimate (never below it), carrying the display-context fields for the function-point breakdown-table format, refined from a green cosmic-func artifact (requires topic — one requirement per topic)."
   },
   "consumes": [

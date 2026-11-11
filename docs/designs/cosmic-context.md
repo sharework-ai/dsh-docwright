@@ -34,7 +34,7 @@ Date: 2026-10-14
 输入与产物分两个作用域——**workspace 级**（跨话题共享，如项目知识）与 **topic 级**（一个具体话题/需求的工作集）。作用域是通用机制而非 cosmic 专属概念（其他场景包同样适用），由 pack 声明：
 
 - **manifest `scope`**：`"workspace" | "topic"`（缺省 `"topic"`，loader 校验值域）。cosmic-context 与 cosmic-context-sync 声明 `workspace`；其余 pack 缺省 `topic`。
-- **manifest `reuse`**：布尔，与 scope 正交——scope 决定产物/素材落在哪级目录，reuse 决定 doc_generate 是否做"已有绿产物即复用"预检。机制对所有 scope 通用，**默认值按作用域语义区分**：workspace pack 缺省 `true`（cosmic-context 项目分析只做一次；cosmic-context-sync 显式 `false`——同步是动作，每次执行）；topic pack 缺省 `false`——topic 产物紧跟需求推进语义（扇出逐个推进、参数试调都要新鲜生成），缺省不复用。topic pack 声明 `reuse: true` 属 pack 作者的显式选择：素材新鲜度有回执清单对账兜底（见"复用预检"），但必须确认其全部输入类可对账（materials 清单、upstream 锚点、params 漂移策略）。调用方 `force: true` 始终可绕过预检。
+- **manifest `reuse`**：布尔，与 scope 正交——scope 决定产物/素材落在哪级目录，reuse 决定 doc_generate 是否做"已有合格产物即复用"预检。机制对所有 scope 通用，**默认值按作用域语义区分**：workspace pack 缺省 `true`（cosmic-context 项目分析只做一次；cosmic-context-sync 显式 `false`——同步是动作，每次执行）；topic pack 缺省 `false`——topic 产物紧跟需求推进语义（扇出逐个推进、参数试调都要新鲜生成），缺省不复用。topic pack 声明 `reuse: true` 属 pack 作者的显式选择：素材新鲜度有回执清单对账兜底（见"复用预检"），但必须确认其全部输入类可对账（materials 清单、upstream 锚点、params 漂移策略）。调用方 `force: true` 始终可绕过预检。
 
 ```
 workspaceRoot/
@@ -49,12 +49,12 @@ workspaceRoot/
 
 **references 与 input 语义分离，不得混用**：`references/` 是项目级参考知识（跨工作事项共享的背景材料），`input/` 是一次工作事项的用户输入（驱动本次生成的需求文档）。素材目录由 manifest `materialsRoot` 声明（缺省 `references`；cosmic-plan 声明 `input`——需求文档是 plan 的生成输入）。topic 级 pack 的素材 ref 先在 `<topic>/<dir>/` 解析、落空再落到工作区级 `<workspace>/<dir>/`（topic 自己的输入遮蔽共享目录）；workspace 级 pack 固定 `<workspace>/<dir>/`。
 
-- **topic 参数**：`doc_generate` 的 `topic`（单段目录名 `[A-Za-z0-9._-]`，confine 校验在 workspaceRoot 内）对声明 `requiresTopic: true` 的 pack **必填**（2026-10-14 真实会话复盘后收紧：cosmic 链四阶段 plan/req/func/tech 一个需求一个 topic，缺失调用期响亮报错；manifest 声明，引擎不做包名硬编码）；其余 pack 缺省行为不变；`doc_validate` 不设该参数——复验全由产物路径驱动。给定后：产物根为 `<topic>/output/`、素材根为 `<topic>/references/`；缺省维持现状（workspaceRoot 根下的 `output/`、`references/`）——既有调用与测试零迁移。workspace scope 的 pack 忽略 topic（固定 workspace 级目录：素材 `references/`、产物 `context/`）。
-- **复用预检**（`reuse: true` 的 pack，机制对所有 scope 通用）：doc_generate 生成前扫 `context/`，命中需同时满足：同 pack 产物、sidecar 回执 `isValid === true` 且版本与已安装 pack 一致、**产物当前 hash 与回执记录一致**（产物 staleness 对账）、**本次调用的素材清单与回执 `materials` 清单逐项相等**（输入新鲜度对账，均不重跑 LLM 校验）、链式 pack 还需**本次 upstream 校验后的锚点与回执 `upstreamHashes` 逐项相等**（上游重生成即级联失效下游复用）、**本次调用寻址的确定性产物名与扫描文件一致**（扇出寻址：targetIndex 2 绝不复用功能 1 的产物；仅时间戳缺省名按文件名无关扫描）；**显式传入非寻址类 params 跳过复用**（交给正常路径的 paramDriftPolicy）。素材清单是生成时引擎记录的 canonical ref + 内容 sha256（inline 素材记 `#!inline` 标记 + 内容 hash，双重前缀拼写归一为实际读取路径），按集合比对（与顺序无关，重复计数）——素材被改、多传、少传任一漂移即落正常生成闭环；素材文件不可读则响亮报错（调用方点名的输入缺失，不静默吞）。回执无 `materials` 字段（旧格式）一律不复用，重生成一次即补齐。命中返回 `reused: true` + 原回执，除非调用方显式 `force: true`。doc_validate seal 回签时原样携带 `materials`（复验只证内容，不改输入基线），人工修正后的产物经 seal 重新可复用。
+- **topic 参数**：`doc_generate` 的 `topic`（单段目录名 `[A-Za-z0-9._-]`，confine 校验在 workspaceRoot 内）对声明 `requiresTopic: true` 的 pack **必填**（2026-10-14 真实会话复盘后收紧：cosmic 链四阶段 plan/req/func/tech 一个需求一个 topic，缺失调用期明确报错；manifest 声明，引擎不做包名硬编码）；其余 pack 缺省行为不变；`doc_validate` 不设该参数——复验全由产物路径驱动。给定后：产物根为 `<topic>/output/`、素材根为 `<topic>/references/`；缺省维持现状（workspaceRoot 根下的 `output/`、`references/`）——既有调用与测试零迁移。workspace scope 的 pack 忽略 topic（固定 workspace 级目录：素材 `references/`、产物 `context/`）。
+- **复用预检**（`reuse: true` 的 pack，机制对所有 scope 通用）：doc_generate 生成前扫 `context/`，命中需同时满足：同 pack 产物、sidecar 回执 `isValid === true` 且版本与已安装 pack 一致、**产物当前 hash 与回执记录一致**（产物 staleness 对账）、**本次调用的素材清单与回执 `materials` 清单逐项相等**（输入新鲜度对账，均不重跑 LLM 校验）、链式 pack 还需**本次 upstream 校验后的锚点与回执 `upstreamHashes` 逐项相等**（上游重生成即级联失效下游复用）、**本次调用寻址的确定性产物名与扫描文件一致**（扇出寻址：targetIndex 2 绝不复用功能 1 的产物；仅时间戳缺省名按文件名无关扫描）；**显式传入非寻址类 params 跳过复用**（交给正常路径的 paramDriftPolicy）。素材清单是生成时引擎记录的 canonical ref + 内容 sha256（inline 素材记 `#!inline` 标记 + 内容 hash，双重前缀拼写归一为实际读取路径），按集合比对（与顺序无关，重复计数）——素材被改、多传、少传任一漂移即落正常生成闭环；素材文件不可读则明确报错（调用方点名的输入缺失，不静默吞）。回执无 `materials` 字段（旧格式）一律不复用，重生成一次即补齐。命中返回 `reused: true` + 原回执，除非调用方显式 `force: true`。doc_validate seal 回签时原样携带 `materials`（复验只证内容，不改输入基线），人工修正后的产物经 seal 重新可复用。
 - **doc_chain_status**：从 `plan` 参数的路径推断输出根（plan 所在目录即 output 根），topic 目录自然生效，不加参数。
 - 产物路径对下游照旧是 workspace-relative（如 `context/cosmic-context-….json`、`req-2026-001/output/plan.json`），`upstream` 传递与 confine 校验不变。
 - **upstream 是内容注入，不是引用**：doc_generate 把 upstream 产物全文渲染进该次调用的 prompt（`{{upstream}}` 槽）——LLM 自身无法读文件，"仅传路径"要么模型读不到、要么经额外工具读取后同样进上下文，无节省反多往返。成本量级：context 产物典型 1-2k token，每次 doc_generate 注入一份；修复循环内每轮 prompt 重建时都在，但**不跨调用累积**（会话持久负担只有回执，回执记录的是 upstream hash 而非全文）；promptTokenBudget 预检（既有）兜总量。req/func/tech 按需携带 context 的实际开销即此量级，不构成上下文灾难；若未来 context 产物膨胀，节流手段是按 pack 裁剪注入视图（如 req 只注入 roles/thirdPartySystems），留作观察项不预先实现。
-- **随行上游（rider）**：consumes 之外、已安装 pack 的绿回执产物（绿 + hash + 版本策略全量校验后）可作为随行上游进入 prompt 与函数规则 context——"按需携带 context"由此承载；链式 pack 的 upstream 至少须含一个 consumed 类型，缺失响亮报错（链契约不因 rider 松动）。
+- **随行上游（rider）**：consumes 之外、已安装 pack 的合格回执产物（回执合格 + hash + 版本策略全量校验后）可作为随行上游进入 prompt 与函数规则 context——"按需携带 context"由此承载；链式 pack 的 upstream 至少须含一个 consumed 类型，缺失明确报错（链契约不因 rider 松动）。
 
 ## 设计
 
@@ -81,7 +81,7 @@ workspaceRoot/
 
 ### 2. 链接入：plan consumes context
 
-- plan manifest `consumes: ["cosmic-plan"] → ["cosmic-context"]`；plan 新增函数规则 `plan/context-alignment` [error]：upstream 须含 `docType: "context"` 绿产物（缺失/非 context 响亮报错，模式与 func-alignment 一致），并做**引用对账**——plan 中 `changeKind: "modified"` 的 function，其模块 code 必须已存在于 context 模块树；`changeKind: "added"` 的 code 必须**不存在于** context（新增不得撞已有编号）且符合 `moduleIdConventionForLevelN`（numeric 段全数字、alphabetic 段全字母）。
+- plan manifest `consumes: ["cosmic-plan"] → ["cosmic-context"]`；plan 新增函数规则 `plan/context-alignment` [error]：upstream 须含 `docType: "context"` 合格产物（缺失/非 context 明确报错，模式与 func-alignment 一致），并做**引用对账**——plan 中 `changeKind: "modified"` 的 function，其模块 code 必须已存在于 context 模块树；`changeKind: "added"` 的 code 必须**不存在于** context（新增不得撞已有编号）且符合 `moduleIdConventionForLevelN`（numeric 段全数字、alphabetic 段全字母）。
 - req/func/tech 的 consumes 不变（plan→req→func→tech 主链）；它们需要项目知识时由模型在 `doc_generate.upstream` 数组按需携带 context（prompt 邀请）。
 - `doc_chain_status` 不变：coverage 定义在 plan functions 扇出上，context 是项目级单产物不参与扇出。
 
@@ -105,8 +105,8 @@ req/plan/func/tech 产物**不需要特别的编号规则**：沿用既有 `arti
 
 plan 规划通过并落地后，把"本次 topic 修改/新增的模块"合并回项目 context，使项目知识随需求持续演化：
 
-- manifest：`name: "cosmic-context-sync"`、`scope: "workspace"`、`reuse: false`（同步是动作，不被复用预检拦截）、`consumes: ["cosmic-context", "cosmic-plan"]`（复用既有上游验证通道：upstream 缺失或非绿在工具层即时响亮拒绝，零 LLM 开销；`doc_chain_status` 的阶段游走跳过 workspace 级 pack，扇出矩阵不受影响）、schema 与 cosmic-context 相同（产物是 `docType: "context"` 的新版本）、双语。
-- 调用：`doc_generate(pack: "cosmic-context-sync", topic: "<topic>", upstream: [<context 路径>, <topic>/output/<plan 路径>])`——upstream 显式传旧 context 与该 topic 的绿 plan（模型可见 ⟺ 日志可重建；工具不做隐式扫描），upstream 缺失或非绿回执 fail loud。触发时机写进工具描述：plan 阶段绿后可用。
+- manifest：`name: "cosmic-context-sync"`、`scope: "workspace"`、`reuse: false`（同步是动作，不被复用预检拦截）、`consumes: ["cosmic-context", "cosmic-plan"]`（复用既有上游验证通道：upstream 缺失或不合格在工具层即时明确拒绝，零 LLM 开销；`doc_chain_status` 的阶段游走跳过 workspace 级 pack，扇出矩阵不受影响）、schema 与 cosmic-context 相同（产物是 `docType: "context"` 的新版本）、双语。
+- 调用：`doc_generate(pack: "cosmic-context-sync", topic: "<topic>", upstream: [<context 路径>, <topic>/output/<plan 路径>])`——upstream 显式传旧 context 与该 topic 的合格 plan（模型可见 ⟺ 日志可重建；工具不做隐式扫描），upstream 缺失或非合格回执 fail loud。触发时机写进工具描述：plan 阶段合格后可用。
 - 生成：LLM 以旧 context + plan 为输入产出合并后的 context（新增模块插入对应层级并按 `moduleIdConventionForLevelN` 分配编号、修改模块更新职责描述），走标准闭环（生成 → 校验 → 修复循环）。
 - 规则（函数规则读 upstream，在 context 自身四条规则之外）：
   - `context-sync/coverage` [error]：plan 中每个 function（changeKind 为 added/modified）的最深层级名称（l3Name ?? l2Name ?? l1Name）必须存在于合并产物的模块树 name 集——v1 语义按 name 匹配，funcId 段与模块 code 的逐段对账留 v2
@@ -130,15 +130,15 @@ plan 规划通过并落地后，把"本次 topic 修改/新增的模块"合并�
 |---|---|---|
 | 1. manifest `scope` + `reuse` 字段 | loader 声明与校验（scope：`workspace`/`topic` 缺省后者；reuse 布尔按 scope 语义取默认、显式声明覆盖） | 小 |
 | 2. `doc_generate` 的 `topic` + `force` 参数 | 产物根/素材根按 `<topic>/` 解析（单段名 + confine 校验）；workspace pack 忽略 topic；缺省行为不变；`force` 绕过复用预检 | 小 |
-| 3. workspace 复用预检 | doc_generate 对 `reuse: true` 生成前扫产物根：同 pack + 绿回执 + 版本一致 + hash 对账命中即复用（`reused: true`，零 LLM） | 中 |
-| 4. 随行上游（rider） | consumes 之外已安装 pack 的绿产物放行注入；链式 pack 至少一个 consumed 类型 | 小 |
+| 3. workspace 复用预检 | doc_generate 对 `reuse: true` 生成前扫产物根：同 pack + 合格回执 + 版本一致 + hash 对账命中即复用（`reused: true`，零 LLM） | 中 |
+| 4. 随行上游（rider） | consumes 之外已安装 pack 的合格产物放行注入；链式 pack 至少一个 consumed 类型 | 小 |
 | 5. doc_chain_status 输出根推断 + workspace 排除 | 输出根 = plan 所在目录；阶段游走跳过 workspace 级 pack | 小 |
 
 复用判定复用既有 hash 对账机制（staleness 语义），不新增校验逻辑。以下需求全部落在既有机制内：
 
 | 需求 | 承载机制 | 结论 |
 |---|---|---|
-| context 作链头、plan 接链 | consumes 声明 + upstream 绿回执校验 + 函数规则 context 注入（D3/D6） | 现成 |
+| context 作链头、plan 接链 | consumes 声明 + upstream 合格回执校验 + 函数规则 context 注入（D3/D6） | 现成 |
 | moduleLevels 驱动的层级/树深校验 | 函数规则 `check(artifact, context)` 读 `context.params`（cfp-total-band 先例） | 现成；schema 静态故精确校验放规则层——既有分层原则，非新缝隙 |
 | 模块树三层校验 | schema 恒表达三级结构（两层内联 children）+ 函数规则遍历（唯一性/深度/编号规则联动）——声明式 `given` 不支持嵌套是已定案边界（说明书 4.8） | 现成 |
 | 角色 kind / changeKind 枚举 | schema enum | 现成 |
@@ -157,18 +157,18 @@ plan 规划通过并落地后，把"本次 topic 修改/新增的模块"合并�
 - **S2 同步 pack**：cosmic-context-sync 全套（`scope: "workspace"`、`reuse: false`、coverage/preserve 规则、golden）+ 测试。
 - **S3 文案与文档**：六 pack description（含 sync）+ req prompt 用户故事主体 + req `functionalUsers[].kind` + 四 pack prompt 领域模型措辞对齐 + 说明书（4.x context/sync 节 + 领域模型节 + 作用域布局节）+ scenario-chains 开放问题 3 定案 + TODOS。
 - 单分支四个 commit（S0 引擎、S1 pack、S2 sync、S3 文档），`--no-ff` 合并。
-- **测试集**：新增 `tests/cosmic-context.spec.ts`、`tests/cosmic-context-sync.spec.ts`，沿用既有 cosmic 系列 spec 模式（pack shape 断言 / golden 双语全绿 / mutation guardrail-is-real / 确定性 LLM 链生成），与 cosmic-plan/req/func/tech 四个 spec 并列。
+- **测试集**：新增 `tests/cosmic-context.spec.ts`、`tests/cosmic-context-sync.spec.ts`，沿用既有 cosmic 系列 spec 模式（pack shape 断言 / golden 双语全部合格 / mutation guardrail-is-real / 确定性 LLM 链生成），与 cosmic-plan/req/func/tech 四个 spec 并列。
 
 ## 验收标准（草案）
 
-1. cosmic-context 双语全绿（golden 无任何 issue）；module-code 重复触发 error；moduleLevels=2 时三级树触发 module-depth error、缺 Level2 编号规则触发 module-id-convention error；assumptions 非空触发 warning。
-2. plan 无 upstream 或 upstream 非 context 时，`plan/context-alignment` 响亮报错；带绿 context 全链 context→plan→req→func→tech 确定性生成 PASS。
+1. cosmic-context 双语全部合格（golden 无任何 issue）；module-code 重复触发 error；moduleLevels=2 时三级树触发 module-depth error、缺 Level2 编号规则触发 module-id-convention error；assumptions 非空触发 warning。
+2. plan 无 upstream 或 upstream 非 context 时，`plan/context-alignment` 明确报错；带合格 context 全链 context→plan→req→func→tech 确定性生成 PASS。
 3. `changeKind` 缺失/非法值被 schema 拒绝；moduleLevels=3 时缺 l3Name 报 error，levels=1 时仅 l1 必填。
 4. req `functionalUsers[].kind` 非法值被 schema 拒绝；prompt 含"角色或第三方系统、顶层模块"指引。
 5. 六 pack description 更新且 `doc_packs` 渲染正确。
 6. **作用域**：`topic: "req-a"` 时产物落 `req-a/output/`、素材根 `req-a/references/`；workspace 产物固定落 `context/`、素材根 `references/`；`doc_chain_status` 在 topic 目录下从 plan 路径正确推断输出根。
-7. **复用**：已有绿 context（回执 valid、hash 一致、素材清单与本次调用逐项相等）时再调 doc_generate 不调 LLM、返回 `reused: true`；素材被改/多传/少传、产物被改（hash 不符）或回执红时重新生成；无 `materials` 字段的旧回执不复用；`force: true` 强制重建；seal 回签后的产物重新可复用；cosmic-context-sync 不受预检拦截（`reuse: false`）。
-8. **同步**：sync 以旧 context + topic 的绿 plan 生成合并 context；plan 中 added/modified 模块缺失触发 `context-sync/coverage` error；旧模块丢失触发 `context-sync/preserve` warning。
+7. **复用**：已有合格 context（回执 valid、hash 一致、素材清单与本次调用逐项相等）时再调 doc_generate 不调 LLM、返回 `reused: true`；素材被改/多传/少传、产物被改（hash 不符）或回执不合格时重新生成；无 `materials` 字段的旧回执不复用；`force: true` 强制重建；seal 回签后的产物重新可复用；cosmic-context-sync 不受预检拦截（`reuse: false`）。
+8. **同步**：sync 以旧 context + topic 的合格 plan 生成合并 context；plan 中 added/modified 模块缺失触发 `context-sync/coverage` error；旧模块丢失触发 `context-sync/preserve` warning。
 9. 引擎改动仅限 pack-loader 与 tools/doc-service（scope/reuse 校验、topic 解析、复用预检）。
 10. 全部测试 + 覆盖率阈值 + typecheck + build + host-smoke PASS。
 
