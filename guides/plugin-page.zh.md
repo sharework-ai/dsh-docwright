@@ -2,6 +2,6 @@
 
 pack 定义一种文档生成场景（或其中的一个环节），它包括了 JSON Schema、参数定义、校验规则、生成提示等信息，多个 pack 可串接成多阶段场景。生成过程中的参数通常经用户确认后才开始使用，每份文档附带可复验的校验回执。完整说明见 npm 或 GitHub 上的 [README 文档](https://github.com/sharework-ai/dsh-docwright)。
 
-- **参数维护**：本页下方的"Docwright 参数"卡片，或 设置 → Docwright 参数。
-- **pack 市场**：插件页的"Docwright 市场"标签页（地址由部署配置 `marketUrl` 决定，默认 [dm.shrwk.com](https://dm.shrwk.com/)）。
-- **自定义 pack**：`cordis.yml` 的 `config.docwright.packsDir`（惯例 `<workspace>/.docwright/packs/`），同名 pack 覆盖内置。
+- **安装场景包**：您可以通过插件页的"Docwright 市场"标签页，或者直接[点击此处](https://dm.shrwk.com)访问并安装。
+- **设置场景包或本插件**：通过本页下方的标签页，您可以设置场景包的参数，更新或删除场景包，以及设置插件的参数。
+- **创建新的场景包**：您可以试着在会话中进行提示：创建一个根据给定素材生成简历的技能，需要至少包含基本信息、教育经历两部分，其中基本信息中的最高学历应当在教育经历中找到。
