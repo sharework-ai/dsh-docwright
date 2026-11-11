@@ -1,5 +1,7 @@
 {
   "meta": {
-    "detail": "guides/plugin-page.en.md"
+    "detail": "guides/plugin-page.en.md",
+    "title": "Docwright document generation",
+    "description": "Document generation for deepseek-harness: quality packs (JSON schema + rules), a validation repair loop, chained scenarios, params with a confirmation gate, replayable receipts, and a pack authoring skill."
   }
 }

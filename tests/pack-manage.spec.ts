@@ -501,3 +501,44 @@ describe('installPack mid-closure failure', () => {
     }
   })
 })
+
+describe('checkPackUpdates per-pack scope', () => {
+  it('queries the market per-pack endpoint and scopes the answer to that card', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    fx.deps.marketUrl = 'https://market.test'
+    const calls: string[] = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input)
+      calls.push(url)
+      if (url.endsWith('/api/packs/ext')) return new Response(JSON.stringify({ ok: true, pack: { name: 'ext', version: '9' } }), { headers: { 'content-type': 'application/json' } })
+      throw new Error(`unexpected ${url}`)
+    }) as typeof fetch
+    try {
+      const rows = await checkPackUpdates(fx.deps, 'ext')
+      expect(rows).toEqual([{ name: 'ext', localVersion: '1', onMarket: true, marketVersion: '9', updateAvailable: true }])
+      expect(calls).toEqual(['https://market.test/api/packs/ext']) // the per-pack endpoint, not the index
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  it('reports an absent pack via the market 404 without touching the index', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    fx.deps.marketUrl = 'https://market.test'
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/api/packs/ext')) return new Response('not found', { status: 404 })
+      throw new Error(`unexpected ${url}`)
+    }) as typeof fetch
+    try {
+      const rows = await checkPackUpdates(fx.deps, 'ext')
+      expect(rows).toEqual([{ name: 'ext', localVersion: '1', onMarket: false, updateAvailable: false }])
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+})

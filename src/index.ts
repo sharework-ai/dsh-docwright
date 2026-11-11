@@ -110,7 +110,7 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       // The pack lane exists only when a packsDir is configured — without one
       // there is nothing to manage and the routes stay unmounted.
       packLane: packsDirConfigured === undefined ? undefined : {
-        checkUpdates: () => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }),
+        checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }, pack),
         updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks }, pack) }),
         deletePack: pack => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks }, pack),
       },

@@ -92,9 +92,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				})
 			}));
 		}
-		/** Version standing of every managed pack (one server-side market fetch). */
-		async function fetchPackUpdates() {
-			return (await parse(await fetch("/api/docwright/pack-updates", { headers: { accept: "application/json" } }))).updates;
+		/** Version standing of the managed packs; `pack` scopes the check to one
+		* card (the check is per-card in the UI). One server-side market fetch. */
+		async function fetchPackUpdates(pack) {
+			const suffix = pack !== void 0 ? `?pack=${encodeURIComponent(pack)}` : "";
+			return (await parse(await fetch(`/api/docwright/pack-updates${suffix}`, { headers: { accept: "application/json" } }))).updates;
 		}
 		/** Update one managed pack from the market (verified download, atomic swap). */
 		async function updateManagedPack(pack) {
@@ -658,26 +660,27 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				rows: []
 			});
 			const [laneDone, setLaneDone] = (0, react.useState)(void 0);
-			const checkLane = (0, react.useCallback)(() => {
-				setLane({
+			const checkOne = (0, react.useCallback)((name) => {
+				setLane((prev) => ({
 					state: "checking",
-					rows: []
-				});
-				fetchPackUpdates().then((rows) => setLane({
-					state: "ready",
-					rows
-				})).catch(() => setLane({
-					state: "unreachable",
-					rows: []
+					rows: prev.rows
 				}));
+				fetchPackUpdates(name).then((rows) => setLane((prev) => ({
+					state: "ready",
+					rows: [...prev.rows.filter((r) => r.name !== name), ...rows]
+				}))).catch(() => setLane((prev) => ({
+					state: "unreachable",
+					rows: prev.rows
+				})));
 			}, []);
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
 			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
 				key: p.name,
 				pack: p,
 				status: byName.get(p.name),
+				checked: byName.has(p.name),
 				laneState: lane.state,
-				checkLane,
+				checkOne,
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
@@ -686,7 +689,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				onDone: (text) => {
 					setLaneDone(text);
 					props.onSaved();
-					checkLane();
+					checkOne(p.name);
 				}
 			})));
 		}
@@ -711,8 +714,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}, `${paramsOpen ? "▾" : "▸"} ${t("paramsToggle")}`), pack.origin.kind === "packsDir" ? (0, react.createElement)(PackLaneActions, {
 				pack,
 				status: props.status,
+				checked: props.checked,
 				laneState: props.laneState,
-				checkLane: props.checkLane,
+				check: props.checkOne,
 				t,
 				lang: props.lang,
 				consumers: props.consumers,
@@ -751,19 +755,19 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					setArmed(void 0);
 				});
 			};
-			const standing = props.laneState === "ready" ? props.status === void 0 || !props.status.onMarket ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
-			const updateAvailable = props.laneState === "ready" && props.status !== void 0 && props.status.onMarket && props.status.updateAvailable;
-			const checkLabel = props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
+			const standing = props.checked && props.laneState === "ready" ? props.status === void 0 || !props.status.onMarket ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
+			const updateAvailable = props.checked && props.laneState === "ready" && props.status !== void 0 && props.status.onMarket && props.status.updateAvailable;
+			const checkLabel = props.checked && props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
 			const rendered = rendered_error(error, props.lang);
 			return (0, react.createElement)("span", { style: {
 				display: "inline-flex",
 				gap: "8px",
 				alignItems: "center"
-			} }, props.laneState === "ready" && standing !== null ? (0, react.createElement)("span", { style: muted }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			} }, standing !== null ? (0, react.createElement)("span", { style: muted }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
-				disabled: busy || props.laneState === "checking",
-				onClick: () => updateAvailable ? armed === "update" ? run("update") : setArmed("update") : props.checkLane()
+				disabled: busy || props.checked && props.laneState === "checking",
+				onClick: () => updateAvailable ? armed === "update" ? run("update") : setArmed("update") : props.check(props.pack.name)
 			}, checkLabel), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
@@ -1046,7 +1050,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					if (configured !== void 0) setUrl(configured);
 				}).catch(() => {});
 			}, []);
-			return (0, react.createElement)("div", { style: rootStyle }, (0, react.createElement)("div", { style: barStyle }, (0, react.createElement)("span", { style: titleStyle }, t("marketTitle")), (0, react.createElement)("a", {
+			return (0, react.createElement)("div", { style: rootStyle }, (0, react.createElement)("div", { style: barStyle }, (0, react.createElement)("span", { style: titleStyle }, t("marketTitle")), (0, react.createElement)("span", { style: {
+				...linkStyle,
+				textDecoration: "none"
+			} }, url.replace(/\/$/, "")), (0, react.createElement)("a", {
 				href: url,
 				target: "_blank",
 				rel: "noreferrer",

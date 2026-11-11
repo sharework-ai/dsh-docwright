@@ -1,5 +1,7 @@
 {
   "meta": {
-    "detail": "guides/plugin-page.zh.md"
+    "detail": "guides/plugin-page.zh.md",
+    "title": "Docwright 文档生成",
+    "description": "为 deepseek-harness 生成文档：高质量 pack（JSON Schema + 校验规则）、验证修复闭环、链式场景、参数确认门、可复验回执，以及 pack 编写技能。"
   }
 }

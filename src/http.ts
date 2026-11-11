@@ -87,7 +87,7 @@ export interface WriteChannels {
   readonly setPackParamDefault: (pack: string, param: string, value: unknown) => Promise<void>
   /** Pack-lane management (src/pack-manage.ts): market version standing, update, delete. Optional — hosts mount it only when a packsDir is configured. */
   readonly packLane?: {
-    readonly checkUpdates: () => Promise<unknown>
+    readonly checkUpdates: (pack?: string | undefined) => Promise<unknown>
     readonly updatePack: (pack: string) => Promise<{ version: string }>
     readonly deletePack: (pack: string) => Promise<void>
   } | undefined
@@ -203,7 +203,11 @@ export function mountParamsRoutes(
           sendJson(response, rejected, errorEnvelope(new CodedError('gateRejected', `request rejected by the host gate (status ${rejected})`, { params: { status: rejected } })))
           return
         }
-        void lane.checkUpdates().then(
+        // Optional ?pack=name scopes the standing to one card — the check is
+        // per-card in the UI (each click answers exactly the clicked card).
+        const url = new URL(request.url ?? '', 'http://local')
+        const only = url.searchParams.get('pack') ?? undefined
+        void lane.checkUpdates(only).then(
           updates => sendJson(response, 200, { updates }),
           error => sendJson(response, error instanceof CodedError && error.code === 'marketUnreachable' ? 200 : 422, errorEnvelope(error)),
         )

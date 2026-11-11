@@ -126,9 +126,11 @@ export interface UiPackUpdate {
   updateAvailable: boolean
 }
 
-/** Version standing of every managed pack (one server-side market fetch). */
-export async function fetchPackUpdates(): Promise<readonly UiPackUpdate[]> {
-  const body = await parse<{ updates: readonly UiPackUpdate[] }>(await fetch('/api/docwright/pack-updates', { headers: { accept: 'application/json' } }))
+/** Version standing of the managed packs; `pack` scopes the check to one
+ * card (the check is per-card in the UI). One server-side market fetch. */
+export async function fetchPackUpdates(pack?: string): Promise<readonly UiPackUpdate[]> {
+  const suffix = pack !== undefined ? `?pack=${encodeURIComponent(pack)}` : ''
+  const body = await parse<{ updates: readonly UiPackUpdate[] }>(await fetch(`/api/docwright/pack-updates${suffix}`, { headers: { accept: 'application/json' } }))
   return body.updates
 }
 

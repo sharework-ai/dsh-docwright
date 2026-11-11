@@ -78,6 +78,9 @@ export function MarketTab(props: { lang: 'zh' | 'en' }): ReactNode {
   return h('div', { style: rootStyle },
     h('div', { style: barStyle },
       h('span', { style: titleStyle }, t('marketTitle')),
+      // The effective market is deployment state — showing the resolved URL
+      // answers "which market am I looking at" without guessing.
+      h('span', { style: { ...linkStyle, textDecoration: 'none' } satisfies CSSProperties }, url.replace(/\/$/, '')),
       h('a', { href: url, target: '_blank', rel: 'noreferrer', style: linkStyle }, t('openExternal'))),
     h('iframe', { key: url, src: url, title: t('marketTitle'), style: frameStyle }))
 }

@@ -293,22 +293,24 @@ function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 
  * 更新 after a check reports a newer version. */
 function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { payload, t } = props
-  // Market standing of the managed packs, fetched ONLY when a check runs.
-  // Unreachable market degrades to an inline note, not error UI.
+  // Market standing, fetched ONLY when a card's 检查更新 is clicked — and
+  // scoped to THAT card: one click answers exactly one pack (the server
+  // still reads the market once). rows holds each checked card's latest row.
   const [lane, setLane] = useState<{ state: 'idle' | 'checking' | 'ready' | 'unreachable'; rows: readonly UiPackUpdate[] }>({ state: 'idle', rows: [] })
   const [laneDone, setLaneDone] = useState<string | undefined>(undefined)
-  const checkLane = useCallback(() => {
-    setLane({ state: 'checking', rows: [] })
-    fetchPackUpdates().then(rows => setLane({ state: 'ready', rows })).catch(() => setLane({ state: 'unreachable', rows: [] }))
+  const checkOne = useCallback((name: string) => {
+    setLane(prev => ({ state: 'checking', rows: prev.rows }))
+    fetchPackUpdates(name).then(rows => setLane(prev => ({ state: 'ready', rows: [...prev.rows.filter(r => r.name !== name), ...rows] })))
+      .catch(() => setLane(prev => ({ state: 'unreachable', rows: prev.rows })))
   }, [])
   const byName = useMemo(() => new Map(lane.rows.map(u => [u.name, u])), [lane.rows])
   return h('div', null,
     lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
-    payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), laneState: lane.state, checkLane, t, lang: props.lang,
+    payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
       resolveText: props.resolveText, onSaved: props.onSaved,
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
-      onDone: text => { setLaneDone(text); props.onSaved(); checkLane() } })))
+      onDone: text => { setLaneDone(text); props.onSaved(); checkOne(p.name) } })))
 }
 
 /** One pack card: identity + description + action row on top; the parameter
@@ -316,8 +318,10 @@ function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | '
 function PackCard(props: {
   pack: UiPackEntry
   status: UiPackUpdate | undefined
+  /** True once this card's own check has run (its standing may render). */
+  checked: boolean
   laneState: 'idle' | 'checking' | 'ready' | 'unreachable'
-  checkLane: () => void
+  checkOne: (name: string) => void
   t: Translate
   lang: 'zh' | 'en'
   resolveText: (value: unknown) => string
@@ -340,7 +344,7 @@ function PackCard(props: {
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
         `${paramsOpen ? '▾' : '▸'} ${t('paramsToggle')}`),
       pack.origin.kind === 'packsDir'
-        ? h(PackLaneActions, { pack, status: props.status, laneState: props.laneState, checkLane: props.checkLane, t, lang: props.lang,
+        ? h(PackLaneActions, { pack, status: props.status, checked: props.checked, laneState: props.laneState, check: props.checkOne, t, lang: props.lang,
           consumers: props.consumers, onDone: props.onDone })
         : null),
     paramsOpen
@@ -362,8 +366,10 @@ function PackCard(props: {
 function PackLaneActions(props: {
   pack: UiPackEntry
   status: UiPackUpdate | undefined
+  /** True once THIS card's check ran — other cards' checks stay invisible here. */
+  checked: boolean
   laneState: 'idle' | 'checking' | 'ready' | 'unreachable'
-  checkLane: () => void
+  check: (name: string) => void
   t: Translate
   lang: 'zh' | 'en'
   /** Installed packs consuming this one — deleting it breaks their chains. */
@@ -386,22 +392,23 @@ function PackLaneActions(props: {
       setArmed(undefined)
     })
   }
-  const standing = props.laneState === 'ready'
+  // The standing renders for THIS card only, and only once its own check ran.
+  const standing = props.checked && props.laneState === 'ready'
     ? (props.status === undefined || !props.status.onMarket
       ? t('notOnMarket')
       : props.status.updateAvailable ? fill(t('updateTo'), { version: props.status.marketVersion ?? '' }) : t('upToDate'))
     : null
-  // The check button's three faces: idle/checking before a check runs, 检查更新
-  // after a check that found nothing newer, 更新 once a newer version is known.
-  const updateAvailable = props.laneState === 'ready' && props.status !== undefined && props.status.onMarket && props.status.updateAvailable
-  const checkLabel = props.laneState === 'checking' ? t('checking')
+  // The check button's faces: 检查更新 until a check reports a newer version,
+  // then the two-step 更新; 检查中… while the round trip runs.
+  const updateAvailable = props.checked && props.laneState === 'ready' && props.status !== undefined && props.status.onMarket && props.status.updateAvailable
+  const checkLabel = props.checked && props.laneState === 'checking' ? t('checking')
     : updateAvailable ? (armed === 'update' ? t('confirmUpdate') : t('updateBtn'))
     : t('checkForUpdates')
   const rendered = rendered_error(error, props.lang)
   return h('span', { style: { display: 'inline-flex', gap: '8px', alignItems: 'center' } satisfies CSSProperties },
-    props.laneState === 'ready' && standing !== null ? h('span', { style: muted }, standing) : null,
-    h(Button, { size: 'sm', variant: 'ghost', disabled: busy || props.laneState === 'checking',
-      onClick: () => (updateAvailable ? (armed === 'update' ? run('update') : setArmed('update')) : props.checkLane()) },
+    standing !== null ? h('span', { style: muted }, standing) : null,
+    h(Button, { size: 'sm', variant: 'ghost', disabled: busy || (props.checked && props.laneState === 'checking'),
+      onClick: () => (updateAvailable ? (armed === 'update' ? run('update') : setArmed('update')) : props.check(props.pack.name)) },
       checkLabel),
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
       armed === 'delete' ? (props.consumers.length > 0 ? fill(t('confirmDeleteBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDelete')) : t('deleteBtn')),

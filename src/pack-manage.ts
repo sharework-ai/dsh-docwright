@@ -124,10 +124,33 @@ export async function checkPackUpdates(deps: {
   readonly packsDir?: string | undefined
   readonly marketUrl: string
   readonly fetchImpl?: typeof fetch
-}): Promise<readonly PackUpdateStatus[]> {
+}, onlyPack?: string | undefined): Promise<readonly PackUpdateStatus[]> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) return []
-  const managed = [...deps.packs.values()].filter(p => p.origin.kind === 'packsDir')
+  const managed = [...deps.packs.values()].filter(p => p.origin.kind === 'packsDir' && (onlyPack === undefined || p.manifest.name === onlyPack))
   if (managed.length === 0) return []
+  // Single-pack check: the market's per-pack detail endpoint answers exactly
+  // one record — no catalog-wide index fetch for one card.
+  if (onlyPack !== undefined) {
+    const pack = managed[0]!
+    try {
+      const response = await (deps.fetchImpl ?? fetch)(`${deps.marketUrl}/api/packs/${encodeURIComponent(onlyPack)}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+      if (response.status === 404) {
+        return [{ name: onlyPack, localVersion: pack.manifest.version, onMarket: false, updateAvailable: false }]
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const body = await response.json() as { pack?: { version?: unknown } }
+      const marketVersion = typeof body.pack?.version === 'string' ? body.pack.version : undefined
+      return [{
+        name: onlyPack,
+        localVersion: pack.manifest.version,
+        onMarket: marketVersion !== undefined,
+        ...(marketVersion !== undefined ? { marketVersion } : {}),
+        updateAvailable: marketVersion !== undefined && compareVersions(marketVersion, pack.manifest.version) > 0,
+      }]
+    } catch (error) {
+      throw new CodedError('marketUnreachable', `could not check "${onlyPack}" against the pack market at ${deps.marketUrl} (${(error as Error).message}); showing local state only`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
+    }
+  }
   let index: MarketIndex
   try {
     const response = await (deps.fetchImpl ?? fetch)(`${deps.marketUrl}/api/index`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
