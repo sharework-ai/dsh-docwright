@@ -7,18 +7,18 @@ JSON is the single source of truth. Every generated document is validated agains
 ## Quickstart (deterministic, ~2 minutes, no API key)
 
 ```sh
-dsh plugin add @sharework-ai/dsh-docwright   # 1. install the bundle into your profile
-dsh                                 # 2. start a session with the profile
+dsh plugin add @sharework-ai/dsh-docwright    # 1. install the bundle into your profile
+node install.mjs cosmic-plan --into .docwright/packs   # 2. install the pack from the market (dm.shrwk.com)
+dsh                                  # 3. start a session with the profile
 ```
 
-Copy the bundled sample into your workspace, then in the session:
+Copy the pack's golden sample (`packs/cosmic-plan/samples/golden.json` in the market archive) into your workspace, then in the session:
 
 ```
 > doc_validate(artifactPath: "sample.json", pack: "cosmic-plan")
-# sample.json = the pack's bundled golden sample copied into your workspace
 ```
 
-You get an all-green receipt in seconds — zero LLM calls. This is the deterministic first-run moment; `doc_generate` (the closed loop) is step two.
+You get an all-green receipt in seconds — zero LLM calls. This is the deterministic first-run moment; `doc_generate` (the closed loop) is step two. In-session, discovery is three-layered: `doc_packs` lists installed packs; when none fits, `doc_market_search` looks the pack market up (deployment param `marketSearch`, default on) and `doc_market_install` lands a hit behind the user's confirmation — usable in the same session; when nothing on the market fits either, the bundled authoring skill writes a new pack.
 
 ## Tools
 
@@ -72,7 +72,8 @@ Per-function fan-out accounting — deterministic, no LLM. Pass `plan` (workspac
 ```yaml
 - id: docwright
   config:
-    packsDir: ""            # extra pack dirs; same-name packs override built-ins
+    packsDir: ""            # where market-installed packs land; same-name packs override built-ins
+    marketSearch: true      # doc_market_search tool + market-lookup hints when no installed pack fits
     marketUrl: ""           # pack market the params UI checks updates and the Plugins-page tab serve (default: https://dm.shrwk.com)
     workspaceRoot: ""       # fallback root when no session workspace (default: cwd)
     materialsRoot: ""       # material reference root (default: <workspace>/references)
@@ -100,9 +101,9 @@ Per-function fan-out accounting — deterministic, no LLM. Pass `plan` (workspac
 
 ## Packs
 
-Hybrid packs: declarative JSON rules for simple families, JS functions for cross-field rules.
+Hybrid packs: declarative JSON rules for simple families, JS functions for cross-field rules. The plugin ships ZERO builtin packs — packs are content, distributed through the pack market (`dm.shrwk.com`); the engine + discovery + authoring skill are the npm package. The COSMIC family lives in this repo's `packs/` as its authoring source (also the verifier's `--with` fixture) and is published to the market.
 
-Six built-in packs cover the COSMIC flow (`cosmic-context` → `cosmic-plan` → `cosmic-req` → `cosmic-func` → `cosmic-tech`, plus `cosmic-context-sync`): context = the workspace-level project context (module tree with codes, roles, third-party systems, ID conventions, design principles; model assumptions explicitly registered), plan = module-change planning (functions hang off modules — one module may carry several; `changeKind` reconciled against the context tree by module name), req = per-function requirements analysis (functional users with kind + user stories — the flow-analysis source — and business rules), func = functional-process design (originator/receiver/origination event per process), tech = the data-movement breakdown whose sequences must follow the three audit-safe patterns `ERX`/`EW`/`EX` (≈2.5 movements per process) and whose total CFPs must never fall below the plan estimate (upper tolerance from the budget's `upFactor`). Downstream stages re-anchor `index`/`funcId`/`desiredCfps` to their parent. `cosmic-context-sync` merges one topic's green plan back into the workspace context so project knowledge evolves with requirements (usable once the plan stage passes).
+Six market packs cover the COSMIC flow (`cosmic-context` → `cosmic-plan` → `cosmic-req` → `cosmic-func` → `cosmic-tech`, plus `cosmic-context-sync`): context = the workspace-level project context (module tree with codes, roles, third-party systems, ID conventions, design principles; model assumptions explicitly registered), plan = module-change planning (functions hang off modules — one module may carry several; `changeKind` reconciled against the context tree by module name), req = per-function requirements analysis (functional users with kind + user stories — the flow-analysis source — and business rules), func = functional-process design (originator/receiver/origination event per process), tech = the data-movement breakdown whose sequences must follow the three audit-safe patterns `ERX`/`EW`/`EX` (≈2.5 movements per process) and whose total CFPs must never fall below the plan estimate (upper tolerance from the budget's `upFactor`). Downstream stages re-anchor `index`/`funcId`/`desiredCfps` to their parent. `cosmic-context-sync` merges one topic's green plan back into the workspace context so project knowledge evolves with requirements (usable once the plan stage passes).
 
 ```
 packs/cosmic-plan/
@@ -115,7 +116,7 @@ packs/cosmic-plan/
 └── samples/golden.json  # must pass all-green; feeds mutation tests
 ```
 
-**Pack contract:** `manifest.description` is required and names the document this pack generates — a one-line string or a LocalizedText map (`{ "en": ..., "zh": ... }`, en entry mandatory as the fallback; builtin cosmic packs ship both; load-time enforced; `doc_packs` projects the en entry to the model regardless of UI locale); `manifest.params` declares the pack's tunables (declaration IS the allowlist — `{ type: number|string|boolean|object, default?, description (same LocalizedText shape), enum?, min?, max?, required?, overridable?, confirm?, extractable? }` per param; load-time invariants: `overridable` and `extractable` each require `confirm` (an adjustable baseline and an extracted value must both pass the confirmation gate), and params referenced by declarative rules (numeric bounds or pattern sources) must not be `overridable`; `required: true` forbids a default; optional params may omit the default (inherited-or-explicit only); declarative-rule numeric bounds may reference number params and `pattern` rules may reference string params via `{ "param": "name" }` — the referenced param must always be present (default or required), a non-empty pattern default must compile, and at check time an empty value disables the rule while a set value must be matched); `manifest.paramDriftPolicy` (`regenerate` default | `revalidate`) sets the param-drift stance; `manifest.maxRounds` optionally sets the pack's default loop rounds; every ERROR rule carries a `suggestion`; every language in `manifest.languages` provides rules + prompt + template; golden sample + per-rule-family mutations are mandatory (a checker that cannot catch a deliberately broken sample is decoration). Function rules receive an optional second argument `context = { upstream, materials, params }` — parsed upstream artifacts, raw material texts, and effective params — for cross-artifact and allowlist checks (see `docs/designs/function-rule-context.md`); single-argument rules keep working unchanged.
+**Pack contract:** `manifest.description` is required and names the document this pack generates — a one-line string or a LocalizedText map (`{ "en": ..., "zh": ... }`, en entry mandatory as the fallback; cosmic packs ship both; load-time enforced; `doc_packs` projects the en entry to the model regardless of UI locale); `manifest.params` declares the pack's tunables (declaration IS the allowlist — `{ type: number|string|boolean|object, default?, description (same LocalizedText shape), enum?, min?, max?, required?, overridable?, confirm?, extractable? }` per param; load-time invariants: `overridable` and `extractable` each require `confirm` (an adjustable baseline and an extracted value must both pass the confirmation gate), and params referenced by declarative rules (numeric bounds or pattern sources) must not be `overridable`; `required: true` forbids a default; optional params may omit the default (inherited-or-explicit only); declarative-rule numeric bounds may reference number params and `pattern` rules may reference string params via `{ "param": "name" }` — the referenced param must always be present (default or required), a non-empty pattern default must compile, and at check time an empty value disables the rule while a set value must be matched); `manifest.paramDriftPolicy` (`regenerate` default | `revalidate`) sets the param-drift stance; `manifest.maxRounds` optionally sets the pack's default loop rounds; every ERROR rule carries a `suggestion`; every language in `manifest.languages` provides rules + prompt + template; golden sample + per-rule-family mutations are mandatory (a checker that cannot catch a deliberately broken sample is decoration). Function rules receive an optional second argument `context = { upstream, materials, params }` — parsed upstream artifacts, raw material texts, and effective params — for cross-artifact and allowlist checks (see `docs/designs/function-rule-context.md`); single-argument rules keep working unchanged.
 
 **Pack authoring** is a first-class plugin capability (docs/designs/pack-authoring.md): when no installed pack fits a document type, the model loads the bundled `docwright-pack-authoring` skill (registered at apply time on the host's skills registry; the playbook ships in `guides/`) and walks a nine-stage flow — domain analysis, artifact planning, schema, rules (plain Node-loadable ESM JS in `rules/functions.js`; the built-in severity deduction `100 − 10×error − 3×warning − 1×info` is the default convergence score), params, chain design, verification, registration. The verification shortcut is `pnpm run pack:check -- <packs-dir> [--with <other-root>]...`: the real loader gate plus per-language golden green through the real DocService (chain packs use their consumed packs' golden samples as upstream; `samples/golden.params.json` supplies required-no-default params for the golden run). Local packs install via the `packsDir` config (convention: `<workspace>/.docwright/packs/`); a same-name pack there overrides a built-in one. Packs load at apply time — reload the plugin after writing files.
 

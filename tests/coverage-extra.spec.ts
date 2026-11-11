@@ -70,10 +70,12 @@ describe('coverage: rule engine branches', () => {
     expect(() => new DocService(pack, 'fr-FR')).toThrow(/does not support language/)
   })
 
-  it('registerTools fails loud when the packs root is empty', async () => {
+  it('registerTools tolerates an empty packs root (market-distributed packs)', async () => {
+    // Zero builtin packs is legal since the cosmic packs moved to the
+    // market: the plugin loads, the guides check is the first loud gate.
     const { registerTools } = await import('../src/index.ts')
     const emptyRoot = await mkdtemp(join(tmpdir(), 'docwright-empty-'))
-    await expect(registerTools({ tools: { register: () => {} } } as never, {}, emptyRoot)).rejects.toThrow(/no packs found/)
+    await expect(registerTools({ tools: { register: () => {} } } as never, {}, emptyRoot)).rejects.toThrow(/pack-authoring guide is missing/)
   })
 })
 

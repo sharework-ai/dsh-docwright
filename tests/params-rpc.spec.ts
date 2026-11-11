@@ -268,7 +268,9 @@ describe('registerTools wiring', () => {
     expect(JSON.parse(resNoSettings.body).error).toContain('config editor is not available')
     const first = handlers.length
     await registerTools(ctx as never, { workspaceRoot: '/w' } as never, packsRoot)
-    expect(registered).toHaveLength(5)
+    expect(registered).toHaveLength(7)
+    expect(registered).toContain('doc_market_search')
+    expect(registered).toContain('doc_market_install')
     // Three routes since S3: the read catalog plus the two write channels (×2 mounts now).
     expect(handlers.length - first).toBe(3)
     const [read, configRoute, paramRoute] = handlers.slice(first)
@@ -436,5 +438,134 @@ describe('POST write routes', () => {
     const missing = fakeRes()
     await param.handler(req('POST', 'https://h', 'h', JSON.stringify({ pack: 'wp' })), missing.typed as never)
     expect(missing.res.statusCode).toBe(422)
+  })
+})
+
+describe('registerTools wiring: the pack lane', () => {
+  it('mounts update/delete/updates routes when packsDir is configured and wires them to the lane', async () => {
+    const { registerTools } = await import('../src/index.ts')
+    const { mkdir, mkdtemp, rm, writeFile } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = await mkdtemp(join(tmpdir(), 'docwright-lane-'))
+    const packDir = join(dir, 'gw')
+    for (const sub of ['rules', 'prompts', 'templates', 'samples']) await mkdir(join(packDir, sub), { recursive: true })
+    await writeFile(join(packDir, 'manifest.json'), JSON.stringify({ name: 'gw', version: '1', description: 'd', consumes: [], languages: ['zh-CN'] }), 'utf8')
+    await writeFile(join(packDir, 'rules', 'zh-CN.json'), JSON.stringify([{ id: 'gw/r', severity: 'error', given: '$', field: 'name', kind: 'minLength', min: 1, suggestion: 's' }]), 'utf8')
+    await writeFile(join(packDir, 'schema.json'), '{"type":"object"}', 'utf8')
+    await writeFile(join(packDir, 'prompts', 'zh-CN.md'), 'T {{materials}}', 'utf8')
+    await writeFile(join(packDir, 'templates', 'zh-CN.hbs'), 't', 'utf8')
+    await writeFile(join(packDir, 'samples', 'golden.json'), '{}', 'utf8')
+    const handlers: Array<(req: unknown, res: unknown) => Promise<void> | void> = []
+    const hostCtx = {
+      effect(fn: () => () => void) { fn() },
+      webServer: { register: (r: { path: string; handler: (req: unknown, res: unknown) => Promise<void> | void }) => { handlers.push(r.handler); return () => {} } },
+    }
+    const ctx = {
+      tools: { register: () => {} },
+      inject(deps: string[], cb: (hostCtx: unknown) => void) { if (deps.includes('webServer')) cb(hostCtx) },
+      get() { return { entries: () => [], edit: () => Promise.resolve() } },
+    }
+    const laneConfig: Record<string, unknown> = { workspaceRoot: '/w', packsDir: dir, marketUrl: 'http://127.0.0.1:1' }
+    await registerTools(ctx as never, laneConfig as never, packsRoot)
+    const paths = ['params', 'config', 'pack-param', 'pack-updates', 'pack-update', 'pack-delete']
+    const byPath = (suffix: string) => handlers[handlers.length - 6 + paths.findIndex(p => suffix.endsWith(p))]!
+    const fakeRes = () => { const res = { statusCode: 0, body: '', writeHead(s: number) { res.statusCode = s }, end(b: string) { res.body = b } }; return res }
+    const req = (method: string, body?: unknown) => ({ method, headers: { origin: 'https://h', host: 'h' }, async *[Symbol.asyncIterator]() { if (body !== undefined) yield Buffer.from(JSON.stringify(body)) } })
+
+    // A dead market answers the READ with 200 + coded envelope (never error UI).
+    // The handler is fire-and-forget (void promise), so yield a tick.
+    const resUpdates = fakeRes()
+    await byPath('pack-updates')(req('GET'), resUpdates)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(resUpdates.statusCode).toBe(200)
+    expect(JSON.parse(resUpdates.body).code).toBe('marketUnreachable')
+
+    // Update through a working fake market: the route answers 200 with the
+    // installed version (the success face of the lane).
+    const { createServer } = await import('node:http')
+    const { execFile } = await import('node:child_process')
+    const { readFile } = await import('node:fs/promises')
+    const { promisify } = await import('node:util')
+    const execAsync = promisify(execFile)
+    const archive = join(dir, 'gw.tgz')
+    await execAsync('tar', ['-czf', archive, '-C', packDir, '.'])
+    const bytes = await readFile(archive)
+    const { createHash } = await import('node:crypto')
+    const { dirHash } = await import('../src/pack-manage.ts')
+    const indexBody = { packs: [{ name: 'gw', version: '1', tarball: '/tarballs/gw-2.tgz', tarballSha256: `sha256:${createHash('sha256').update(bytes).digest('hex')}`, contentHash: await dirHash(packDir) }] }
+    const market = createServer((request, response) => {
+      if (String(request.url).endsWith('/api/index')) {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify(indexBody))
+        return
+      }
+      response.writeHead(200, { 'content-type': 'application/gzip' })
+      response.end(bytes)
+    })
+    await new Promise<void>(resolve => market.listen(0, '127.0.0.1', resolve))
+    const port = (market.address() as { port: number }).port
+    laneConfig.marketUrl = `http://127.0.0.1:${port}`
+    const resUpdate = fakeRes()
+    await byPath('pack-update')(req('POST', { pack: 'gw' }), resUpdate)
+    expect(resUpdate.statusCode).toBe(200)
+    expect(JSON.parse(resUpdate.body)).toMatchObject({ ok: true, version: '1' })
+    market.close()
+
+    // Delete needs no market: the directory goes, the reload succeeds.
+    const resDelete = fakeRes()
+    await byPath('pack-delete')(req('POST', { pack: 'gw' }), resDelete)
+    expect(resDelete.statusCode).toBe(200)
+    expect(JSON.parse(resDelete.body)).toEqual({ ok: true })
+
+    await rm(dir, { recursive: true, force: true })
+  })
+})
+
+describe('registerTools wiring: lane gates and bad bodies', () => {
+  it('answers gateRejected on the lane routes and invalidParamBody on a missing pack name', async () => {
+    const { registerTools } = await import('../src/index.ts')
+    const handlers: Array<(req: unknown, res: unknown) => Promise<void> | void> = []
+    const connection = { requestRejection: () => 401 }
+    const hostCtx = {
+      effect(fn: () => () => void) { fn() },
+      webServer: { register: (r: { path: string; handler: (req: unknown, res: unknown) => Promise<void> | void }) => { handlers.push(r.handler); return () => {} } },
+    }
+    const ctx = {
+      tools: { register: () => {} },
+      inject(deps: string[], cb: (hostCtx: unknown) => void) { if (deps.includes('webServer')) cb(hostCtx) },
+      get(name: string) {
+        if (name === 'connection') return connection
+        return { entries: () => [], edit: () => Promise.resolve() }
+      },
+    }
+    await registerTools(ctx as never, { workspaceRoot: '/w', packsDir: '/tmp/docwright-lane-gate' } as never, packsRoot)
+    const fakeRes = () => { const res = { statusCode: 0, body: '', writeHead(s: number) { res.statusCode = s }, end(b: string) { res.body = b } }; return res }
+    const req = (method: string, body?: unknown) => ({ method, headers: { origin: 'https://h', host: 'h' }, async *[Symbol.asyncIterator]() { if (body !== undefined) yield Buffer.from(JSON.stringify(body)) } })
+    const lane = handlers.slice(handlers.length - 3)
+    const [updates, update, del] = lane
+
+    // Host gate on the read (updates) and on the delete write.
+    const resUpdates = fakeRes()
+    await updates!(req('GET'), resUpdates)
+    expect(resUpdates.statusCode).toBe(401)
+    expect(JSON.parse(resUpdates.body).code).toBe('gateRejected')
+    const resDelete = fakeRes()
+    await del!(req('POST', { pack: 'x' }), resDelete)
+    expect(resDelete.statusCode).toBe(401)
+
+    // A missing pack name in the write body names the shape (422) — on a
+    // NON-gated mount, since the gate outranks body validation.
+    const plainHandlers: Array<(req: unknown, res: unknown) => Promise<void> | void> = []
+    const plainCtx = {
+      tools: { register: () => {} },
+      inject(deps: string[], cb: (hostCtx: unknown) => void) { if (deps.includes('webServer')) cb({ effect(fn: () => () => void) { fn() }, webServer: { register: (r: { path: string; handler: (req: unknown, res: unknown) => Promise<void> | void }) => { plainHandlers.push(r.handler); return () => {} } } }) },
+      get() { return { entries: () => [], edit: () => Promise.resolve() } },
+    }
+    await registerTools(plainCtx as never, { workspaceRoot: '/w', packsDir: '/tmp/docwright-lane-gate' } as never, packsRoot)
+    const resUpdate = fakeRes()
+    await plainHandlers[plainHandlers.length - 2]!(req('POST', {}), resUpdate)
+    expect(resUpdate.statusCode).toBe(422)
+    expect(JSON.parse(resUpdate.body).code).toBe('invalidParamBody')
   })
 })

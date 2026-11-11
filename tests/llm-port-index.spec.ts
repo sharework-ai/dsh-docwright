@@ -51,13 +51,21 @@ describe('llm port', () => {
 })
 
 describe('plugin apply', () => {
-  it('registers all five tools against a minimal fake context', async () => {
+  it('registers the six tools against a minimal fake context (market search on by default)', async () => {
     const { name, inject, apply } = await import('../src/index.ts')
     expect(name).toBe('docwright')
     expect(inject).toContain('tools')
     const registered: string[] = []
     const ctx = { tools: { register: (t: { name: string }) => { registered.push(t.name) } }, inject: () => {} }
     await apply(ctx as never, { provider: 'p', model: 'm' })
+    expect(registered).toEqual(['doc_packs', 'doc_generate', 'doc_extract_params', 'doc_validate', 'doc_chain_status', 'doc_market_search', 'doc_market_install'])
+  })
+
+  it('marketSearch: false drops doc_market_search from the roster', async () => {
+    const { apply } = await import('../src/index.ts')
+    const registered: string[] = []
+    const ctx = { tools: { register: (t: { name: string }) => { registered.push(t.name) } }, inject: () => {} }
+    await apply(ctx as never, { marketSearch: false, provider: 'p', model: 'm' })
     expect(registered).toEqual(['doc_packs', 'doc_generate', 'doc_extract_params', 'doc_validate', 'doc_chain_status'])
   })
 
@@ -72,6 +80,6 @@ describe('plugin apply', () => {
     const registered: string[] = []
     const ctx = { tools: { register: (t: { name: string }) => { registered.push(t.name) } }, inject: () => {} }
     await apply(ctx as never, { packsDir: '/nonexistent-docwright-packs', provider: 'p', model: 'm' })
-    expect(registered).toEqual(['doc_packs', 'doc_generate', 'doc_extract_params', 'doc_validate', 'doc_chain_status'])
+    expect(registered).toEqual(['doc_packs', 'doc_generate', 'doc_extract_params', 'doc_validate', 'doc_chain_status', 'doc_market_search', 'doc_market_install'])
   })
 })

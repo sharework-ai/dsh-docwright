@@ -44,6 +44,8 @@ export interface Config {
   packsDir?: string
   /** Pack market base URL the params UI checks pack updates against (default: https://dm.shrwk.com). */
   marketUrl?: string
+  /** Register the doc_market_search tool and advertise it in the discovery prompts (default: true). False removes the market-search discovery channel entirely. */
+  marketSearch?: boolean
   /** Workspace root when no session workspace drives the call (default: cwd). */
   workspaceRoot?: string
   /** Root material references resolve against (default: <workspace>/references). */
@@ -79,6 +81,7 @@ const bi = (en: string, zh: string): { en: string; zh: string } => ({ en, zh })
 export const Config: z<Config> = z.object({
   packsDir: z.string().extra('description', bi('Extra pack directories merged over the built-in packs/ (same-name wins)', '额外 pack 目录，合并覆盖内置 packs/（同名者胜）')),
   marketUrl: z.string().extra('description', bi('Pack market base URL the params UI checks pack updates against (default: https://dm.shrwk.com)', '参数界面检查 pack 更新所用的市场地址（默认：https://dm.shrwk.com）')),
+  marketSearch: z.boolean().default(true).extra('description', bi('Register the doc_market_search tool and advertise market lookup in the discovery prompts when no installed pack fits (default: true)', '注册 doc_market_search 工具，并在已装 pack 无一契合时提示去市场查找（默认：开启）')),
   workspaceRoot: z.string().extra('description', bi('Workspace root when no session workspace drives the call (default: the process cwd)', '调用无会话工作区时使用的工作区根（默认：进程 cwd）')),
   materialsRoot: z.string().extra('description', bi('Root material references resolve against (default: <workspace>/references)', '素材引用的解析根目录（默认：<workspace>/references）')),
   outputRoot: z.string().extra('description', bi('Root artifacts are written to (default: <workspace>/output)', '产物写入根目录（默认：<workspace>/output）')),

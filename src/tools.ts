@@ -7,6 +7,8 @@ import { generateDocument, getDocService, parseUpstreamArtifacts, summarizeArtif
 import { buildExtractionFile, extractionFilePath, extractableParams, processProposals, readExtractionFile, verifyExtraction, writeExtractionFile } from './extract.ts'
 import { materialAnchors, readMaterialEntries } from './materials.ts'
 import { createLlmPort } from './llm-port.ts'
+import { installPack, marketUrlOf } from './pack-manage.ts'
+import { fetchMarketCard, searchMarket } from './market-search.ts'
 import { previewParams, resolveEffectiveParams, type ExtractionView, type ParamDrift, type ParamRow } from './params.ts'
 import type { Pack } from './pack.ts'
 import { effectiveWorkspaceRoot, normalizeWindowsPath, resolveRootWithin, type SessionWorkspaceCarrier } from './paths.ts'
@@ -28,6 +30,9 @@ export interface ToolDeps {
   readonly packs: ReadonlyMap<string, Pack>
   readonly config: Config
   readonly ctx: object & { llm?: unknown }
+  /** The builtin packs root + loader, for the install lane's in-place reload (registerTools owns the values). */
+  readonly builtinRoot?: string
+  readonly loadPacks?: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
 }
 
 /**
@@ -117,7 +122,10 @@ function resolveScopedRoots(
 function resolvePack(deps: ToolDeps, name: string): Pack {
   const pack = deps.packs.get(name)
   if (pack === undefined) {
-    throw new Error(`unknown pack "${name}"; discover installed packs via doc_packs (available: ${[...deps.packs.keys()].sort().join(', ')})`)
+    const marketHint = deps.config.marketSearch !== false
+      ? '; if none of them fits, search the pack market with doc_market_search before authoring a new pack'
+      : ''
+    throw new Error(`unknown pack "${name}"; discover installed packs via doc_packs (available: ${[...deps.packs.keys()].sort().join(', ') || 'none installed'})${marketHint}`)
   }
   return pack
 }
@@ -220,9 +228,9 @@ export type ValidateToolResult = {
 export function defineDocPacksTool(deps: ToolDeps) {
   return defineTool({
     name: 'doc_packs',
-    description: 'List installed document packs: name, one-line description, supported languages, and consumed upstream types, plus the deployment\'s effective confirmation-gate policy (confirmPolicy — the boundary you must respect; interaction style beyond it is yours to read from the user\'s pace). '
+    description: 'List installed document packs: name, one-line description, supported languages, and consumed upstream types, plus the deployment\'s effective confirmation-gate policy (confirmPolicy — the boundary you must respect; interaction style beyond it is yours to read from the user\'s pace) and whether pack-market search is enabled (marketSearch). '
       + 'Call this before doc_generate to pick the right pack for the document the user wants. '
-      + 'If no installed pack fits the document type the user needs — including requests phrased as "make/create a document-generation skill" — load the docwright-pack-authoring skill to author a new pack (the how-to guide ships with this plugin).',
+      + 'If no installed pack fits the document type the user needs — including requests phrased as "make/create a document-generation skill" — search the pack market with doc_market_search (when marketSearch is on; the result carries the install command) before falling back to loading the docwright-pack-authoring skill to author a new pack (the how-to guide ships with this plugin).',
     parameters: {},
     output: {
       schema: { type: 'json' },
@@ -231,6 +239,7 @@ export function defineDocPacksTool(deps: ToolDeps) {
     async execute() {
       return {
         confirmPolicy: deps.config.confirmPolicy ?? DEFAULT_CONFIRM_POLICY,
+        marketSearch: deps.config.marketSearch !== false,
         packs: [...deps.packs.values()].map(p => ({
         name: p.manifest.name,
         version: p.manifest.version,
@@ -253,6 +262,91 @@ export function defineDocPacksTool(deps: ToolDeps) {
       }
     },
   })
+}
+
+/** Layer-3 capability discovery: when no installed pack serves the document
+ * the user needs, the model searches the pack market before falling back to
+ * pack authoring. The MODEL composes the keyword terms (it reads the
+ * intent); the market does traditional keyword matching — no vectors at
+ * catalog scale. Registered only when the deployment enables market search
+ * (Config.marketSearch); the description stays static either way — the
+ * tool's absence is the false signal. */
+export function defineMarketSearchTool(deps: ToolDeps) {
+  return defineTool({
+    name: 'doc_market_search',
+    description: 'Search the docwright pack market for document packs by keyword. Use it when the user asks for a document type the installed packs cannot serve (doc_packs found no fit): compose the terms from the user\'s intent — domain words and document genre ("COSMIC function point estimation", "meeting minutes", "resume") — never guessed pack names. Returns per hit: name, one-line description, version, languages, consumed upstream types. To act on a hit, install it with doc_market_install (the user confirms first; the pack is usable in this session right after) — never fabricate a local pack from a search hit.',
+    parameters: {
+      query: { type: 'string', required: true, description: 'Free-text keywords, whitespace-separated; ALL terms must match. Compose from document genre and domain words; English matches best (descriptions are matched in en and zh)' },
+      limit: { type: 'number', description: 'Max hits to return (default 20, cap 50)' },
+    },
+    output: {
+      schema: { type: 'json' },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args: { query: string; limit?: number }) {
+      return searchMarket({ marketUrl: marketUrlOf(deps.config), packsDir: deps.config.packsDir }, args.query, args.limit)
+    },
+  })
+}
+
+/** The install half of market discovery: lands a market pack into the
+ * packsDir behind the SAME confirmation grammar as doc_generate — the first
+ * call (no confirm) returns a pendingConfirmation table the model presents;
+ * the user's approval is the second call with confirm: true. The install
+ * hot-reloads the pack map in place, so the pack is usable in THIS session
+ * immediately — no restart, no new session. */
+export function defineMarketInstallTool(deps: ToolDeps) {
+  return defineTool({
+    name: 'doc_market_install',
+    description: 'Install a pack from the docwright pack market into the deployment\'s packsDir (the doc_market_search hits carry this option). CONFIRMATION GATE: call without confirm first — the result is a pendingConfirmation table (pack, version, source market, target packsDir); present it to the user and only re-call with confirm: true after they approve (never self-confirm). The install verifies the tarball against the market index (sha256 + manifest name + content hash), lands atomically, and hot-reloads the pack map — doc_packs lists the pack in THIS session right after, no restart needed. Installing an already-installed pack name updates it in place.',
+    parameters: {
+      pack: { type: 'string', required: true, description: 'Pack name exactly as doc_market_search reported it' },
+      confirm: { type: 'boolean', description: 'Set true only after the user approved the pendingConfirmation table' },
+    },
+    output: {
+      schema: { type: 'json' },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args: { pack: string; confirm?: boolean }) {
+      if (args.confirm !== true) {
+        // The pending table reads the market index so the user approves a
+        // concrete version, not a name — an unreachable market surfaces here,
+        // before anything is asked or written.
+        const card = await firstMarketCard(deps, args.pack)
+        const table: Record<string, string | string[]> = {
+          pack: args.pack,
+          sourceMarket: marketUrlOf(deps.config),
+          target: deps.config.packsDir !== undefined && deps.config.packsDir.length > 0 ? deps.config.packsDir : '(no packsDir configured — set config.packsDir first)',
+        }
+        if (card !== undefined) {
+          table.version = card.version
+          table.description = card.description
+          table.consumes = card.consumes
+        }
+        return {
+          status: 'pendingConfirmation',
+          table,
+          note: 'Present this table to the user; re-call with confirm: true after they approve.',
+        }
+      }
+      if (deps.builtinRoot === undefined || deps.loadPacks === undefined) {
+        throw new Error('doc_market_install requires the plugin wiring (builtinRoot/loadPacks); nothing was written')
+      }
+      const { version, dest, existed } = await installPack({
+        packs: deps.packs as Map<string, Pack>,
+        builtinRoot: deps.builtinRoot,
+        packsDir: deps.config.packsDir,
+        marketUrl: marketUrlOf(deps.config),
+        loadPacks: deps.loadPacks,
+      }, args.pack)
+      return { status: 'installed', pack: args.pack, version, dest, ...(existed ? { note: 'existing pack updated in place' } : {}), sessionNote: 'the pack is usable in this session immediately (doc_packs lists it now)' }
+    },
+  })
+}
+
+/** The catalog card for one pack name (the confirmation table's substance). */
+async function firstMarketCard(deps: ToolDeps, name: string): Promise<{ version: string; description: string; consumes: string[] } | undefined> {
+  return fetchMarketCard(marketUrlOf(deps.config), name)
 }
 
 /** Merged inheritance base from the upstream receipts' as-run params. */
