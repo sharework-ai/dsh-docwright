@@ -6,25 +6,35 @@ This guide is self-contained: everything below works in a dsh session with the d
 
 The user asks to install, add, fetch, or get a scenario pack — by name ("帮我安装 cosmic-context 技能", "install the resume pack") or by the document type they need ("装一个生成会议纪要的 pack"). The pack is installed from the deployment's pack market.
 
-## Step 1 — find the pack (skip when the name is explicit)
+## Step 1 — check what is already installed (always first)
+
+Call `doc_packs` before anything else. It lists every installed pack with its version.
+
+- **The pack is already installed at the market's current version**: tell the user it is already available and skip the install entirely — go straight to using it.
+- **The pack is already installed but older**: no separate update call is needed — `doc_market_install` updates an existing pack name in place (Step 3 handles both install and update), or the user can use the settings page's Packs tab (check for updates).
+- **The pack is not installed**: continue with Step 2. Some of its dependencies may already be installed; the install closure skips members already at the market version.
+
+Only when `doc_packs` shows the pack missing (or outdated and the user wants the new version) does installing make sense. Never install a pack the user already has without saying so.
+
+## Step 2 — find the pack (skip when the name is explicit)
 
 Call `doc_market_search` with keywords you compose from the user's intent (document genre + domain words; English matches best). Each hit carries name, description, version, consumed pack types, and the install option. Present the plausible hit(s) and confirm the exact name with the user when more than one fits. If the user gave an exact pack name, skip this step.
 
 The market URL is deployment state: the tools read `marketUrl` from the plugin config (default `https://dm.shrwk.com`). Never hardcode a market other than the one the deployment is configured with — the same tools serve test and production markets.
 
-## Step 2 — ask for confirmation (always)
+## Step 3 — ask for confirmation (always)
 
-Call `doc_market_install` with `{ "pack": "<name>" }` and WITHOUT `confirm`. The result is a `pendingConfirmation` table listing the whole install closure: the requested pack plus every pack it consumes (transitively), each at its market version, the source market, and the target `packsDir`. Present this table to the user in plain language (for a chain pack, say that the dependencies install along with it).
+Call `doc_market_install` with `{ "pack": "<name>" }` and WITHOUT `confirm`. The result is a `pendingConfirmation` table listing the whole install closure: the requested pack plus every pack it consumes (transitively), each at its market version, the source market, and the target `packsDir`. Present this table to the user in plain language (for a chain pack, say that the dependencies install along with it). For a pack that is already installed and only being updated, say so explicitly.
 
 Never self-confirm: do not call with `confirm: true` before the user has seen the table and approved it. If the user declines, stop — nothing has been written at this point.
 
-## Step 3 — execute
+## Step 4 — execute
 
 After approval, re-call `doc_market_install` with `{ "pack": "<name>", "confirm": true }`. The install verifies the download against the market index (sha256, manifest name, content hash), lands it atomically in the `packsDir`, and hot-reloads the pack map. Members already installed at the market version are skipped; an existing pack name is updated in place.
 
 The result lists what landed (`installed: name@version` entries). The packs are usable in THIS session immediately — no restart and no new session.
 
-## Step 4 — verify and continue
+## Step 5 — verify and continue
 
 Call `doc_packs` to confirm the pack (and its dependencies) now appear, then continue the user's original task with `doc_generate`. Upstream packs the chain needs are part of the closure, so a chained scenario works right away.
 

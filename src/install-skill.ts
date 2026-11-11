@@ -20,11 +20,11 @@ export const INSTALL_SKILL_NAME = 'docwright-pack-install'
  * the model never self-confirms.
  */
 export const INSTALL_SKILL_DESCRIPTION =
-  'Install docwright scenario packs (pack) from the pack market. When the user asks to install, add, fetch, or get a pack — '
-  + '"帮我安装 cosmic-context", "install the resume pack", "从市场装个 pack" — call doc_market_search to find it by intent, '
-  + 'then doc_market_install: the first call returns a pendingConfirmation table to present to the user, and only their '
-  + 'approval (confirm: true) executes. The market follows the deployment\'s marketUrl; the pack (and its dependencies) is '
-  + 'usable in this session immediately after install.'
+  'Install docwright scenario packs (pack) from the pack market. On "帮我安装 X / install pack X": call doc_packs FIRST to '
+  + 'check whether X is already installed (same version: say so and skip; older: it updates in place), then doc_market_search '
+  + 'by intent if the name is unknown. doc_market_install returns a pendingConfirmation table to present; only the user\'s '
+  + 'approval (confirm: true) executes. The market follows the deployment\'s marketUrl; packs are usable in this session '
+  + 'immediately.'
 
 export const INSTALL_SKILL_WHEN_TO_USE =
   'Use when the user asks to install, add, or fetch a docwright scenario pack (by name or by the document type they need) '

@@ -38,6 +38,7 @@ describe('pack-install skill', () => {
     expect(guide).toContain('confirm: true')
     expect(guide).toContain('marketUrl')
     expect(guide).toContain('usable in THIS session immediately')
+    expect(guide).toMatch(/Step 1 — check what is already installed[\s\S]*doc_packs/)
   })
 
   it('fails loud when the guide file is absent', async () => {
