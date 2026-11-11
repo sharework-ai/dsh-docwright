@@ -359,7 +359,8 @@ function PackCard(props: {
       h(Pill, {}, `v${pack.version}`),
       h(Pill, {}, pack.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
       h(Pill, {}, pack.origin.kind === 'builtin' ? t('originBuiltin') : fill(t('originPacksDir'), { root: pack.origin.root })),
-      pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null),
+      pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null,
+      props.suites.length > 0 ? h(Pill, {}, t('suiteManagedBadge')) : null),
     h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(pack.description)),
     pack.consumes.length > 0
       ? h('div', { style: muted }, t('consumed'),
@@ -369,7 +370,7 @@ function PackCard(props: {
         }, `${index > 0 ? ', ' : ''}${dep}${props.installed.has(dep) ? '' : t('missingDep')}`)))
       : null,
     props.suites.length > 0
-      ? h('div', { style: muted }, t('suitesOf'), props.suites.join(', '))
+      ? h('div', { style: muted }, t('suitesManagedNote'), props.suites.join(', '))
       : null,
     h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
