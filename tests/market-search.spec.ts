@@ -55,14 +55,36 @@ describe('searchMarket', () => {
   })
 })
 
-describe('fetchMarketCard', () => {
-  it('answers undefined without throwing on an unreachable market or a missing pack', async () => {
-    const { fetchMarketCard } = await import('../src/market-search.ts')
-    expect(await fetchMarketCard('http://127.0.0.1:1', 'gw')).toBeUndefined()
+
+describe('fetchInstallPlan', () => {
+  const indexOk = (packs: unknown) => async (input: unknown) => {
+    if (String(input).endsWith('/api/index')) return new Response(JSON.stringify({ packs }), { headers: { 'content-type': 'application/json' } })
+    throw new Error('unexpected')
+  }
+
+  it('throws naming the market when unreachable, and naming the pack when absent', async () => {
+    const { fetchInstallPlan } = await import('../src/market-search.ts')
+    await expect(fetchInstallPlan('http://127.0.0.1:1', 'gw')).rejects.toThrow(/could not reach the pack market.*nothing was asked/)
     const realFetch = globalThis.fetch
-    globalThis.fetch = (async () => new Response(JSON.stringify({ packs: [{ name: 'other' }] }), { headers: { 'content-type': 'application/json' } })) as typeof fetch
+    globalThis.fetch = indexOk([{ name: 'other', version: '1' }]) as typeof fetch
     try {
-      expect(await fetchMarketCard('https://market.test', 'gw')).toBeUndefined()
+      await expect(fetchInstallPlan('https://market.test', 'gw')).rejects.toThrow(/"gw" is not listed on the market/)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  it('lists the consumes closure with the requested pack flagged', async () => {
+    const { fetchInstallPlan } = await import('../src/market-search.ts')
+    const realFetch = globalThis.fetch
+    globalThis.fetch = indexOk([
+      { name: 'base', version: '1', description: { en: 'base' } },
+      { name: 'mid', version: '1', description: { en: 'mid' }, consumes: ['base'] },
+      { name: 'top', version: '2', description: { en: 'top' }, consumes: ['mid'] },
+    ]) as typeof fetch
+    try {
+      const plan = await fetchInstallPlan('https://market.test', 'top')
+      expect(plan.members.map(m => [m.name, m.requested])).toEqual([['base', false], ['mid', false], ['top', true]])
     } finally {
       globalThis.fetch = realFetch
     }

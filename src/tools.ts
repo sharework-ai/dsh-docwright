@@ -8,7 +8,7 @@ import { buildExtractionFile, extractionFilePath, extractableParams, processProp
 import { materialAnchors, readMaterialEntries } from './materials.ts'
 import { createLlmPort } from './llm-port.ts'
 import { installPack, marketUrlOf } from './pack-manage.ts'
-import { fetchMarketCard, searchMarket } from './market-search.ts'
+import { fetchInstallPlan, searchMarket } from './market-search.ts'
 import { previewParams, resolveEffectiveParams, type ExtractionView, type ParamDrift, type ParamRow } from './params.ts'
 import type { Pack } from './pack.ts'
 import { effectiveWorkspaceRoot, normalizeWindowsPath, resolveRootWithin, type SessionWorkspaceCarrier } from './paths.ts'
@@ -308,20 +308,28 @@ export function defineMarketInstallTool(deps: ToolDeps) {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args: { pack: string; confirm?: boolean }) {
+      if (deps.builtinRoot === undefined || deps.loadPacks === undefined) {
+        throw new Error('doc_market_install requires the plugin wiring (builtinRoot/loadPacks); nothing was written')
+      }
+      const laneDeps = {
+        packs: deps.packs as Map<string, Pack>,
+        builtinRoot: deps.builtinRoot,
+        packsDir: deps.config.packsDir,
+        marketUrl: marketUrlOf(deps.config),
+        loadPacks: deps.loadPacks,
+      }
       if (args.confirm !== true) {
         // The pending table reads the market index so the user approves a
-        // concrete version, not a name — an unreachable market surfaces here,
+        // CONCRETE plan — the consumes closure, each member at its market
+        // version. An unreachable market or an absent member surfaces here,
         // before anything is asked or written.
-        const card = await firstMarketCard(deps, args.pack)
+        const plan = await fetchInstallPlan(laneDeps.marketUrl, args.pack)
+        const rows: string[] = plan.members.map(m => `${m.name}@${m.version}${m.requested ? ' (requested)' : ' (consumed upstream)'}`)
         const table: Record<string, string | string[]> = {
-          pack: args.pack,
-          sourceMarket: marketUrlOf(deps.config),
+          requested: args.pack,
+          sourceMarket: laneDeps.marketUrl,
           target: deps.config.packsDir !== undefined && deps.config.packsDir.length > 0 ? deps.config.packsDir : '(no packsDir configured — set config.packsDir first)',
-        }
-        if (card !== undefined) {
-          table.version = card.version
-          table.description = card.description
-          table.consumes = card.consumes
+          installs: rows,
         }
         return {
           status: 'pendingConfirmation',
@@ -329,24 +337,17 @@ export function defineMarketInstallTool(deps: ToolDeps) {
           note: 'Present this table to the user; re-call with confirm: true after they approve.',
         }
       }
-      if (deps.builtinRoot === undefined || deps.loadPacks === undefined) {
-        throw new Error('doc_market_install requires the plugin wiring (builtinRoot/loadPacks); nothing was written')
+      const { installed } = await installPack(laneDeps, args.pack)
+      const unchanged = installed.filter(o => o.unchanged)
+      return {
+        status: 'installed',
+        pack: args.pack,
+        installed: installed.map(o => `${o.name}@${o.version}${o.unchanged ? ' (already current)' : o.existed ? ' (updated in place)' : ''}`),
+        ...(unchanged.length === installed.length ? { note: 'everything already current; nothing was downloaded' } : {}),
+        sessionNote: 'the packs are usable in this session immediately (doc_packs lists them now)',
       }
-      const { version, dest, existed } = await installPack({
-        packs: deps.packs as Map<string, Pack>,
-        builtinRoot: deps.builtinRoot,
-        packsDir: deps.config.packsDir,
-        marketUrl: marketUrlOf(deps.config),
-        loadPacks: deps.loadPacks,
-      }, args.pack)
-      return { status: 'installed', pack: args.pack, version, dest, ...(existed ? { note: 'existing pack updated in place' } : {}), sessionNote: 'the pack is usable in this session immediately (doc_packs lists it now)' }
     },
   })
-}
-
-/** The catalog card for one pack name (the confirmation table's substance). */
-async function firstMarketCard(deps: ToolDeps, name: string): Promise<{ version: string; description: string; consumes: string[] } | undefined> {
-  return fetchMarketCard(marketUrlOf(deps.config), name)
 }
 
 /** Merged inheritance base from the upstream receipts' as-run params. */

@@ -313,6 +313,7 @@ function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | '
       p.consumes.length > 0 ? h('div', { style: muted }, `${t('consumed')}: ${p.consumes.join(', ')}`) : null,
       p.origin.kind === 'packsDir'
         ? h(PackLaneActions, { pack: p, status: byName.get(p.name), laneState: lane.state, t, lang: props.lang,
+          consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
           onDone: text => { setLaneDone(text); props.onSaved(); refreshLane() } })
         : null,
       h('div', { style: { marginTop: '6px' } },
@@ -334,6 +335,8 @@ function PackLaneActions(props: {
   laneState: 'loading' | 'ready' | 'unreachable'
   t: Translate
   lang: 'zh' | 'en'
+  /** Installed packs consuming this one — deleting it breaks their chains. */
+  consumers: readonly string[]
   onDone: (doneText: string) => void
 }) {
   const { t } = props
@@ -367,7 +370,7 @@ function PackLaneActions(props: {
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy || updateImpossible, onClick: () => (armed === 'update' ? run('update') : setArmed('update')) },
         armed === 'update' ? t('confirmUpdate') : t('updateBtn')),
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
-        armed === 'delete' ? t('confirmDelete') : t('deleteBtn')),
+        armed === 'delete' ? (props.consumers.length > 0 ? fill(t('confirmDeleteBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDelete')) : t('deleteBtn')),
       busy ? h('span', { style: muted }, t('saving')) : null),
     rendered !== undefined ? h('span', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties },
       rendered.text,

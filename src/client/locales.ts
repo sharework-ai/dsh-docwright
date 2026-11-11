@@ -54,6 +54,7 @@ export const en = {
   confirmUpdate: 'Confirm update (overwrites local changes)',
   deleteBtn: 'Delete',
   confirmDelete: 'Confirm delete',
+  confirmDeleteBreaks: 'Confirm delete ({packs} consume it — their chains break)',
   updatedDone: 'Updated to v{version}.',
   deletedDone: 'Deleted.',
   // Server error codes (src/coded-error.ts): what happened / why / what to do.
@@ -132,6 +133,7 @@ export const zh: Record<string, string> = {
   confirmUpdate: '确认更新（将覆盖本地改动）',
   deleteBtn: '删除',
   confirmDelete: '确认删除',
+  confirmDeleteBreaks: '确认删除（{packs} 消费它，删除将断链）',
   updatedDone: '已更新到 v{version}。',
   deletedDone: '已删除。',
   // 服务端错误码（src/coded-error.ts）：发生了什么 / 为什么 / 怎么办。

@@ -54,6 +54,11 @@ interface MarketIndexEntry {
   readonly tarball: string
   readonly tarballSha256: string
   readonly contentHash: string
+  readonly consumes?: readonly unknown[]
+}
+
+function consumesOf(entry: MarketIndexEntry): readonly string[] {
+  return Array.isArray(entry.consumes) ? entry.consumes.filter((c): c is string => typeof c === 'string') : []
 }
 
 interface MarketIndex {
@@ -301,12 +306,49 @@ async function swapFromMarket(deps: {
   return installedVersion
 }
 
+/** One landed pack of an install. */
+export interface InstallOutcome {
+  readonly name: string
+  readonly version: string
+  readonly dest: string
+  /** True when a pack directory declaring this manifest name already existed. */
+  readonly existed: boolean
+  /** True when the installed version already matched the market — nothing was downloaded. */
+  readonly unchanged?: boolean
+}
+
 /**
- * Install one pack from the market into the packsDir (the doc_market_install
- * lane): same verified pipeline as update; lands at packsDir/<name>, or —
- * when a directory declaring that manifest name already exists — swaps that
- * directory in place (install ≡ update for an existing pack). The caller owns
- * the user-confirmation gate; this function executes.
+ * The install closure of `requested`: the pack plus its transitive consumed
+ * upstreams, dependencies first — the unit "installing a chain pack" actually
+ * lands. A consumes target that is neither on the market nor installed
+ * locally fails loud naming the requester.
+ */
+export function resolveInstallClosure(index: MarketIndex, requested: string, installedLocally: ReadonlySet<string>): readonly MarketIndexEntry[] {
+  const byName = new Map(index.packs.map(e => [e.name, e]))
+  const order: MarketIndexEntry[] = []
+  const seen = new Set<string>()
+  const visit = (name: string, requester: string | undefined): void => {
+    if (seen.has(name)) return
+    seen.add(name)
+    const entry = byName.get(name)
+    if (entry === undefined) {
+      if (installedLocally.has(name)) return // satisfied locally (installed pack or builtin-merged)
+      throw new CodedError('absentFromMarket', `pack "${requested}" needs "${name}" (consumes chain${requester !== undefined ? ` of "${requester}"` : ''}), but it is neither listed on the market nor installed; nothing was written`, { params: { pack: requested } })
+    }
+    for (const up of consumesOf(entry)) visit(up, name)
+    order.push(entry)
+  }
+  visit(requested, undefined)
+  return order
+}
+
+/**
+ * Install a pack from the market into the packsDir (the doc_market_install
+ * lane): the CONSUMES CLOSURE is the unit — the requested pack plus its
+ * transitive upstreams land behind one caller-owned confirmation gate, then
+ * ONE in-place reload makes all of them visible mid-session. Members whose
+ * installed version already matches the market are skipped (unchanged);
+ * installing an existing name updates it in place.
  */
 export async function installPack(deps: {
   readonly packs: Map<string, Pack>
@@ -315,7 +357,7 @@ export async function installPack(deps: {
   readonly marketUrl: string
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
   readonly fetchImpl?: typeof fetch
-}, name: string): Promise<{ version: string; dest: string; existed: boolean }> {
+}, name: string): Promise<{ installed: readonly InstallOutcome[] }> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) {
     throw new CodedError('packNotManaged', `pack "${name}" cannot be installed: no packsDir is configured (set config.packsDir — packs install there and join the builtin merge)`, { params: { pack: name } })
   }
@@ -327,14 +369,28 @@ export async function installPack(deps: {
   } catch (error) {
     throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
   }
-  const entry = index.packs.find(e => e.name === name)
-  if (entry === undefined) {
-    throw new CodedError('absentFromMarket', `pack "${name}" is not listed on the market at ${deps.marketUrl}, so there is nothing to install; nothing was written`, { params: { pack: name, url: deps.marketUrl } })
+  const closure = resolveInstallClosure(index, name, new Set(deps.packs.keys()))
+  const outcomes: InstallOutcome[] = []
+  try {
+    for (const entry of closure) {
+      const local = deps.packs.get(entry.name)
+      const existing = await findManagedPackDir(deps.packsDir, entry.name)
+      if (local !== undefined && existing !== undefined && local.manifest.version === entry.version) {
+        outcomes.push({ name: entry.name, version: entry.version, dest: existing, existed: true, unchanged: true })
+        continue
+      }
+      const dest = existing ?? join(deps.packsDir, entry.name)
+      const version = await swapFromMarket({ ...deps, packsDir: deps.packsDir }, entry.name, entry, dest)
+      outcomes.push({ name: entry.name, version, dest, existed: existing !== undefined })
+    }
+  } catch (error) {
+    // Members before the failure landed on disk; reload so the session sees
+    // the partial install instead of a stale map, then surface the failure.
+    await reloadPacksInPlace(deps).catch(() => {})
+    throw error
   }
-  const existing = await findManagedPackDir(deps.packsDir, name)
-  const dest = existing ?? join(deps.packsDir, name)
-  const version = await swapFromMarket({ ...deps, packsDir: deps.packsDir }, name, entry, dest)
-  return { version, dest, existed: existing !== undefined }
+  await reloadPacksInPlace(deps)
+  return { installed: outcomes }
 }
 
 /** Manifest-name scan without the throw (install's existing-vs-new branch).

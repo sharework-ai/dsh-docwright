@@ -190,13 +190,14 @@ describe('doc_market_install tool', () => {
     const realFetch = globalThis.fetch
     globalThis.fetch = (async (input: unknown) => {
       const url = String(input)
-      if (url.endsWith('api/packs?q=gw')) return new Response(JSON.stringify({ packs: [{ name: 'gw', version: '2', description: { en: 'a gateworthy pack' } }] }), { headers: { 'content-type': 'application/json' } })
+      if (url.endsWith('/api/index')) return new Response(JSON.stringify({ packs: [{ name: 'gw', version: '2', tarball: '/tarballs/gw-2.tgz', tarballSha256: 'sha256:x', contentHash: 'sha256:x' }] }), { headers: { 'content-type': 'application/json' } })
       throw new Error(`unexpected fetch ${url}`)
     }) as typeof fetch
     try {
-      const out = await tool.execute({ pack: 'gw' } as never, { signal } as never) as { status: string; table: Record<string, string> }
+      const out = await tool.execute({ pack: 'gw' } as never, { signal } as never) as { status: string; table: Record<string, unknown> }
       expect(out.status).toBe('pendingConfirmation')
-      expect(out.table).toMatchObject({ pack: 'gw', version: '2', sourceMarket: 'https://market.test' })
+      expect(out.table.requested).toBe('gw')
+      expect(out.table.sourceMarket).toBe('https://market.test')
       expect(out.note).toContain('confirm: true')
     } finally {
       globalThis.fetch = realFetch
@@ -249,8 +250,9 @@ describe('doc_market_install tool', () => {
       return response
     }
     try {
-      const out = await tool.execute({ pack: 'gw', confirm: true } as never, { signal } as never) as { status: string; version: string; dest: string }
-      expect(out).toMatchObject({ status: 'installed', version: '2', dest: join(packsDir, 'gw') })
+      const out = await tool.execute({ pack: 'gw', confirm: true } as never, { signal } as never) as { status: string; installed: string[] }
+      expect(out.status).toBe('installed')
+      expect(out.installed[0]).toContain('gw@2')
       expect((tool.output!.render as (a: unknown, v: unknown) => unknown)({ pack: 'gw', confirm: true }, out)).toEqual([{ type: 'text', text: JSON.stringify(out) }])
       expect(deps.packs.get('gw')?.manifest.version).toBe('2')
     } finally {

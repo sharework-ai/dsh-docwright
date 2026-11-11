@@ -165,6 +165,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmUpdate: "Confirm update (overwrites local changes)",
 			deleteBtn: "Delete",
 			confirmDelete: "Confirm delete",
+			confirmDeleteBreaks: "Confirm delete ({packs} consume it — their chains break)",
 			updatedDone: "Updated to v{version}.",
 			deletedDone: "Deleted.",
 			"err.gateRejected": "The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.",
@@ -239,6 +240,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmUpdate: "确认更新（将覆盖本地改动）",
 			deleteBtn: "删除",
 			confirmDelete: "确认删除",
+			confirmDeleteBreaks: "确认删除（{packs} 消费它，删除将断链）",
 			updatedDone: "已更新到 v{version}。",
 			deletedDone: "已删除。",
 			"err.gateRejected": "请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。",
@@ -671,6 +673,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				laneState: lane.state,
 				t,
 				lang: props.lang,
+				consumers: payload.packs.filter((other) => other.name !== p.name && other.consumes.includes(p.name)).map((other) => other.name),
 				onDone: (text) => {
 					setLaneDone(text);
 					props.onSaved();
@@ -727,7 +730,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => armed === "delete" ? run("delete") : setArmed("delete")
-			}, armed === "delete" ? t("confirmDelete") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null), rendered !== void 0 ? (0, react.createElement)("span", { style: {
+			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null), rendered !== void 0 ? (0, react.createElement)("span", { style: {
 				color: "var(--dsw-alias-state-error-primary, crimson)",
 				whiteSpace: "pre-wrap"
 			} }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { style: {

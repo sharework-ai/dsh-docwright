@@ -56,12 +56,12 @@ async function managedFixture(): Promise<{ deps: ManagedDeps; root: string; pack
 }
 
 /** A fake market: GET /api/index serves the given entries; GET /tarballs/<file> serves the built tarballs. */
-async function marketServer(entries: readonly { name: string; version: string; dir?: string }[]): Promise<{ url: string; dispose: () => Promise<void>; tarballs: Map<string, Buffer> }> {
+async function marketServer(entries: readonly { name: string; version: string; dir?: string; consumes?: readonly string[] }[]): Promise<{ url: string; dispose: () => Promise<void>; tarballs: Map<string, Buffer> }> {
   const tarballs = new Map<string, Buffer>()
-  const index = { ok: true, packs: [] as Record<string, string>[] }
+  const index = { ok: true, packs: [] as Record<string, unknown>[] }
   for (const entry of entries) {
     if (entry.dir === undefined) {
-      index.packs.push({ name: entry.name, version: entry.version, tarball: `/tarballs/${entry.name}-${entry.version}.tgz`, tarballSha256: 'sha256:bogus', contentHash: 'sha256:bogus' })
+      index.packs.push({ name: entry.name, version: entry.version, tarball: `/tarballs/${entry.name}-${entry.version}.tgz`, tarballSha256: 'sha256:bogus', contentHash: 'sha256:bogus', consumes: entry.consumes ?? [] })
       continue
     }
     const tgz = join(entry.dir, '..', `${entry.name}-${entry.version}.tgz`)
@@ -74,6 +74,7 @@ async function marketServer(entries: readonly { name: string; version: string; d
       tarball: `/tarballs/${entry.name}-${entry.version}.tgz`,
       tarballSha256: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
       contentHash: await dirHash(entry.dir),
+      consumes: entry.consumes ?? [],
     })
   }
   const server: Server = createServer((request, response) => {
@@ -377,7 +378,7 @@ describe('installPack', () => {
     fx.deps.marketUrl = market.url
     const packsRef = fx.deps.packs
     const out = await installPack(fx.deps, 'fresh')
-    expect(out).toMatchObject({ version: '3', dest: join(fx.packsDir, 'fresh'), existed: false })
+    expect(out.installed).toEqual([{ name: 'fresh', version: '3', dest: join(fx.packsDir, 'fresh'), existed: false }])
     expect(fx.deps.packs).toBe(packsRef)
     expect(fx.deps.packs.get('fresh')?.manifest.version).toBe('3')
     expect(fx.deps.packs.has('ext')).toBe(true)
@@ -390,18 +391,49 @@ describe('installPack', () => {
     const market = await marketServer([{ name: 'ext', version: '4', dir: newer }])
     fx.deps.marketUrl = market.url
     const out = await installPack(fx.deps, 'ext')
-    expect(out.existed).toBe(true)
+    expect(out.installed[0]).toMatchObject({ name: 'ext', version: '4', existed: true })
     expect(fx.deps.packs.get('ext')?.manifest.version).toBe('4')
   })
 
-  it('refuses without a packsDir and when the market does not list the pack', async () => {
+  it('refuses without a packsDir; an absent member fails loud only when not satisfied locally', async () => {
     const fx = await managedFixture()
     marketStack.push(fx)
     const market = await marketServer([])
     fx.deps.marketUrl = market.url
     await expect(installPack({ ...fx.deps, packsDir: undefined }, 'ext')).rejects.toThrow(/no packsDir is configured/)
-    await expect(installPack(fx.deps, 'ext')).rejects.toThrow(/not listed on the market/)
-    await expect(installPack(fx.deps, 'ghost')).rejects.toThrow(/not listed on the market/)
+    // 'ext' is installed locally, so an empty market is a no-op closure
+    // (a locally-satisfied member absent from the market lands no row).
+    const out = await installPack(fx.deps, 'ext')
+    expect(out.installed).toEqual([])
+    // 'ghost' is neither local nor listed: the closure fails naming it.
+    await expect(installPack(fx.deps, 'ghost')).rejects.toThrow(/needs "ghost".*neither listed on the market nor installed/)
+  })
+
+  it('installs the consumes closure: one call lands the whole chain, upstreams first', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    // A three-pack chain: chain-top consumes mid consumes base.
+    const baseDir = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'base', '1')
+    const midDir = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'mid', '1')
+    await writeFile(join(midDir, 'manifest.json'), JSON.stringify({
+      name: 'mid', version: '1', description: 'd', consumes: ['base'], languages: ['zh-CN'],
+      params: { limit: { type: 'number', default: 3, min: 1, max: 20, description: 'd' } },
+    }), 'utf8')
+    const topDir = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'top', '1')
+    await writeFile(join(topDir, 'manifest.json'), JSON.stringify({
+      name: 'top', version: '1', description: 'd', consumes: ['mid'], languages: ['zh-CN'],
+      params: { limit: { type: 'number', default: 3, min: 1, max: 20, description: 'd' } },
+    }), 'utf8')
+    const market = await marketServer([{ name: 'base', version: '1', dir: baseDir }, { name: 'mid', version: '1', dir: midDir, consumes: ['base'] }, { name: 'top', version: '1', dir: topDir, consumes: ['mid'] }])
+    fx.deps.marketUrl = market.url
+    const packsRef = fx.deps.packs
+    const out = await installPack(fx.deps, 'top')
+    expect(out.installed.map(o => o.name)).toEqual(['base', 'mid', 'top'])
+    expect(fx.deps.packs).toBe(packsRef)
+    for (const name of ['base', 'mid', 'top']) expect(fx.deps.packs.has(name)).toBe(true)
+    // Re-install: everything already current — nothing re-downloaded.
+    const again = await installPack(fx.deps, 'top')
+    expect(again.installed.every(o => o.unchanged)).toBe(true)
   })
 })
 
@@ -416,7 +448,7 @@ describe('installPack edge coverage', () => {
     const market = await marketServer([{ name: 'solo', version: '1', dir: source }])
     fx.deps.marketUrl = market.url
     const out = await installPack({ ...fx.deps, packsDir: fresh }, 'solo')
-    expect(out.existed).toBe(false)
+    expect(out.installed[0]).toMatchObject({ name: 'solo', version: '1', existed: false })
     expect(fx.deps.packs.get('solo')?.manifest.version).toBe('1')
     await rm(fresh, { recursive: true, force: true })
     // Dead market on the install lane: marketUnreachable, not absentFromMarket.
@@ -434,5 +466,38 @@ describe('installPack edge coverage', () => {
     // 'ext' still resolves; junk/.hidden never abort the scan.
     expect(await resolveManagedPackDir(fx.packsDir, 'ext')).toBe(join(fx.packsDir, 'ext'))
     await expect(resolveManagedPackDir(fx.packsDir, 'junk')).rejects.toThrow(/not managed here/)
+  })
+})
+
+describe('installPack mid-closure failure', () => {
+  it('reloads the partial install and surfaces the failing member', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const baseDir = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'base', '1')
+    const topDir = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'top', '1')
+    const topBytes = Buffer.concat([await readFile(join(topDir, 'manifest.json'))]) // placeholder
+    const market = await marketServer([{ name: 'base', version: '1', dir: baseDir }, { name: 'top', version: '1', dir: topDir, consumes: ['base'] }])
+    // 'top' cannot load (its tarball sha lies): base lands, top fails.
+    const realFetch = globalThis.fetch
+    globalThis.fetch = async input => {
+      const url = String(input)
+      if (url.endsWith('/api/index')) {
+        return new Response(JSON.stringify({ packs: [
+          { name: 'base', version: '1', tarball: `/tarballs/base-1.tgz`, tarballSha256: `sha256:${createHash('sha256').update(market.tarballs.get('/tarballs/base-1.tgz')!).digest('hex')}`, contentHash: await dirHash(baseDir), consumes: [] },
+          { name: 'top', version: '1', tarball: `/tarballs/top-1.tgz`, tarballSha256: 'sha256:lie', contentHash: 'sha256:x', consumes: ['base'] },
+        ] }), { headers: { 'content-type': 'application/json' } })
+      }
+      const bytes = market.tarballs.get(url.slice('https://market.test'.length))!
+      return new Response(bytes, { headers: { 'content-type': 'application/gzip' } })
+    }
+    fx.deps.marketUrl = 'https://market.test'
+    void topBytes
+    try {
+      await expect(installPack(fx.deps, 'top')).rejects.toThrow(/integrity check failed/)
+      // The partial install reloaded: base is usable even though top failed.
+      expect(fx.deps.packs.get('base')?.manifest.version).toBe('1')
+    } finally {
+      globalThis.fetch = realFetch
+    }
   })
 })
