@@ -503,7 +503,6 @@ function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayloa
     h('thead', null, h('tr', null,
       h('th', { style: thStyle }, t('colSuite')),
       h('th', { style: thStyle }, t('colMembers')),
-      h('th', { style: thStyle }, t('status')),
       h('th', { style: thStyle }, t('actions')))),
     h('tbody', null, lane.rows.map(s => h(SuiteRows, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, onSaved: props.onSaved }))))
 }
@@ -542,12 +541,6 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
     }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
   }
   const rendered = rendered_error(error, props.lang)
-  const statusBits: string[] = []
-  if (suite.incomplete) statusBits.push(t('suiteIncomplete'))
-  if (suite.updateAvailable) statusBits.push(t('updateBtn'))
-  const statusCell = h('td', { style: tdStyle }, statusBits.length > 0
-    ? h('span', { style: { color: suite.incomplete ? 'var(--dsw-alias-state-error-primary, crimson)' : undefined } }, statusBits.join(' · '))
-    : h('span', { style: muted }, t('suiteOk')))
   const actionsCell = h('td', { style: tdStyle },
     h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } },
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
@@ -567,7 +560,6 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
         h('div', { style: { fontWeight: 600 } }, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
         suite.incomplete ? h('div', { style: muted }, t('suiteFillHint')) : null),
       h('td', { style: tdStyle }, suite.members.map(memberText)),
-      statusCell,
       actionsCell),
     confirmRow)
 }

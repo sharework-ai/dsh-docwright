@@ -924,7 +924,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			if (lane === void 0) return null;
 			if (lane.state === "unreachable") return (0, react.createElement)("p", { style: muted }, t("suitesUnreachable"));
 			if (lane.rows.length === 0) return (0, react.createElement)("p", { style: muted }, t("suitesEmpty"));
-			return (0, react.createElement)("table", { style: tableStyle }, (0, react.createElement)("thead", null, (0, react.createElement)("tr", null, (0, react.createElement)("th", { style: thStyle }, t("colSuite")), (0, react.createElement)("th", { style: thStyle }, t("colMembers")), (0, react.createElement)("th", { style: thStyle }, t("status")), (0, react.createElement)("th", { style: thStyle }, t("actions")))), (0, react.createElement)("tbody", null, lane.rows.map((s) => (0, react.createElement)(SuiteRows, {
+			return (0, react.createElement)("table", { style: tableStyle }, (0, react.createElement)("thead", null, (0, react.createElement)("tr", null, (0, react.createElement)("th", { style: thStyle }, t("colSuite")), (0, react.createElement)("th", { style: thStyle }, t("colMembers")), (0, react.createElement)("th", { style: thStyle }, t("actions")))), (0, react.createElement)("tbody", null, lane.rows.map((s) => (0, react.createElement)(SuiteRows, {
 				key: s.name,
 				suite: s,
 				packs: props.payload.packs,
@@ -969,10 +969,6 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
 			};
 			const rendered = rendered_error(error, props.lang);
-			const statusBits = [];
-			if (suite.incomplete) statusBits.push(t("suiteIncomplete"));
-			if (suite.updateAvailable) statusBits.push(t("updateBtn"));
-			const statusCell = (0, react.createElement)("td", { style: tdStyle }, statusBits.length > 0 ? (0, react.createElement)("span", { style: { color: suite.incomplete ? "var(--dsw-alias-state-error-primary, crimson)" : void 0 } }, statusBits.join(" · ")) : (0, react.createElement)("span", { style: muted }, t("suiteOk")));
 			const actionsCell = (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: {
 				display: "flex",
 				gap: "6px",
@@ -1006,7 +1002,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				error,
 				lang: props.lang
 			}) : null)));
-			return (0, react.createElement)(react.Fragment, null, (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: { fontWeight: 600 } }, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("td", { style: tdStyle }, suite.members.map(memberText)), statusCell, actionsCell), confirmRow);
+			return (0, react.createElement)(react.Fragment, null, (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: { fontWeight: 600 } }, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("td", { style: tdStyle }, suite.members.map(memberText)), actionsCell), confirmRow);
 		}
 		function ConfigView(props) {
 			const { payload, t } = props;
