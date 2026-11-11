@@ -130,12 +130,18 @@ describe('checkPackUpdates', () => {
     fx.deps.marketUrl = market.url
     const rows = await checkPackUpdates(fx.deps)
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ name: 'ext', localVersion: '1', marketVersion: '2', updateAvailable: true })
+    expect(rows[0]).toMatchObject({ name: 'ext', localVersion: '1', marketVersion: '2', onMarket: true, updateAvailable: true })
     const stale = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'ext', '1')
     const marketOld = await marketServer([{ name: 'ext', version: '1', dir: stale }])
     fx.deps.marketUrl = marketOld.url
     const rowsOld = await checkPackUpdates(fx.deps)
-    expect(rowsOld[0]).toMatchObject({ marketVersion: '1', updateAvailable: false })
+    expect(rowsOld[0]).toMatchObject({ marketVersion: '1', onMarket: true, updateAvailable: false })
+    // A market that does not list the pack at all: the row stays explicit.
+    const marketOther = await marketServer([{ name: 'stray', version: '9' }])
+    fx.deps.marketUrl = marketOther.url
+    const rowsAbsent = await checkPackUpdates(fx.deps)
+    expect(rowsAbsent[0]).toMatchObject({ name: 'ext', onMarket: false, updateAvailable: false })
+    expect(rowsAbsent[0].marketVersion).toBeUndefined()
     const empty = await checkPackUpdates({ ...fx.deps, packsDir: undefined })
     expect(empty).toEqual([])
   })

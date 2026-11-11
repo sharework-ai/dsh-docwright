@@ -120,6 +120,8 @@ export async function savePackParam(pack: string, param: string, value: unknown)
 export interface UiPackUpdate {
   name: string
   localVersion: string
+  /** False when the market has no pack under this name. */
+  onMarket: boolean
   marketVersion?: string
   updateAvailable: boolean
 }

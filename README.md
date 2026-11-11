@@ -73,6 +73,7 @@ Per-function fan-out accounting — deterministic, no LLM. Pass `plan` (workspac
 - id: docwright
   config:
     packsDir: ""            # extra pack dirs; same-name packs override built-ins
+    marketUrl: ""           # pack market the params UI checks updates and the Plugins-page tab serve (default: https://dm.shrwk.com)
     workspaceRoot: ""       # fallback root when no session workspace (default: cwd)
     materialsRoot: ""       # material reference root (default: <workspace>/references)
     outputRoot: ""          # artifact output root (default: <workspace>/output)
