@@ -389,7 +389,9 @@ function PackCard(props: {
     h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
         `${paramsOpen ? '▾' : '▸'} ${t('paramsToggle')}`),
-      pack.origin.kind === 'packsDir'
+      // Suite members are managed through their suite (the Suites tab owns
+      // install/update/delete): no per-pack lane buttons for them.
+      pack.origin.kind === 'packsDir' && props.suites.length === 0
         ? h(PackLaneActions, { pack, status: props.status, checked: props.checked, laneState: props.laneState, check: props.checkOne, t, lang: props.lang,
           consumers: props.consumers, onDone: props.onDone })
         : null),

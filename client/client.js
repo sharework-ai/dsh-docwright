@@ -815,7 +815,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				size: "sm",
 				variant: "ghost",
 				onClick: () => setParamsOpen((v) => !v)
-			}, `${paramsOpen ? "▾" : "▸"} ${t("paramsToggle")}`), pack.origin.kind === "packsDir" ? (0, react.createElement)(PackLaneActions, {
+			}, `${paramsOpen ? "▾" : "▸"} ${t("paramsToggle")}`), pack.origin.kind === "packsDir" && props.suites.length === 0 ? (0, react.createElement)(PackLaneActions, {
 				pack,
 				status: props.status,
 				checked: props.checked,
