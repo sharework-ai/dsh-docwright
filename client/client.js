@@ -1006,7 +1006,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				error,
 				lang: props.lang
 			}) : null)));
-			return (0, react.createElement)("tbody", null, (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: { fontWeight: 600 } }, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("td", { style: tdStyle }, suite.members.map(memberText)), statusCell, actionsCell), confirmRow);
+			return (0, react.createElement)(react.Fragment, null, (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: { fontWeight: 600 } }, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("td", { style: tdStyle }, suite.members.map(memberText)), statusCell, actionsCell), confirmRow);
 		}
 		function ConfigView(props) {
 			const { payload, t } = props;

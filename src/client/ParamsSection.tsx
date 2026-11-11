@@ -21,7 +21,7 @@
  * identifiers and values (param names, enum members, JSON) sit in the host
  * code face (`--dsh-font-family-code`).
  */
-import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
+import { createElement as h, Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSuiteStatus, saveConfigPatch, savePackParam, updateManagedPack, updateSuite } from './api.ts'
 import type { ApiError } from './api.ts'
@@ -561,7 +561,7 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
       h('div', { style: { ...actions, marginTop: '6px' } },
         h(Button, { size: 'sm', disabled: busy || installed.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
         rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null)))
-  return h('tbody', null,
+  return h(Fragment, null,
     h('tr', null,
       h('td', { style: tdStyle },
         h('div', { style: { fontWeight: 600 } }, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
