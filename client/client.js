@@ -137,7 +137,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			scopeTopic: "topic",
 			originBuiltin: "built-in",
 			originPacksDir: "packsDir: {root}",
-			consumed: "upstream",
+			consumed: "Depends on:",
+			missingDep: " (missing)",
 			driftPolicy: "param drift",
 			min: "min",
 			max: "max",
@@ -216,7 +217,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			scopeTopic: "话题级",
 			originBuiltin: "内置",
 			originPacksDir: "自定义目录：{root}",
-			consumed: "上游",
+			consumed: "依赖项：",
+			missingDep: "（缺失）",
 			driftPolicy: "参数漂移",
 			min: "下限",
 			max: "上限",
@@ -679,6 +681,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				})));
 			}, []);
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
+			const installedNames = (0, react.useMemo)(() => new Set(payload.packs.map((p) => p.name)), [payload.packs]);
 			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
 				key: p.name,
 				pack: p,
@@ -690,6 +693,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				lang: props.lang,
 				resolveText: props.resolveText,
 				onSaved: props.onSaved,
+				installed: installedNames,
 				consumers: payload.packs.filter((other) => other.name !== p.name && other.consumes.includes(p.name)).map((other) => other.name),
 				onDone: (text) => {
 					setLaneDone(text);
@@ -706,7 +710,13 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: pack.origin.root })), pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
 				...desc,
 				marginBottom: "4px"
-			} }, props.resolveText(pack.description)), pack.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, `${t("consumed")}: ${pack.consumes.join(", ")}`) : null, (0, react.createElement)("div", { style: {
+			} }, props.resolveText(pack.description)), pack.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, t("consumed"), pack.consumes.map((dep, index) => (0, react.createElement)("span", {
+				key: dep,
+				style: props.installed.has(dep) ? void 0 : {
+					color: "var(--dsw-alias-state-error-primary, crimson)",
+					whiteSpace: "pre-wrap"
+				}
+			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, (0, react.createElement)("div", { style: {
 				marginTop: "4px",
 				display: "flex",
 				gap: "8px",

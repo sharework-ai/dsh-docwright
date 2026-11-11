@@ -50,14 +50,18 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
   // Zero installed packs is a legal state since the cosmic packs moved to
   // the market: the plugin loads, doc_packs lists nothing, and (with
   // marketSearch on) the discovery layer points at the market.
-  const packs = new Map(await loadPacks(builtinRoot, { extra: config.packsDir === undefined || config.packsDir.length === 0 ? undefined : [config.packsDir] }))
+  const packsDirConfiguredForLoad = config.packsDir === undefined || config.packsDir.length === 0 ? undefined : config.packsDir
+  /** One wiring point: the builtin-load switch applies to the initial load, every hot-reload, and the install lane. */
+  const loadPacksConfigured = (root: string, dirs: { extra?: readonly string[] | undefined }) =>
+    loadPacks(root, { ...dirs, includeBuiltin: config.loadBuiltinPacks !== false })
+  const packs = new Map(await loadPacksConfigured(builtinRoot, { extra: packsDirConfiguredForLoad === undefined ? undefined : [packsDirConfiguredForLoad] }))
   if (config.defaultLanguage !== undefined && config.defaultLanguage.length > 0) {
     const missing = [...packs.values()].filter(p => !p.manifest.languages.includes(config.defaultLanguage ?? ''))
     if (missing.length > 0) {
       throw new Error(`docwright: defaultLanguage "${config.defaultLanguage}" missing from packs: ${missing.map(p => p.manifest.name).join(', ')} (available per pack: ${[...packs.values()].map(p => `${p.manifest.name}=[${p.manifest.languages.join(',')}]`).join(' ')})`)
     }
   }
-  const deps = { packs, config, ctx, builtinRoot, loadPacks }
+  const deps = { packs, config, ctx, builtinRoot, loadPacks: loadPacksConfigured }
   ctx.tools.register(defineDocPacksTool(deps))
   ctx.tools.register(defineDocGenerateTool(deps))
   ctx.tools.register(defineDocExtractTool(deps))
@@ -105,14 +109,14 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
         packs,
         builtinRoot,
         extraPacksDir: packsDirConfigured,
-        loadPacks,
+        loadPacks: loadPacksConfigured,
       }, pack, param, value),
       // The pack lane exists only when a packsDir is configured — without one
       // there is nothing to manage and the routes stay unmounted.
       packLane: packsDirConfigured === undefined ? undefined : {
         checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }, pack),
-        updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks }, pack) }),
-        deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks }, pack, opts),
+        updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack) }),
+        deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks: loadPacksConfigured }, pack, opts),
       },
     }
     host.effect(() => mountParamsRoutes(host.webServer, {

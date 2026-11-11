@@ -132,3 +132,23 @@ describe('pack loader', () => {
     await expect(loadPacks(packsRoot, { extra: [root] })).rejects.toThrow(/duplicate pack name "cosmic-plan"/)
   })
 })
+
+describe('loadPacks includeBuiltin switch', () => {
+  it('skips the builtin root entirely when includeBuiltin is false', async () => {
+    const packs = await loadPacks(packsRoot, { includeBuiltin: false })
+    expect(packs.size).toBe(0)
+    // With a packsDir extra, only that root's packs load.
+    const extra = await mkdtemp(join(tmpdir(), 'docwright-market-only-'))
+    const dir = join(extra, 'only-pack')
+    for (const sub of ['rules', 'prompts', 'templates', 'samples']) await mkdir(join(dir, sub), { recursive: true })
+    await writeFile(join(dir, 'manifest.json'), JSON.stringify({ name: 'only-pack', version: '1', description: 'd', consumes: [], languages: ['zh-CN'] }), 'utf8')
+    await writeFile(join(dir, 'rules', 'zh-CN.json'), JSON.stringify([{ id: 'x/r', severity: 'error', given: '$', field: 'name', kind: 'minLength', min: 1, suggestion: 's' }]), 'utf8')
+    await writeFile(join(dir, 'schema.json'), '{"type":"object"}', 'utf8')
+    await writeFile(join(dir, 'prompts', 'zh-CN.md'), 'T {{materials}}', 'utf8')
+    await writeFile(join(dir, 'templates', 'zh-CN.hbs'), 't', 'utf8')
+    await writeFile(join(dir, 'samples', 'golden.json'), '{}', 'utf8')
+    const marketOnly = await loadPacks(packsRoot, { extra: [extra], includeBuiltin: false })
+    expect([...marketOnly.keys()]).toEqual(['only-pack'])
+    expect(marketOnly.get('only-pack')?.origin.kind).toBe('packsDir')
+  })
+})

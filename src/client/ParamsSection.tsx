@@ -304,11 +304,12 @@ function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | '
       .catch(() => setLane(prev => ({ state: 'unreachable', rows: prev.rows })))
   }, [])
   const byName = useMemo(() => new Map(lane.rows.map(u => [u.name, u])), [lane.rows])
+  const installedNames = useMemo(() => new Set(payload.packs.map(p => p.name)), [payload.packs])
   return h('div', null,
     lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
     payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
-      resolveText: props.resolveText, onSaved: props.onSaved,
+      resolveText: props.resolveText, onSaved: props.onSaved, installed: installedNames,
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
       onDone: text => { setLaneDone(text); props.onSaved(); checkOne(p.name) } })))
 }
@@ -326,6 +327,8 @@ function PackCard(props: {
   lang: 'zh' | 'en'
   resolveText: (value: unknown) => string
   onSaved: () => void
+  /** Installed pack names — a dependency outside this set renders red. */
+  installed: ReadonlySet<string>
   consumers: readonly string[]
   onDone: (doneText: string) => void
 }) {
@@ -339,7 +342,13 @@ function PackCard(props: {
       h(Pill, {}, pack.origin.kind === 'builtin' ? t('originBuiltin') : fill(t('originPacksDir'), { root: pack.origin.root })),
       pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null),
     h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(pack.description)),
-    pack.consumes.length > 0 ? h('div', { style: muted }, `${t('consumed')}: ${pack.consumes.join(', ')}`) : null,
+    pack.consumes.length > 0
+      ? h('div', { style: muted }, t('consumed'),
+        pack.consumes.map((dep, index) => h('span', {
+          key: dep,
+          style: props.installed.has(dep) ? undefined : { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties,
+        }, `${index > 0 ? ', ' : ''}${dep}${props.installed.has(dep) ? '' : t('missingDep')}`)))
+      : null,
     h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
         `${paramsOpen ? '▾' : '▸'} ${t('paramsToggle')}`),

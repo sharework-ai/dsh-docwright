@@ -21,6 +21,13 @@ const RULE_KINDS: readonly string[] = ['minLength', 'maxLength', 'forbiddenKeywo
 
 interface RawPackDirs {
   readonly extra?: readonly string[] | undefined
+  /**
+   * Load the builtin root (default true). A market-only deployment sets
+   * false so the source checkout's packs/ (authoring fixture) does not
+   * shadow packsDir installs — matching the published package, which ships
+   * no builtin packs at all.
+   */
+  readonly includeBuiltin?: boolean | undefined
 }
 
 /** Strict param-spec validation: declaration is the allowlist, so a broken declaration must fail at load. */
@@ -348,10 +355,11 @@ async function listPackRoots(root: string): Promise<readonly string[]> {
  * syntax belongs to load time, decision #11).
  */
 export async function loadPacks(builtinRoot: string, dirs: RawPackDirs): Promise<ReadonlyMap<string, Pack>> {
-  const roots = [builtinRoot, ...(dirs.extra ?? [])]
+  const withBuiltin = dirs.includeBuiltin !== false
+  const roots = [...(withBuiltin ? [builtinRoot] : []), ...(dirs.extra ?? [])]
   const packs = new Map<string, Pack>()
   for (const [rootIndex, root] of roots.entries()) {
-    const origin = { kind: rootIndex === 0 ? 'builtin' : 'packsDir', root } as const
+    const origin = { kind: withBuiltin && rootIndex === 0 ? 'builtin' : 'packsDir', root } as const
     const seen = new Map<string, string>()
     for (const dir of await listPackRoots(root)) {
       const pack = await loadOnePack(dir)
