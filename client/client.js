@@ -141,6 +141,26 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}));
 		}
 		//#endregion
+		//#region src/client/icons.ts
+		const DEPENDS_ICON_PATH = "M914.285 292.572h-73.142c-21.943 0-36.571 14.628-36.571 36.571 0 21.942 14.628 36.572 36.571 36.572h73.142c21.943 0 36.572 14.628 36.572 36.57v512c0 21.943-14.629 36.572-36.572 36.572h-512c-21.942 0-36.57-14.629-36.57-36.572V621.716c0-21.943-14.63-36.572-36.572-36.572-21.943 0-36.571 14.629-36.571 36.572v292.568c0 58.515 51.2 109.715 109.713 109.715h512C972.8 1024 1024 972.8 1024 914.285v-512c0-58.513-51.2-109.713-109.715-109.713M694.857 694.857c14.628-14.629 14.628-36.572 0-51.2L380.343 329.143c-14.628-14.628-36.571-14.628-51.2 0-14.628 14.629-14.628 36.572 0 51.2l321.829 321.829c7.313 7.313 29.256 7.313 43.885-7.315m-512-36.572h-73.141c-21.943 0-36.572-14.628-36.572-36.57v-512c0-21.943 14.629-36.572 36.572-36.572h512c21.942 0 36.57 14.629 36.57 36.572v292.569c0 21.943 14.63 36.572 36.572 36.572 21.943 0 36.572-14.629 36.572-36.572V109.716C731.428 51.2 680.228 0 621.716 0h-512C51.2 0 0 51.2 0 109.715v512c0 58.513 51.2 109.713 109.715 109.713h73.142c21.943 0 36.571-14.628 36.571-36.571 0-21.942-14.628-36.572-36.571-36.572";
+		const SUITE_ICON_PATH = "M312.79104 494.81728l-132.11648-79.17568a22.15936 22.15936 0 0 0-30.6176 7.5776 22.46656 22.46656 0 0 0 7.5776 30.86336l132.13696 79.17568a22.03648 22.03648 0 0 0 30.6176-7.82336 22.13888 22.13888 0 0 0-7.59808-30.6176zm140.86144 465.98144c5.30432 3.11296 11.264 2.23232 16.7936-4.01408-5.05856 5.34528-11.03872 7.12704-16.7936 4.01408zM312.79104 494.7968l-132.11648-79.17568a22.15936 22.15936 0 0 0-30.6176 7.5776 22.46656 22.46656 0 0 0 7.5776 30.86336l132.13696 79.17568a22.03648 22.03648 0 0 0 30.6176-7.82336 22.13888 22.13888 0 0 0-7.59808-30.6176zm0 0l-132.11648-79.17568a22.15936 22.15936 0 0 0-30.6176 7.5776 22.46656 22.46656 0 0 0 7.5776 30.86336l132.13696 79.17568a22.03648 22.03648 0 0 0 30.6176-7.82336 22.13888 22.13888 0 0 0-7.59808-30.6176zm157.67552 461.94688c-5.5296 6.22592-11.50976 7.12704-16.7936 4.01408 5.7344 3.15392 11.71456 1.37216 16.7936-4.01408zm11.63264-57.9584v-397.7216l350.33088-198.8608 35.86048-21.74976c7.168-4.66944 8.54016-10.60864 9.48224-14.86848a22.528 22.528 0 0 0-12.1856-22.54848L469.66784 45.09696a22.4256 22.4256 0 0 0-20.25472 0l-395.8784 197.95968c-14.7456 9.66656-12.45184 31.06816-12.45184 33.3824V698.7776c0 7.82336 4.15744 15.19616 10.83392 19.33312 0 0 387.3792 234.0864 394.0352 237.07648 13.59872 6.67648 22.1184 4.83328 28.54912 1.6384l128.90112-74.58816c11.0592-6.4512 14.7456-20.48 8.2944-31.5392-6.22592-11.0592-20.48-14.7456-31.31392-8.51968l-89.088 51.79392v-0.22528l-9.19552 5.05856zm-45.11744-397.7216v396.5952L85.97504 686.14144v-384.4096l351.0272 199.35232zm22.56896-39.1168L111.28832 264.43776 459.5712 90.43968l348.2624 174.01856-348.2624 197.48864zM771.8912 865.77152l181.61664-109.09696a17.69472 17.69472 0 0 0 8.27392-14.9504V541.696c0-7.02464-5.28384-11.96032-11.03872-14.72512l-4.608-2.29376c-0.45056-0.22528-1.14688-0.22528-1.59744-0.22528h1.37216l-176.5376-88.1664a18.08384 18.08384 0 0 0-15.42144 0l-176.3328 88.1664a23.9616 23.9616 0 0 0-16.09728 22.20032v195.072c0 6.22592 3.21536 11.73504 8.51968 14.9504 0 0 179.95776 107.99104 180.87936 108.21632 0 0.02048 10.73152 7.9872 20.97152 0.90112zm-27.38176-44.19584l-148.48-89.53856V571.1872l148.48 84.00896v166.42048zm17.26464-196.096l-144.7936-82.18624L761.77408 471.04l144.54784 72.2944-144.54784 82.16576zm165.4784 106.55744l-148.21376 89.2928v-166.17472l148.23424-84.00896v160.89088z";
+		/** One theme-adaptive inline icon: currentColor fill, sized to the line so it
+		* never expands the row height, vertically centered. */
+		function icon(pathData, size = 14) {
+			return (0, react.createElement)("svg", {
+				viewBox: "0 0 1024 1024",
+				width: size,
+				height: size,
+				fill: "currentColor",
+				style: {
+					display: "inline-block",
+					verticalAlign: "middle",
+					flex: "none"
+				},
+				dangerouslySetInnerHTML: { __html: `<path d="${pathData}"/>` }
+			});
+		}
+		//#endregion
 		//#region src/client/locales.ts
 		const en = {
 			nav: "Docwright params",
@@ -777,32 +797,51 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		function PackCard(props) {
 			const { pack, t } = props;
 			const [paramsOpen, setParamsOpen] = (0, react.useState)(false);
-			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: pack.origin.root })), pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
+			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
 				...desc,
 				marginBottom: "4px"
-			} }, props.resolveText(pack.description)), pack.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, t("consumed"), pack.consumes.map((dep, index) => (0, react.createElement)("span", {
+			} }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { style: {
+				...muted,
+				marginTop: "4px",
+				display: "flex",
+				gap: "6px",
+				flexWrap: "wrap",
+				alignItems: "center"
+			} }, pack.consumes.length > 0 ? (0, react.createElement)("span", { style: {
+				display: "inline-flex",
+				gap: "6px",
+				alignItems: "center",
+				flexWrap: "wrap"
+			} }, (0, react.createElement)("span", {
+				title: t("consumed"),
+				style: {
+					display: "inline-flex",
+					alignItems: "center"
+				}
+			}, icon(DEPENDS_ICON_PATH)), pack.consumes.map((dep, index) => (0, react.createElement)("span", {
 				key: dep,
 				style: props.installed.has(dep) ? void 0 : {
 					color: "var(--dsw-alias-state-error-primary, crimson)",
 					whiteSpace: "pre-wrap"
 				}
-			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, props.suites.length > 0 ? (0, react.createElement)("div", { style: {
-				marginTop: "4px",
-				display: "flex",
-				gap: "6px",
-				flexWrap: "wrap"
-			} }, props.suites.map((suite) => (0, react.createElement)("span", {
+			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { style: { opacity: .6 } }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
 				key: suite,
 				title: t("suiteManagedTip"),
 				style: {
+					display: "inline-flex",
+					gap: "4px",
+					alignItems: "center",
 					background: "rgba(147, 51, 234, 0.12)",
 					border: "1px solid rgba(147, 51, 234, 0.38)",
 					borderRadius: "999px",
-					padding: "1px 10px",
+					padding: "1px 8px",
 					fontSize: "0.82rem",
 					whiteSpace: "nowrap"
 				}
-			}, suite))) : null, (0, react.createElement)("div", { style: {
+			}, (0, react.createElement)("span", { style: {
+				display: "inline-flex",
+				alignItems: "center"
+			} }, icon(SUITE_ICON_PATH, 12)), suite))) : null, (0, react.createElement)("div", { style: {
 				marginTop: "4px",
 				display: "flex",
 				gap: "8px",

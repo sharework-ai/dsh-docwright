@@ -24,6 +24,7 @@
 import { createElement as h, Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSuiteStatus, saveConfigPatch, savePackParam, updateManagedPack, updateSuite } from './api.ts'
+import { DEPENDS_ICON_PATH, icon, SUITE_ICON_PATH } from './icons.ts'
 import type { ApiError } from './api.ts'
 import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration, UiSuiteStatus } from './api.ts'
 import { en, fill, renderError, translate, zh } from './locales.ts'
@@ -358,33 +359,44 @@ function PackCard(props: {
       h('span', { style: nameStyle }, pack.name),
       h(Pill, {}, `v${pack.version}`),
       h(Pill, {}, pack.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
-      h(Pill, {}, pack.origin.kind === 'builtin' ? t('originBuiltin') : fill(t('originPacksDir'), { root: pack.origin.root })),
+      pack.origin.kind === 'builtin' ? h(Pill, {}, t('originBuiltin')) : null,
       pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null),
     h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(pack.description)),
-    pack.consumes.length > 0
-      ? h('div', { style: muted }, t('consumed'),
-        pack.consumes.map((dep, index) => h('span', {
-          key: dep,
-          style: props.installed.has(dep) ? undefined : { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties,
-        }, `${index > 0 ? ', ' : ''}${dep}${props.installed.has(dep) ? '' : t('missingDep')}`)))
-      : null,
-    props.suites.length > 0
-      ? h('div', { style: { marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap' } satisfies CSSProperties },
+    pack.consumes.length > 0 || props.suites.length > 0
+      ? h('div', { style: { ...muted, marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } satisfies CSSProperties },
+        pack.consumes.length > 0
+          ? h('span', { style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
+            h('span', { title: t('consumed'), style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
+              icon(DEPENDS_ICON_PATH)),
+            pack.consumes.map((dep, index) => h('span', {
+              key: dep,
+              style: props.installed.has(dep) ? undefined : { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties,
+            }, `${index > 0 ? ', ' : ''}${dep}${props.installed.has(dep) ? '' : t('missingDep')}`)))
+          : null,
+        pack.consumes.length > 0 && props.suites.length > 0
+          ? h('span', { style: { opacity: 0.6 } satisfies CSSProperties }, '·')
+          : null,
         props.suites.map(suite => h('span', {
           key: suite,
           title: t('suiteManagedTip'),
           style: {
+            display: 'inline-flex',
+            gap: '4px',
+            alignItems: 'center',
             // Translucent purple reads correctly on both light and dark
             // themes (same pairing as the market's suite cards) and, being a
             // plain background, never intercepts clicks.
             background: 'rgba(147, 51, 234, 0.12)',
             border: '1px solid rgba(147, 51, 234, 0.38)',
             borderRadius: '999px',
-            padding: '1px 10px',
+            padding: '1px 8px',
             fontSize: '0.82rem',
             whiteSpace: 'nowrap',
           } satisfies CSSProperties,
-        }, suite)))
+        },
+          h('span', { style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
+            icon(SUITE_ICON_PATH, 12)),
+          suite)))
       : null,
     h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
