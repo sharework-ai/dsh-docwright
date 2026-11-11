@@ -1,14 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="docwright">
   <!--
-    docwright logo: a convergence loop — the product's core mechanic.
-    Two arrow arcs chase each other around a rounded-square frame (the
-    document outline), and the accent check sits at the center: generate,
-    validate, repair until green. No document glyph, no braces: the mark is
-    a cycle, and stays legible at 16 px.
+    docwright logo: the approval stamp. AI-written documents leave this loop
+    only when a check has been stamped onto them — a slightly tilted stamp
+    impression (double border, the tilt of a hand-pressed stamp) with the
+    accent check inside. Validation made physical.
 
     Theme adaptation: the ink CSS variable follows the system light/dark
-    preference via the embedded media query; the accent keeps enough
-    contrast in either palette.
+    preference via the embedded media query.
   -->
   <style>
     :root {
@@ -25,16 +23,11 @@
     .accent { stroke: var(--accent); }
   </style>
 
-  <g fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- loop arcs: the rounded-square frame, broken where the arrows are -->
-    <path class="ink" d="M32 13h10q9 0 9 9v7"/>
-    <path class="ink" d="M51 36v6q0 9-9 9H32"/>
-    <path class="ink" d="M32 51H22q-9 0-9-9v-7"/>
-    <path class="ink" d="M13 28v-6q0-9 9-9h10"/>
-    <!-- arrowheads: clockwise chase -->
-    <path class="ink" d="M45 31l6 6-6 6"/>
-    <path class="ink" d="M19 33l-6-6 6-6"/>
-    <!-- the check at the loop's center -->
-    <path class="accent" stroke-width="7" d="M23 32.5l7 8.5L44 21"/>
+  <g transform="rotate(-8 32 32)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- stamp impression: bold outer frame + thin inner frame -->
+    <rect class="ink" x="10" y="10" width="44" height="44" rx="9" stroke-width="5.5"/>
+    <rect class="ink" x="17" y="17" width="30" height="30" rx="5" stroke-width="2.5" opacity="0.55"/>
+    <!-- the check the stamp presses -->
+    <path class="accent" stroke-width="7" d="M23.5 32.5l7 8L43.5 21"/>
   </g>
 </svg>
