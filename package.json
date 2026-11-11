@@ -30,6 +30,7 @@
   "files": [
     "lib",
     "guides",
+    "assets",
     "locale",
     "cordis.patch.yml"
   ],

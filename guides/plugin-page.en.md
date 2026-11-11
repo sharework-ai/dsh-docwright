@@ -1,3 +1,5 @@
+![docwright](/assets/images/logo.svg)
+
 # Docwright document generation
 
 A pack defines one document-generation scenario (or one stage of it): JSON Schema, parameter definitions, validation rules, generation prompt and related assets. Multiple packs chain into multi-stage scenarios. Parameters normally start being used only after the user confirms them, and every document ships with a replayable validation receipt. The full README lives on npm and [GitHub](https://github.com/sharework-ai/dsh-docwright).
