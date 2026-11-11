@@ -67,6 +67,25 @@ const muted: CSSProperties = {
   color: secondary,
 }
 const smallMuted: CSSProperties = { ...muted, fontSize: '0.82rem' }
+
+/** Gray rounded chip: the shared container for a dependency or a member
+ * pack. Translucent gray reads on both themes and, being a plain background,
+ * never intercepts clicks. `missing` renders the red variant. */
+function chipStyle(missing = false): CSSProperties {
+  return {
+    background: missing ? 'rgba(197, 48, 48, 0.10)' : 'rgba(127, 127, 127, 0.12)',
+    border: `1px solid ${missing ? 'rgba(197, 48, 48, 0.38)' : 'rgba(127, 127, 127, 0.30)'}`,
+    color: missing ? 'var(--dsw-alias-state-error-primary, crimson)' : undefined,
+    borderRadius: '999px',
+    padding: '1px 8px',
+    fontSize: '0.82rem',
+    whiteSpace: 'nowrap',
+  }
+}
+
+/** Anchor ids of the pack and suite cards (jump targets for the chips). */
+const packAnchorId = (name: string): string => `docwright-pack-${name}`
+const suiteAnchorId = (name: string): string => `docwright-suite-${name}`
 const group: CSSProperties = {
   border: '0.5px solid var(--dsw-alias-border-l4, transparent)',
   borderRadius: 'var(--dsw-radius-xl, 20px)',
@@ -310,7 +329,7 @@ function suitesByPack(rows: readonly UiSuiteStatus[]): ReadonlyMap<string, reado
  * the installed-pack list reads at a glance. Market standing is CHECK-ON-DEMAND
  * (检查更新) — never fetched on view mount, and the button only turns into
  * 更新 after a check reports a newer version. */
-function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, readonly string[]>; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, readonly string[]>; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
   const { payload, t } = props
   // Market standing, fetched ONLY when a card's 检查更新 is clicked — and
   // scoped to THAT card: one click answers exactly one pack (the server
@@ -328,7 +347,7 @@ function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, 
     lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
     payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
-      resolveText: props.resolveText, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(p.name) ?? [],
+      resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(p.name) ?? [],
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
       onDone: text => { setLaneDone(text); props.onSaved(); checkOne(p.name) } })))
 }
@@ -350,12 +369,14 @@ function PackCard(props: {
   installed: ReadonlySet<string>
   /** Suite names this pack belongs to (display-only marker). */
   suites: readonly string[]
+  /** Switch tabs and scroll to a card anchor (suite/dependency chips). */
+  onJump: (view: 'packs' | 'suites', anchor: string) => void
   consumers: readonly string[]
   onDone: (doneText: string) => void
 }) {
   const { pack, t } = props
   const [paramsOpen, setParamsOpen] = useState(false)
-  return h('div', { style: card },
+  return h('div', { id: packAnchorId(pack.name), style: card },
     h('div', { style: packHead },
       h('span', { style: nameStyle }, pack.name),
       h(Pill, {}, `v${pack.version}`),
@@ -369,10 +390,17 @@ function PackCard(props: {
           ? h('span', { style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
             h('span', { title: t('consumed'), style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
               icon(DEPENDS_ICON_PATH)),
-            pack.consumes.map((dep, index) => h('span', {
-              key: dep,
-              style: props.installed.has(dep) ? undefined : { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties,
-            }, `${index > 0 ? ', ' : ''}${dep}${props.installed.has(dep) ? '' : t('missingDep')}`)))
+            pack.consumes.map(dep => {
+              const installed = props.installed.has(dep)
+              return h('span', {
+                key: dep,
+                title: installed ? dep : `${dep}${t('missingDep')}`,
+                // An installed dependency jumps to its pack card; a missing
+                // one cannot go anywhere, it just reads red.
+                onClick: installed ? () => props.onJump('packs', packAnchorId(dep)) : undefined,
+                style: { ...chipStyle(!installed), ...(installed ? { cursor: 'pointer' } satisfies CSSProperties : {}) },
+              }, dep)
+            }))
           : null,
         pack.consumes.length > 0 && props.suites.length > 0
           ? h('span', { style: { opacity: 0.6 } satisfies CSSProperties }, '·')
@@ -380,10 +408,12 @@ function PackCard(props: {
         props.suites.map(suite => h('span', {
           key: suite,
           title: t('suiteManagedTip'),
+          onClick: () => props.onJump('suites', suiteAnchorId(suite)),
           style: {
             display: 'inline-flex',
             gap: '4px',
             alignItems: 'center',
+            cursor: 'pointer',
             // Translucent purple reads correctly on both light and dark
             // themes (same pairing as the market's suite cards) and, being a
             // plain background, never intercepts clicks.
@@ -507,26 +537,16 @@ type SuitesLane = { state: 'ok' | 'unreachable'; rows: readonly UiSuiteStatus[] 
 /** Suites tab: one card per suite, same two-column shape as the pack cards —
  * suite identity on the left, info (description, member packs, actions) on
  * the right. No table, no header row; the page font throughout. */
-function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
   const { lane, t } = props
   if (lane === undefined) return null
   if (lane.state === 'unreachable') return h('p', { style: muted }, t('suitesUnreachable'))
   if (lane.rows.length === 0) return h('p', { style: muted }, t('suitesEmpty'))
-  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
+  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved })))
 }
 
-function memberText(m: { name: string; localVersion?: string; marketVersion?: string; missing: boolean; updateAvailable: boolean }): ReturnType<typeof h> {
-  if (m.localVersion === undefined) {
-    return h('span', { key: m.name, style: { color: 'var(--dsw-alias-state-error-primary, crimson)', display: 'block' } },
-      m.name, ' — ', h('span', null, m.marketVersion === undefined ? 'missing' : m.marketVersion))
-  }
-  const arrow = m.updateAvailable && m.marketVersion !== undefined
-    ? h('span', { style: muted }, ' → ', m.marketVersion)
-    : null
-  return h('div', { key: m.name }, m.name, '@', m.localVersion, arrow)
-}
 
-function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
   const { suite, t, resolveText } = props
   const [armedDelete, setArmedDelete] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -550,7 +570,7 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
   }
   const rendered = rendered_error(error, props.lang)
   const nameCol: CSSProperties = { width: '170px', flex: 'none', fontWeight: 600 }
-  return h('div', { style: { ...card, display: 'flex', gap: '14px' } satisfies CSSProperties },
+  return h('div', { id: suiteAnchorId(suite.name), style: { ...card, display: 'flex', gap: '14px' } satisfies CSSProperties },
     h('div', { style: nameCol },
       h('div', null, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
       suite.incomplete ? h('div', { style: muted }, t('suiteFillHint')) : null),
@@ -559,7 +579,16 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
       h('div', { style: { ...muted, marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } satisfies CSSProperties },
         h('span', { title: t('colMembers'), style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
           icon(SUITE_ICON_PATH)),
-        suite.members.map(memberText)),
+        suite.members.map(m => {
+          const installed = m.localVersion !== undefined
+          return h('span', {
+            key: m.name,
+            title: m.name,
+            // An installed member jumps to its pack card; a missing one reads red in place.
+            onClick: installed ? () => props.onJump('packs', packAnchorId(m.name)) : undefined,
+            style: { ...chipStyle(m.localVersion === undefined), ...(installed ? { cursor: 'pointer' } satisfies CSSProperties : {}) },
+          }, m.localVersion === undefined ? m.name : `${m.name}@${m.localVersion}`)
+        })),
       h('div', { style: actions },
         h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
         h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
@@ -674,6 +703,15 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
   const [suites, setSuites] = useState<SuitesLane | undefined>(undefined)
   const [error, setError] = useState<Error | undefined>(undefined)
   const [view, setView] = useState<'packs' | 'suites' | 'groups' | 'config'>('packs')
+
+  /** Chip jumps: switch to the target tab, then scroll the anchored card
+   * into view once it has rendered (one frame is enough for React). */
+  const jumpTo = useCallback((target: 'packs' | 'suites', anchor: string) => {
+    setView(target)
+    window.setTimeout(() => {
+      document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 60)
+  }, [])
   const refresh = useCallback(() => {
     fetchParams().then(p => {
       setPayload(p)
@@ -710,7 +748,7 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
     h('div', { style: { margin: '8px 0 12px' } },
       h(SegmentedTabs, { items: [...tabs], value: view, onChange: v => setView(v as 'groups' | 'packs' | 'suites' | 'config'), label: t('title') })),
     view === 'groups' ? h(GroupsView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
-    view === 'packs' ? h(PacksView, { payload, suites: suiteMarkers, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
-    view === 'suites' ? h(SuitesView, { lane: suites, payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
+    view === 'packs' ? h(PacksView, { payload, suites: suiteMarkers, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,
+    view === 'suites' ? h(SuitesView, { lane: suites, payload, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,
     view === 'config' ? h(ConfigView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null)
 }

@@ -442,6 +442,23 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			...muted,
 			fontSize: "0.82rem"
 		};
+		/** Gray rounded chip: the shared container for a dependency or a member
+		* pack. Translucent gray reads on both themes and, being a plain background,
+		* never intercepts clicks. `missing` renders the red variant. */
+		function chipStyle(missing = false) {
+			return {
+				background: missing ? "rgba(197, 48, 48, 0.10)" : "rgba(127, 127, 127, 0.12)",
+				border: `1px solid ${missing ? "rgba(197, 48, 48, 0.38)" : "rgba(127, 127, 127, 0.30)"}`,
+				color: missing ? "var(--dsw-alias-state-error-primary, crimson)" : void 0,
+				borderRadius: "999px",
+				padding: "1px 8px",
+				fontSize: "0.82rem",
+				whiteSpace: "nowrap"
+			};
+		}
+		/** Anchor ids of the pack and suite cards (jump targets for the chips). */
+		const packAnchorId = (name) => `docwright-pack-${name}`;
+		const suiteAnchorId = (name) => `docwright-suite-${name}`;
 		const group = {
 			border: "0.5px solid var(--dsw-alias-border-l4, transparent)",
 			borderRadius: "var(--dsw-radius-xl, 20px)",
@@ -787,6 +804,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
+				onJump: props.onJump,
 				onSaved: props.onSaved,
 				installed: installedNames,
 				suites: props.suites.get(p.name) ?? [],
@@ -803,7 +821,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		function PackCard(props) {
 			const { pack, t } = props;
 			const [paramsOpen, setParamsOpen] = (0, react.useState)(false);
-			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
+			return (0, react.createElement)("div", {
+				id: packAnchorId(pack.name),
+				style: card
+			}, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
 				...desc,
 				marginBottom: "4px"
 			} }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { style: {
@@ -824,19 +845,26 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					display: "inline-flex",
 					alignItems: "center"
 				}
-			}, icon(DEPENDS_ICON_PATH)), pack.consumes.map((dep, index) => (0, react.createElement)("span", {
-				key: dep,
-				style: props.installed.has(dep) ? void 0 : {
-					color: "var(--dsw-alias-state-error-primary, crimson)",
-					whiteSpace: "pre-wrap"
-				}
-			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { style: { opacity: .6 } }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
+			}, icon(DEPENDS_ICON_PATH)), pack.consumes.map((dep) => {
+				const installed = props.installed.has(dep);
+				return (0, react.createElement)("span", {
+					key: dep,
+					title: installed ? dep : `${dep}${t("missingDep")}`,
+					onClick: installed ? () => props.onJump("packs", packAnchorId(dep)) : void 0,
+					style: {
+						...chipStyle(!installed),
+						...installed ? { cursor: "pointer" } : {}
+					}
+				}, dep);
+			})) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { style: { opacity: .6 } }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
 				key: suite,
 				title: t("suiteManagedTip"),
+				onClick: () => props.onJump("suites", suiteAnchorId(suite)),
 				style: {
 					display: "inline-flex",
 					gap: "4px",
 					alignItems: "center",
+					cursor: "pointer",
 					background: "rgba(147, 51, 234, 0.12)",
 					border: "1px solid rgba(147, 51, 234, 0.38)",
 					borderRadius: "999px",
@@ -965,19 +993,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
+				onJump: props.onJump,
 				onSaved: props.onSaved
 			})));
-		}
-		function memberText(m) {
-			if (m.localVersion === void 0) return (0, react.createElement)("span", {
-				key: m.name,
-				style: {
-					color: "var(--dsw-alias-state-error-primary, crimson)",
-					display: "block"
-				}
-			}, m.name, " — ", (0, react.createElement)("span", null, m.marketVersion === void 0 ? "missing" : m.marketVersion));
-			const arrow = m.updateAvailable && m.marketVersion !== void 0 ? (0, react.createElement)("span", { style: muted }, " → ", m.marketVersion) : null;
-			return (0, react.createElement)("div", { key: m.name }, m.name, "@", m.localVersion, arrow);
 		}
 		function SuiteCard(props) {
 			const { suite, t, resolveText } = props;
@@ -1009,11 +1027,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				flex: "none",
 				fontWeight: 600
 			};
-			return (0, react.createElement)("div", { style: {
-				...card,
-				display: "flex",
-				gap: "14px"
-			} }, (0, react.createElement)("div", { style: nameCol }, (0, react.createElement)("div", null, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("div", { style: {
+			return (0, react.createElement)("div", {
+				id: suiteAnchorId(suite.name),
+				style: {
+					...card,
+					display: "flex",
+					gap: "14px"
+				}
+			}, (0, react.createElement)("div", { style: nameCol }, (0, react.createElement)("div", null, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("div", { style: {
 				flex: "1 1 auto",
 				minWidth: 0
 			} }, (0, react.createElement)("div", { style: {
@@ -1032,7 +1053,18 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					display: "inline-flex",
 					alignItems: "center"
 				}
-			}, icon(SUITE_ICON_PATH)), suite.members.map(memberText)), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			}, icon(SUITE_ICON_PATH)), suite.members.map((m) => {
+				const installed = m.localVersion !== void 0;
+				return (0, react.createElement)("span", {
+					key: m.name,
+					title: m.name,
+					onClick: installed ? () => props.onJump("packs", packAnchorId(m.name)) : void 0,
+					style: {
+						...chipStyle(m.localVersion === void 0),
+						...installed ? { cursor: "pointer" } : {}
+					}
+				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}`);
+			})), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
@@ -1173,6 +1205,17 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const [suites, setSuites] = (0, react.useState)(void 0);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [view, setView] = (0, react.useState)("packs");
+			/** Chip jumps: switch to the target tab, then scroll the anchored card
+			* into view once it has rendered (one frame is enough for React). */
+			const jumpTo = (0, react.useCallback)((target, anchor) => {
+				setView(target);
+				window.setTimeout(() => {
+					document.getElementById(anchor)?.scrollIntoView({
+						behavior: "smooth",
+						block: "center"
+					});
+				}, 60);
+			}, []);
 			const refresh = (0, react.useCallback)(() => {
 				fetchParams().then((p) => {
 					setPayload(p);
@@ -1254,6 +1297,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang,
 				resolveText: props.resolveText,
+				onJump: jumpTo,
 				onSaved: refresh
 			}) : null, view === "suites" ? (0, react.createElement)(SuitesView, {
 				lane: suites,
@@ -1261,6 +1305,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang,
 				resolveText: props.resolveText,
+				onJump: jumpTo,
 				onSaved: refresh
 			}) : null, view === "config" ? (0, react.createElement)(ConfigView, {
 				payload,
