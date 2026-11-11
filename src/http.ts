@@ -90,6 +90,10 @@ export interface WriteChannels {
     readonly checkUpdates: (pack?: string | undefined) => Promise<unknown>
     readonly updatePack: (pack: string) => Promise<{ version: string }>
     readonly deletePack: (pack: string, opts?: { force?: boolean }) => Promise<void>
+    /** Suite lane (docs/designs/pack-suites.md): market suite list projected onto the local packsDir. */
+    readonly suiteStatus?: () => Promise<unknown>
+    readonly updateSuite?: (suite: string) => Promise<unknown>
+    readonly deleteSuite?: (suite: string, opts?: { force?: boolean }) => Promise<unknown>
   } | undefined
 }
 
@@ -101,6 +105,9 @@ export interface WriteChannels {
  * - `GET  /api/docwright/pack-updates` — per packsDir pack standing vs the market (read; mounted with the pack lane).
  * - `POST /api/docwright/pack-update` — `{ pack }` updates one packsDir pack from the market (verified, atomic).
  * - `POST /api/docwright/pack-delete` — `{ pack }` deletes one packsDir pack directory.
+ * - `GET  /api/docwright/suites` — market suites projected onto the local packsDir (read; mounted with the pack lane).
+ * - `POST /api/docwright/suite-update` — `{ suite }` updates the suite's outdated members from the market.
+ * - `POST /api/docwright/suite-delete` — `{ suite, force? }` deletes the suite's installed members (outside-consumer protection).
  */
 export function mountParamsRoutes(
   webServer: WebServerLike,
@@ -185,6 +192,9 @@ export function mountParamsRoutes(
   let disposeUpdates: (() => void) | undefined
   let disposePackUpdate: (() => void) | undefined
   let disposePackDelete: (() => void) | undefined
+  let disposeSuiteStatus: (() => void) | undefined
+  let disposeSuiteUpdate: (() => void) | undefined
+  let disposeSuiteDelete: (() => void) | undefined
   if (deps.writes!.packLane !== undefined) {
     const lane = deps.writes!.packLane
     const packName = (body: unknown): string => {
@@ -193,6 +203,13 @@ export function mountParamsRoutes(
         throw new CodedError('invalidParamBody', 'body must be {"pack": "<name>"} with a non-empty pack name; nothing was written')
       }
       return pack
+    }
+    const suiteName = (body: unknown): string => {
+      const { suite } = body as { suite?: unknown }
+      if (typeof suite !== 'string' || suite.length === 0) {
+        throw new CodedError('invalidParamBody', 'body must be {"suite": "<name>"} with a non-empty suite name; nothing was written')
+      }
+      return suite
     }
     disposeUpdates = webServer.register({
       kind: 'exact',
@@ -226,8 +243,47 @@ export function mountParamsRoutes(
       await lane.deletePack(pack, { force: force === true })
       return { status: 200, payload: { ok: true } }
     })
+    // The suite lane (docs/designs/pack-suites.md): a status read for the
+    // Suites settings tab plus per-suite update/delete. suiteStatus answers
+    // like pack-updates — a market that is DOWN is a coded 200 envelope, not
+    // error UI; a market that does not KNOW suites answers an empty list.
+    disposeSuiteStatus = webServer.register({
+      kind: 'exact',
+      path: '/api/docwright/suites',
+      handler: (request, response) => {
+        const rejected = hostRejection(deps.connection?.(), request)
+        if (rejected !== undefined) {
+          sendJson(response, rejected, errorEnvelope(new CodedError('gateRejected', `request rejected by the host gate (status ${rejected})`, { params: { status: rejected } })))
+          return
+        }
+        if (lane.suiteStatus === undefined) {
+          sendJson(response, 200, { suites: [] })
+          return
+        }
+        void lane.suiteStatus().then(
+          suites => sendJson(response, 200, { suites }),
+          error => sendJson(response, error instanceof CodedError && error.code === 'marketUnreachable' ? 200 : 422, errorEnvelope(error)),
+        )
+      },
+    })
+    disposeSuiteUpdate = post('/api/docwright/suite-update', async body => {
+      if (lane.updateSuite === undefined) throw new CodedError('suiteLaneMissing', 'the suite lane is not wired on this deployment; nothing was written')
+      const suite = suiteName(body)
+      const result = await lane.updateSuite(suite)
+      return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
+    })
+    disposeSuiteDelete = post('/api/docwright/suite-delete', async body => {
+      if (lane.deleteSuite === undefined) throw new CodedError('suiteLaneMissing', 'the suite lane is not wired on this deployment; nothing was written')
+      const suite = suiteName(body)
+      const { force } = body as { force?: unknown }
+      const result = await lane.deleteSuite(suite, { force: force === true })
+      return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
+    })
   }
   return () => {
+    disposeSuiteDelete?.()
+    disposeSuiteUpdate?.()
+    disposeSuiteStatus?.()
     disposePackDelete?.()
     disposePackUpdate?.()
     disposeUpdates?.()

@@ -152,3 +152,50 @@ export async function deleteManagedPack(pack: string, force = false): Promise<vo
     body: JSON.stringify({ pack, force }),
   }))
 }
+
+/** One suite member's local-vs-market standing. */
+export interface UiSuiteMember {
+  name: string
+  localVersion?: string
+  marketVersion?: string
+  missing: boolean
+  updateAvailable: boolean
+}
+
+/** One market suite projected onto the local packsDir. */
+export interface UiSuiteStatus {
+  name: string
+  version: string
+  description: LocalizedText
+  category: string
+  members: readonly UiSuiteMember[]
+  incomplete: boolean
+  updateAvailable: boolean
+}
+
+/** Suite standing for the Suites tab: the market's suite list with each
+ * member's local placement. An empty array means the market has no suites
+ * (or does not support them) — a one-line note, never an error. */
+export async function fetchSuiteStatus(): Promise<readonly UiSuiteStatus[]> {
+  const body = await parse<{ suites: readonly UiSuiteStatus[] }>(await fetch('/api/docwright/suites', { headers: { accept: 'application/json' } }))
+  return body.suites
+}
+
+/** Update a suite: refresh each outdated member to its market version. */
+export async function updateSuite(suite: string): Promise<{ updated: readonly { name: string; version: string }[]; unchanged: readonly string[]; missing: readonly string[] }> {
+  return parse(await fetch('/api/docwright/suite-update', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ suite }),
+  }))
+}
+
+/** Delete a suite's installed members. Members consumed by packs outside the
+ * suite are kept (their consumers are named in the result) unless `force`. */
+export async function deleteSuite(suite: string, force = false): Promise<{ deleted: readonly string[]; kept: readonly { name: string; consumers: readonly string[] }[] }> {
+  return parse(await fetch('/api/docwright/suite-delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ suite, force }),
+  }))
+}

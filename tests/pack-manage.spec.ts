@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkPackUpdates, compareVersions, deletePack, dirHash, installPack, resolveManagedPackDir, updatePack } from '../src/pack-manage.ts'
+import { checkPackUpdates, checkSuiteStatus, compareVersions, deletePack, deleteSuite, dirHash, installPack, installSuite, resolveManagedPackDir, resolveSuiteInstallClosure, updatePack, updateSuite } from '../src/pack-manage.ts'
 import { loadPacks } from '../src/pack-loader.ts'
 import type { Pack } from '../src/pack.ts'
 
@@ -572,5 +572,313 @@ describe('checkPackUpdates per-pack scope: failure path', () => {
     marketStack.push(fx)
     fx.deps.marketUrl = 'http://127.0.0.1:1'
     await expect(checkPackUpdates(fx.deps, 'ext')).rejects.toThrow(/could not check "ext" against the pack market/)
+  })
+})
+
+/** A suite-aware fake market: /api/index, /api/suites, /api/suites/<name>,
+ * and tarballs for entries that carry a dir. */
+async function suiteMarketServer(
+  packs: readonly { name: string; version: string; dir?: string; consumes?: readonly string[] }[],
+  suites: readonly { name: string; version: string; members: readonly string[]; description?: unknown; category?: string }[],
+): Promise<{ url: string; dispose: () => Promise<void> }> {
+  const tarballs = new Map<string, Buffer>()
+  const indexPacks: Record<string, unknown>[] = []
+  for (const entry of packs) {
+    let sha = 'sha256:bogus'
+    let content = 'sha256:bogus'
+    if (entry.dir !== undefined) {
+      const tgz = join(entry.dir, '..', `${entry.name}-${entry.version}.tgz`)
+      await execFileAsync('tar', ['-czf', tgz, '-C', entry.dir, '.'])
+      const bytes = await readFile(tgz)
+      tarballs.set(`/tarballs/${entry.name}-${entry.version}.tgz`, bytes)
+      sha = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+      content = await dirHash(entry.dir)
+    }
+    indexPacks.push({ name: entry.name, version: entry.version, tarball: `/tarballs/${entry.name}-${entry.version}.tgz`, tarballSha256: sha, contentHash: content, consumes: entry.consumes ?? [] })
+  }
+  const json = (response: import('node:http').ServerResponse, body: unknown): void => {
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(JSON.stringify(body))
+  }
+  const server: Server = createServer((request, response) => {
+    const url = request.url ?? ''
+    if (url === '/api/index') return json(response, { packs: indexPacks })
+    if (url === '/api/suites') return json(response, { suites })
+    if (url.startsWith('/api/suites/')) {
+      const name = decodeURIComponent(url.slice('/api/suites/'.length))
+      const suite = suites.find(s => s.name === name)
+      if (suite === undefined) {
+        response.writeHead(404)
+        response.end('no such suite')
+        return
+      }
+      return json(response, suite)
+    }
+    const bytes = tarballs.get(url)
+    if (bytes === undefined) {
+      response.writeHead(404)
+      response.end('no such tarball')
+      return
+    }
+    response.writeHead(200, { 'content-type': 'application/gzip' })
+    response.end(bytes)
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('no local port')
+  return { url: `http://127.0.0.1:${address.port}`, dispose: async () => server.close() }
+}
+
+/** A fixture pack whose manifest declares the given consumes edges. */
+async function packFixtureConsuming(root: string, name: string, version: string, consumes: readonly string[]): Promise<string> {
+  const dir = await packFixture(root, name, version)
+  const manifest = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as { consumes?: string[] }
+  manifest.consumes = [...consumes]
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest), 'utf8')
+  return dir
+}
+
+describe('resolveSuiteInstallClosure', () => {
+  it('merges every member closure into one deduplicated dependencies-first list', async () => {
+    const index = {
+      ok: true,
+      packs: [
+        { name: 'base', version: '1', tarball: '', tarballSha256: '', contentHash: '', consumes: [] },
+        { name: 'mid', version: '1', tarball: '', tarballSha256: '', contentHash: '', consumes: ['base'] },
+        { name: 'top', version: '1', tarball: '', tarballSha256: '', contentHash: '', consumes: ['mid'] },
+        { name: 'other', version: '1', tarball: '', tarballSha256: '', contentHash: '', consumes: ['base'] },
+      ],
+    } as unknown as Parameters<typeof resolveSuiteInstallClosure>[0]
+    const suite = { name: 'cosmic', version: '1', description: {}, category: '', members: ['top', 'other', 'locally-there'] }
+    const closure = resolveSuiteInstallClosure(index, suite, new Set(['locally-there']))
+    expect(closure.map(e => e.name)).toEqual(['base', 'mid', 'top', 'other'])
+  })
+
+  it('fails loud naming the suite when a needed name is neither on the market nor installed', async () => {
+    const index = { ok: true, packs: [{ name: 'solo', version: '1', tarball: '', tarballSha256: '', contentHash: '', consumes: ['ghost'] }] } as unknown as Parameters<typeof resolveSuiteInstallClosure>[0]
+    const suite = { name: 'cosmic', version: '1', description: {}, category: '', members: ['solo'] }
+    expect(() => resolveSuiteInstallClosure(index, suite, new Set())).toThrow(/suite "cosmic" needs "ghost"/)
+  })
+})
+
+describe('installSuite', () => {
+  it('lands every member plus their merged upstreams in one call and reloads once', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-mkt-'))
+    marketStack.push({ dispose: async () => { await rm(parent, { recursive: true, force: true }) } })
+    await packFixtureConsuming(parent, 'base', '1', [])
+    await packFixtureConsuming(parent, 'mid', '1', ['base'])
+    await packFixtureConsuming(parent, 'top', '1', ['mid'])
+    const market = await suiteMarketServer(
+      [
+        { name: 'base', version: '1', dir: join(parent, 'base') },
+        { name: 'mid', version: '1', dir: join(parent, 'mid'), consumes: ['base'] },
+        { name: 'top', version: '1', dir: join(parent, 'top'), consumes: ['mid'] },
+      ],
+      [{ name: 'cosmic', version: '1', members: ['top', 'ext'] }],
+    )
+    marketStack.push(market)
+    const deps = { ...fx.deps, marketUrl: market.url }
+    const { suite, installed } = await installSuite(deps, 'cosmic')
+    expect(suite.name).toBe('cosmic')
+    // ext is a member satisfied locally (not on this market): the closure is
+    // base, mid, top — dependencies first, no duplicate entries.
+    expect(installed.map(o => [o.name, o.unchanged ?? false])).toEqual([['base', false], ['mid', false], ['top', false]])
+    for (const name of ['base', 'mid', 'top']) {
+      expect(fx.packs.has(name)).toBe(true)
+      expect(readdir(join(fx.packsDir, name))).resolves.toBeTruthy()
+    }
+  })
+
+  it('fails loud on an old market (404) or an unreachable one, writing nothing', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const dead = { ...fx.deps, marketUrl: 'http://127.0.0.1:1' }
+    await expect(installSuite(dead, 'cosmic')).rejects.toThrow(/could not reach the pack market/)
+    const market = await suiteMarketServer([{ name: 'solo', version: '1', dir: undefined }], [])
+    marketStack.push(market)
+    await expect(installSuite({ ...fx.deps, marketUrl: market.url }, 'cosmic')).rejects.toThrow(/suite "cosmic" is not offered by the pack market/)
+  })
+
+  it('skips members already installed at the market version (retry tops up)', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-retry-'))
+    marketStack.push({ dispose: async () => { await rm(parent, { recursive: true, force: true }) } })
+    const extDir = await packFixture(parent, 'ext', '2')
+    const market = await suiteMarketServer([{ name: 'ext', version: '2', dir: extDir }], [{ name: 's', version: '1', members: ['ext'] }])
+    marketStack.push(market)
+    const first = await installSuite({ ...fx.deps, marketUrl: market.url }, 's')
+    expect(first.installed).toEqual([{ name: 'ext', version: '2', dest: join(fx.packsDir, 'ext'), existed: true }])
+    const second = await installSuite({ ...fx.deps, marketUrl: market.url }, 's')
+    expect(second.installed).toEqual([{ name: 'ext', version: '2', dest: join(fx.packsDir, 'ext'), existed: true, unchanged: true }])
+  })
+})
+
+describe('updateSuite', () => {
+  it('updates the outdated member, keeps the current one, and reports missing members', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-upd-'))
+    marketStack.push({ dispose: async () => { await rm(parent, { recursive: true, force: true }) } })
+    const v2Dir = await packFixture(parent, 'ext', '2')
+    const market = await suiteMarketServer(
+      [{ name: 'ext', version: '2', dir: v2Dir }],
+      [{ name: 's', version: '1', members: ['ext', 'wp', 'ghost-member'] }],
+    )
+    marketStack.push(market)
+    const result = await updateSuite({ ...fx.deps, marketUrl: market.url }, 's')
+    // ext updates to v2; wp is installed but not in this packsDir → reported
+    // missing (updating only refreshes what the packsDir manages); the
+    // never-installed member is missing too; nothing is "unchanged" here.
+    expect(result.updated).toEqual([{ name: 'ext', version: '2' }])
+    expect(result.unchanged).toEqual([])
+    expect(result.missing.sort()).toEqual(['ghost-member', 'wp'])
+    // Second pass: ext is now current → unchanged, nothing re-downloaded.
+    const second = await updateSuite({ ...fx.deps, marketUrl: market.url }, 's')
+    expect(second.updated).toEqual([])
+    expect(second.unchanged).toEqual(['ext'])
+    expect(second.missing.sort()).toEqual(['ghost-member', 'wp'])
+  })
+
+  it('refuses a suite the market does not know', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const market = await suiteMarketServer([], [])
+    marketStack.push(market)
+    await expect(updateSuite({ ...fx.deps, marketUrl: market.url }, 'nope')).rejects.toThrow(/suite "nope" is not offered/)
+    await expect(deleteSuite({ ...fx.deps, marketUrl: market.url }, 'nope')).rejects.toThrow(/suite "nope" is not offered/)
+  })
+})
+
+describe('deleteSuite', () => {
+  it('deletes installed members, keeps the ones packs outside the suite consume, and force removes those too', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    // packsDir: a and b are the suite; c (outside) consumes a.
+    await packFixtureConsuming(fx.packsDir, 'a', '1', [])
+    await packFixtureConsuming(fx.packsDir, 'b', '1', [])
+    await packFixtureConsuming(fx.packsDir, 'c', '1', ['a'])
+    const reloaded = await loadPacks(fx.deps.builtinRoot, { extra: [fx.packsDir] })
+    fx.packs.clear()
+    for (const [name, pack] of reloaded) fx.packs.set(name, pack)
+    const market = await suiteMarketServer([], [{ name: 'pair', version: '1', members: ['a', 'b', 'never-installed'] }])
+    marketStack.push(market)
+    const kept = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')
+    expect(kept.deleted).toEqual(['b'])
+    expect(kept.kept).toEqual([{ name: 'a', consumers: ['c'] }])
+    await expect(readdir(join(fx.packsDir, 'a'))).resolves.toBeTruthy()
+    await expect(readdir(join(fx.packsDir, 'b'))).rejects.toThrow()
+    // The forced pass only sees 'a' again: 'b' is already gone, so the unit
+    // is "installed members" — retrying a delete never double-deletes.
+    const forced = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair', { force: true })
+    expect(forced.deleted).toEqual(['a'])
+    expect(forced.kept).toEqual([])
+    await expect(readdir(join(fx.packsDir, 'a'))).rejects.toThrow()
+  })
+})
+
+describe('checkSuiteStatus', () => {
+  it('projects the market suite list onto the local packsDir (versions, missing, updateAvailable)', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-status-'))
+    marketStack.push({ dispose: async () => { await rm(parent, { recursive: true, force: true }) } })
+    const v2Dir = await packFixture(parent, 'ext', '2')
+    const market = await suiteMarketServer(
+      [{ name: 'ext', version: '2', dir: v2Dir }],
+      [{
+        name: 'cosmic', version: '3', category: 'estimation',
+        description: { en: 'COSMIC suite', zh: 'COSMIC 套件' },
+        members: ['ext', 'wp', 'ghost'],
+      }],
+    )
+    marketStack.push(market)
+    const suites = await checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: market.url })
+    expect(suites).toHaveLength(1)
+    const suite = suites[0]!
+    expect(suite).toMatchObject({ name: 'cosmic', version: '3', category: 'estimation', incomplete: true, updateAvailable: true })
+    expect(suite.members).toEqual([
+      { name: 'ext', localVersion: '1', marketVersion: '2', missing: false, updateAvailable: true },
+      // wp is a BUILTIN fixture pack — suite placement is the packsDir scan,
+      // so a builtin-only member counts as missing (suites land in packsDir).
+      { name: 'wp', missing: true, updateAvailable: false },
+      { name: 'ghost', missing: true, updateAvailable: false },
+    ])
+  })
+
+  it('answers an empty list on an old market and marketUnreachable when unreachable', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const packless = await suiteMarketServer([{ name: 'x', version: '1', dir: undefined }], [])
+    marketStack.push(packless)
+    expect(await checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: packless.url })).toEqual([])
+    await expect(checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: 'http://127.0.0.1:1' })).rejects.toThrow(/marketUnreachable|could not reach/)
+  })
+})
+
+describe('suite lane failure branches', () => {
+  it('maps suite-detail HTTP failures, missing packsDir, and index failures to their codes', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    // Suite detail answers HTTP 500 → marketUnreachable with the per-suite wording.
+    const broken = createServer((request, response) => {
+      if ((request.url ?? '').includes('/api/suites/cosmic')) {
+        response.writeHead(500, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ error: 'boom' }))
+        return
+      }
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ packs: [] }))
+    })
+    await new Promise<void>(resolve => broken.listen(0, '127.0.0.1', resolve))
+    const brokenPort = (broken.address() as { port: number }).port
+    marketStack.push({ dispose: async () => broken.close() })
+    await expect(installSuite({ ...fx.deps, marketUrl: `http://127.0.0.1:${brokenPort}` }, 'cosmic')).rejects.toThrow(/could not read suite "cosmic".*HTTP 500/)
+    // No packsDir configured → the suite cannot install anywhere.
+    await expect(installSuite({ ...fx.deps, packsDir: undefined, marketUrl: 'https://market.test' }, 'cosmic')).rejects.toThrow(/no packsDir is configured/)
+    // Suite detail fine, index fetch dead → marketUnreachable from the update path.
+    const detailOnly = createServer((request, response) => {
+      if ((request.url ?? '').includes('/api/suites/cosmic')) {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ name: 'cosmic', version: '1', members: ['ext'] }))
+        return
+      }
+      response.writeHead(500)
+      response.end('boom')
+    })
+    await new Promise<void>(resolve => detailOnly.listen(0, '127.0.0.1', resolve))
+    const detailPort = (detailOnly.address() as { port: number }).port
+    marketStack.push({ dispose: async () => detailOnly.close() })
+    await expect(updateSuite({ ...fx.deps, marketUrl: `http://127.0.0.1:${detailPort}` }, 'cosmic')).rejects.toThrow(/could not reach the pack market/)
+    // checkSuiteStatus: index read failing after the suite list is read.
+    const statusOnly = createServer((request, response) => {
+      if ((request.url ?? '') === '/api/suites') {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ suites: [{ name: 'cosmic', version: '1', members: ['ext'] }] }))
+        return
+      }
+      response.writeHead(500)
+      response.end('boom')
+    })
+    await new Promise<void>(resolve => statusOnly.listen(0, '127.0.0.1', resolve))
+    const statusPort = (statusOnly.address() as { port: number }).port
+    marketStack.push({ dispose: async () => statusOnly.close() })
+    await expect(checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: `http://127.0.0.1:${statusPort}` })).rejects.toThrow(/suite status is unavailable/)
+    // A packsDir that does not exist: no local placement, suites still listed.
+    const emptyDir = await suiteMarketServer([], [{ name: 'cosmic', version: '1', members: ['ext'] }])
+    marketStack.push(emptyDir)
+    const suites = await checkSuiteStatus({ packs: fx.packs, packsDir: join(fx.packsDir, 'does-not-exist'), marketUrl: emptyDir.url })
+    expect(suites[0]!.members[0]).toMatchObject({ name: 'ext', missing: true })
+    // The suite-detail fetch itself dying (index fine) → marketUnreachable.
+    await expect(installSuite({
+      ...fx.deps,
+      marketUrl: emptyDir.url,
+      fetchImpl: (async (input: unknown) => {
+        if (String(input).includes('/api/suites/')) throw new Error('ECONNRESET')
+        return new Response(JSON.stringify({ packs: [] }), { headers: { 'content-type': 'application/json' } })
+      }) as typeof fetch,
+    }, 'cosmic')).rejects.toThrow(/could not reach the pack market/)
   })
 })

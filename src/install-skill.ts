@@ -20,15 +20,16 @@ export const INSTALL_SKILL_NAME = 'docwright-pack-install'
  * the model never self-confirms.
  */
 export const INSTALL_SKILL_DESCRIPTION =
-  'Install docwright scenario packs (pack) from the pack market. On "帮我安装 X / install pack X": call doc_packs FIRST to '
-  + 'check whether X is already installed (same version: say so and skip; older: it updates in place), then doc_market_search '
+  'Install docwright scenario packs (pack) or whole suites (suite = a named set of packs) from the pack market. On "帮我安装 X / install pack X / 安装整套 X / install the X suite": call doc_packs FIRST to '
+  + 'check whether X (or every suite member) is already installed (same version: say so and skip; older: it updates in place; partially installed suite: install completes it), then doc_market_search '
   + 'by intent if the name is unknown. doc_market_install returns a pendingConfirmation table to present; only the user\'s '
   + 'approval (confirm: true) executes. The market follows the deployment\'s marketUrl; packs are usable in this session '
   + 'immediately.'
 
 export const INSTALL_SKILL_WHEN_TO_USE =
   'Use when the user asks to install, add, or fetch a docwright scenario pack (by name or by the document type they need) '
-  + 'from the pack market, or asks which packs the market offers.'
+  + 'or a whole suite of packs ("安装整套 X", "安装 X 套件", "install the X suite") from the pack market, or asks which '
+  + 'packs or suites the market offers.'
 
 /** Read the bundled install guide; fail loud with a fix hint when absent. */
 export async function readInstallGuide(guidesRoot: string): Promise<string> {

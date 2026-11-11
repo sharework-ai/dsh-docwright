@@ -156,9 +156,13 @@ describe('doc_market_search tool', () => {
     }) as typeof fetch
     try {
       const args = { query: 'cosmic plan' }
-      const out = await tool.execute(args as never, { signal } as never) as { count: number; market: string; packs: Array<{ install: string; requiresTopic: boolean }> }
-      expect(calls).toEqual(['https://market.test/api/packs?q=cosmic%20plan'])
+      const out = await tool.execute(args as never, { signal } as never) as { count: number; market: string; suites: unknown[]; packs: Array<{ install: string; requiresTopic: boolean }> }
+      // The catalog read is /api/packs; the suite lane reads /api/suites and
+      // degrades to [] when the market answers without suite data.
+      expect(calls[0]).toBe('https://market.test/api/packs?q=cosmic%20plan')
+      expect(calls.some(c => c === 'https://market.test/api/suites')).toBe(true)
       expect(out).toMatchObject({ market: 'https://market.test', count: 1 })
+      expect(out.suites).toEqual([])
       expect(out.packs[0]).toMatchObject({ requiresTopic: true })
       expect(out.packs[0].install).toContain('doc_market_install')
       expect(out.packs[0].install).toContain('cosmic-plan')
@@ -257,6 +261,125 @@ describe('doc_market_install tool', () => {
       expect(deps.packs.get('gw')?.manifest.version).toBe('2')
     } finally {
       globalThis.fetch = realFetch
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('doc_market_install tool: suites', () => {
+  const suiteMarket = () => async (input: unknown) => {
+    const url = String(input)
+    if (url.endsWith('/api/index')) {
+      return new Response(JSON.stringify({ packs: [
+        { name: 'base', version: '1', description: { en: 'base' } },
+        { name: 'top', version: '1', description: { en: 'top' }, consumes: ['base'] },
+        { name: 'solo', version: '3', description: { en: 'solo' } },
+      ] }), { headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/suites/')) {
+      return new Response(JSON.stringify({ name: 'cosmic', version: '2', members: ['top', 'solo'] }), { headers: { 'content-type': 'application/json' } })
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }
+
+  it('asks through a pendingConfirmation table labeling suite members vs consumed upstreams', async () => {
+    const deps = await makeDeps({ marketUrl: 'https://market.test', packsDir: '/w/.docwright/packs' })
+    const tool = defineMarketInstallTool(deps)
+    const realFetch = globalThis.fetch
+    globalThis.fetch = suiteMarket() as typeof fetch
+    try {
+      const out = await tool.execute({ suite: 'cosmic' } as never, { signal } as never) as { status: string; table: Record<string, unknown> }
+      expect(out.status).toBe('pendingConfirmation')
+      expect(out.table.requestedSuite).toBe('cosmic')
+      expect(out.table.installs).toEqual(['base@1 (consumed upstream)', 'top@1 (suite member)', 'solo@3 (suite member)'])
+      // Old market: the suite fetch 404s → a clear error, nothing asked.
+      globalThis.fetch = (async () => new Response('no', { status: 404 })) as typeof fetch
+      await expect(tool.execute({ suite: 'cosmic' } as never, { signal } as never)).rejects.toThrow(/is not offered by the pack market/)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  it('refuses a call that passes both or neither of pack and suite', async () => {
+    const deps = await makeDeps({ marketUrl: 'https://market.test', packsDir: '/w/.docwright/packs' })
+    const tool = defineMarketInstallTool(deps)
+    await expect(tool.execute({ pack: 'a', suite: 'b' } as never, { signal } as never)).rejects.toThrow(/exactly one of pack or suite/)
+    await expect(tool.execute({} as never, { signal } as never)).rejects.toThrow(/exactly one of pack or suite/)
+  })
+
+  it('installs the whole suite on confirm and reports the suite name', async () => {
+    const deps = await makeDeps({ marketUrl: 'https://market.test', packsDir: '/w/.docwright/packs' })
+    const tool = defineMarketInstallTool(deps)
+    const calls: string[] = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: unknown) => {
+      calls.push(String(input))
+      return suiteMarket()(input)
+    }) as typeof fetch
+    // The confirm path needs a real packsDir + loader; use the tool with the
+    // bare-deps error instead: the wiring guard fires before any fetch.
+    const bare = { packs: deps.packs, config: deps.config }
+    const bareTool = defineMarketInstallTool(bare as never)
+    await expect(bareTool.execute({ suite: 'cosmic', confirm: true } as never, { signal } as never)).rejects.toThrow(/requires the plugin wiring/)
+    expect(calls).toEqual([])
+    void tool
+    void globalThis.fetch
+    globalThis.fetch = realFetch
+  })
+})
+
+describe('doc_market_install tool: suite confirm (real install)', () => {
+  it('lands the suite members plus upstreams on confirm and hot-reloads the map', async () => {
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const { mkdir, mkdtemp, readFile, rm } = await import('node:fs/promises')
+    const { dirHash } = await import('../src/pack-manage.ts')
+    const execFileAsync = promisify(execFile)
+    const packsDir = await mkdtemp(join(tmpdir(), 'docwright-suite-tool-'))
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-tgz-'))
+    const makePack = async (name: string): Promise<Buffer> => {
+      const content = join(parent, name)
+      for (const sub of ['rules', 'prompts', 'templates', 'samples']) await mkdir(join(content, sub), { recursive: true })
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(join(content, 'manifest.json'), JSON.stringify({ name, version: '1', description: 'd', consumes: name === 'top' ? ['base'] : [], languages: ['zh-CN'] }), 'utf8')
+      await writeFile(join(content, 'rules', 'zh-CN.json'), JSON.stringify([{ id: `${name}/r`, severity: 'error', given: '$', field: 'name', kind: 'minLength', min: 1, suggestion: 's' }]), 'utf8')
+      await writeFile(join(content, 'schema.json'), '{"type":"object"}', 'utf8')
+      await writeFile(join(content, 'prompts', 'zh-CN.md'), 'T {{materials}}', 'utf8')
+      await writeFile(join(content, 'templates', 'zh-CN.hbs'), 't', 'utf8')
+      await writeFile(join(content, 'samples', 'golden.json'), '{}', 'utf8')
+      const tgzPath = join(parent, `${name}.tgz`)
+      await execFileAsync('tar', ['-czf', tgzPath, '-C', content, '.'])
+      return readFile(tgzPath)
+    }
+    const [baseTgz, topTgz] = [await makePack('base'), await makePack('top')]
+    const hashes = { base: await dirHash(join(parent, 'base')), top: await dirHash(join(parent, 'top')) }
+    const deps = await makeDeps({ marketUrl: 'https://market.test', packsDir })
+    const tool = defineMarketInstallTool(deps)
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/api/index')) {
+        return new Response(JSON.stringify({ packs: [
+          { name: 'base', version: '1', tarball: '/tarballs/base.tgz', tarballSha256: `sha256:${createHash('sha256').update(baseTgz).digest('hex')}`, contentHash: hashes.base, consumes: [] },
+          { name: 'top', version: '1', tarball: '/tarballs/top.tgz', tarballSha256: `sha256:${createHash('sha256').update(topTgz).digest('hex')}`, contentHash: hashes.top, consumes: ['base'] },
+        ] }), { headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/api/suites/')) {
+        return new Response(JSON.stringify({ name: 'cosmic', version: '1', members: ['top'] }), { headers: { 'content-type': 'application/json' } })
+      }
+      if (url.endsWith('/tarballs/base.tgz')) return new Response(baseTgz, { headers: { 'content-type': 'application/gzip' } })
+      if (url.endsWith('/tarballs/top.tgz')) return new Response(topTgz, { headers: { 'content-type': 'application/gzip' } })
+      throw new Error(`unexpected fetch ${url}`)
+    }) as typeof fetch
+    try {
+      const out = await tool.execute({ suite: 'cosmic', confirm: true } as never, { signal } as never) as { status: string; suite?: string; installed: string[] }
+      expect(out.status).toBe('installed')
+      expect(out.suite).toBe('cosmic')
+      expect(out.installed.map(row => row.split('@')[0])).toEqual(['base', 'top'])
+      expect(deps.packs.get('top')?.manifest.name).toBe('top')
+    } finally {
+      globalThis.fetch = realFetch
+      await rm(packsDir, { recursive: true, force: true })
       await rm(parent, { recursive: true, force: true })
     }
   })

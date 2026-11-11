@@ -39,6 +39,12 @@ describe('pack-install skill', () => {
     expect(guide).toContain('marketUrl')
     expect(guide).toContain('usable in THIS session immediately')
     expect(guide).toMatch(/Step 1 — check what is already installed[\s\S]*doc_packs/)
+    // The suite lane (docs/designs/pack-suites.md): search cards route to a
+    // suite install; single-pack installs mention their suite; the installed
+    // check covers top-up installs of partially installed suites.
+    expect(guide).toContain('"suite"')
+    expect(guide).toMatch(/Suite branch/)
+    expect(guide).toMatch(/top-up install/)
   })
 
   it('fails loud when the guide file is absent', async () => {
@@ -53,7 +59,9 @@ describe('pack-install skill', () => {
     expect(skills).toHaveLength(1)
     expect(skills[0]).toMatchObject({ name: INSTALL_SKILL_NAME, source: 'bundled', resourceBase: { kind: 'directory', path: guidesRoot } })
     expect(skills[0].description).toContain('doc_market_install')
+    expect(skills[0].description).toContain('suite')
     expect(skills[0].whenToUse).toContain('install')
+    expect(skills[0].whenToUse).toContain('install the X suite')
   })
 
   it('fails loud when the host skills service is unusable', () => {

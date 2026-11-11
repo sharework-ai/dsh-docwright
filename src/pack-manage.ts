@@ -393,6 +393,24 @@ export async function installPack(deps: {
     throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
   }
   const closure = resolveInstallClosure(index, name, new Set(deps.packs.keys()))
+  const packsDir = deps.packsDir
+  const outcomes = await landClosure({ ...deps, packsDir }, closure, name)
+  return { installed: outcomes }
+}
+
+/** Land a resolved closure (dependencies first): members already installed at
+ * the market version are skipped; every other member downloads, verifies, and
+ * swaps. One in-place reload makes ALL of them visible mid-session. A
+ * mid-closure failure keeps the already-landed members on disk, reloads so
+ * the session sees the partial install, and surfaces the failing member. */
+async function landClosure(deps: {
+  readonly packs: Map<string, Pack>
+  readonly builtinRoot: string
+  readonly packsDir: string
+  readonly marketUrl: string
+  readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+  readonly fetchImpl?: typeof fetch
+}, closure: readonly MarketIndexEntry[], requester: string): Promise<readonly InstallOutcome[]> {
   const outcomes: InstallOutcome[] = []
   try {
     for (const entry of closure) {
@@ -413,7 +431,7 @@ export async function installPack(deps: {
     throw error
   }
   await reloadPacksInPlace(deps)
-  return { installed: outcomes }
+  return outcomes
 }
 
 /** Manifest-name scan without the throw (install's existing-vs-new branch).
@@ -479,4 +497,304 @@ export async function deletePack(deps: {
   const dir = await resolveManagedPackDir(deps.packsDir, name)
   await rm(dir, { recursive: true, force: true })
   await reloadPacksInPlace(deps)
+}
+
+/** One market suite record (GET /api/suites rows and /api/suites/{name}). */
+interface MarketSuiteRecord {
+  readonly name?: unknown
+  readonly version?: unknown
+  readonly description?: unknown
+  readonly category?: unknown
+  readonly members?: unknown
+}
+
+export interface SuiteDetail {
+  readonly name: string
+  readonly version: string
+  readonly description: unknown
+  readonly category: string
+  readonly members: readonly string[]
+}
+
+function suiteRecordOf(record: MarketSuiteRecord): SuiteDetail {
+  return {
+    name: typeof record.name === 'string' ? record.name : '',
+    version: typeof record.version === 'string' ? record.version : '',
+    description: record.description,
+    category: typeof record.category === 'string' ? record.category : '',
+    members: Array.isArray(record.members) ? record.members.filter((m): m is string => typeof m === 'string') : [],
+  }
+}
+
+/** GET /api/suites/{name}: null on a 404 (an old market or an unknown suite
+ * — the caller words the error), CodedError marketUnreachable on fetch or
+ * server failures. */
+async function fetchSuiteDetail(marketUrl: string, suite: string, fetchImpl: typeof fetch): Promise<SuiteDetail | null> {
+  let response: Response
+  let body: unknown
+  try {
+    response = await fetchImpl(`${marketUrl}/api/suites/${encodeURIComponent(suite)}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (response.status === 404) return null
+    body = await response.json()
+  } catch (error) {
+    throw new CodedError('marketUnreachable', `could not reach the pack market at ${marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: marketUrl }, detail: (error as Error).message })
+  }
+  if (!response.ok) {
+    throw new CodedError('marketUnreachable', `could not read suite "${suite}" from the pack market at ${marketUrl} (HTTP ${response.status}); nothing was written`, { params: { url: marketUrl }, detail: `HTTP ${response.status}` })
+  }
+  return suiteRecordOf(body as MarketSuiteRecord)
+}
+
+/** Suite-absent error (old market or unknown suite): same family as a pack
+ * absent from the market — problem + cause + fix, nothing written. */
+function suiteAbsentError(suite: string, marketUrl: string): CodedError {
+  return new CodedError('absentFromMarket', `suite "${suite}" is not offered by the pack market at ${marketUrl} (the market may not support suites, or the suite name is wrong); nothing was written`, { params: { pack: suite, url: marketUrl } })
+}
+
+/**
+ * The merged install closure of a SUITE: every member's resolveInstallClosure
+ * over ONE shared visit set, so a pack consumed by several members lands once
+ * and dependencies stay first. A needed name that is neither on the market
+ * nor installed locally fails loud naming the suite.
+ */
+export function resolveSuiteInstallClosure(index: MarketIndex, suite: SuiteDetail, installedLocally: ReadonlySet<string>): readonly MarketIndexEntry[] {
+  const byName = new Map(index.packs.map(e => [e.name, e]))
+  const order: MarketIndexEntry[] = []
+  const seen = new Set<string>()
+  const visit = (name: string, requester: string | undefined): void => {
+    if (seen.has(name)) return
+    seen.add(name)
+    const entry = byName.get(name)
+    if (entry === undefined) {
+      if (installedLocally.has(name)) return // satisfied locally (installed pack or builtin-merged)
+      throw new CodedError('absentFromMarket', `suite "${suite.name}" needs "${name}" (${requester === undefined ? 'a member' : `consumes chain of "${requester}"`}), but it is neither listed on the market nor installed; nothing was written`, { params: { pack: name } })
+    }
+    for (const up of consumesOf(entry)) visit(up, name)
+    order.push(entry)
+  }
+  for (const member of suite.members) visit(member, undefined)
+  return order
+}
+
+/**
+ * Install a suite from the market into the packsDir (the doc_market_install
+ * suite lane): the UNIT is the merged closure of all members — each member
+ * plus its transitive consumed upstreams, deduplicated, dependencies first,
+ * behind one caller-owned confirmation gate, then ONE in-place reload makes
+ * everything visible mid-session. Members already installed at the market
+ * version are skipped (unchanged), so retrying a partially failed install
+ * only lands what is missing.
+ */
+export async function installSuite(deps: {
+  readonly packs: Map<string, Pack>
+  readonly builtinRoot: string
+  readonly packsDir?: string | undefined
+  readonly marketUrl: string
+  readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+  readonly fetchImpl?: typeof fetch
+}, suite: string): Promise<{ suite: SuiteDetail; installed: readonly InstallOutcome[] }> {
+  if (deps.packsDir === undefined || deps.packsDir.length === 0) {
+    throw new CodedError('packNotManaged', `suite "${suite}" cannot be installed: no packsDir is configured (set config.packsDir — packs install there and join the builtin merge)`, { params: { pack: suite } })
+  }
+  let index: MarketIndex
+  try {
+    const response = await (deps.fetchImpl ?? fetch)(`${deps.marketUrl}/api/index`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    index = await response.json() as MarketIndex
+  } catch (error) {
+    throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
+  }
+  const detail = await fetchSuiteDetail(deps.marketUrl, suite, deps.fetchImpl ?? fetch)
+  if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
+  const closure = resolveSuiteInstallClosure(index, detail, new Set(deps.packs.keys()))
+  const installed = await landClosure({ ...deps, packsDir: deps.packsDir }, closure, suite)
+  return { suite: detail, installed }
+}
+
+/**
+ * Update a suite: every member that is installed locally and has a newer
+ * market version goes through the existing updatePack pipeline; members
+ * already current stay untouched; members missing locally (or no longer on
+ * the market) are reported, not installed — installing is the suite lane's
+ * job, updating only refreshes what is there.
+ */
+export async function updateSuite(deps: {
+  readonly packs: Map<string, Pack>
+  readonly builtinRoot: string
+  readonly packsDir?: string | undefined
+  readonly marketUrl: string
+  readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+  readonly fetchImpl?: typeof fetch
+}, suite: string): Promise<{ suite: SuiteDetail; updated: readonly { name: string; version: string }[]; unchanged: readonly string[]; missing: readonly string[] }> {
+  const detail = await fetchSuiteDetail(deps.marketUrl, suite, deps.fetchImpl ?? fetch)
+  if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
+  let index: MarketIndex
+  try {
+    const response = await (deps.fetchImpl ?? fetch)(`${deps.marketUrl}/api/index`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    index = await response.json() as MarketIndex
+  } catch (error) {
+    throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
+  }
+  const byName = new Map(index.packs.map(e => [e.name, e]))
+  const updated: { name: string; version: string }[] = []
+  const unchanged: string[] = []
+  const missing: string[] = []
+  for (const member of detail.members) {
+    const entry = byName.get(member)
+    const local = deps.packs.get(member)
+    const existing = await findManagedPackDir(deps.packsDir ?? '', member)
+    if (entry === undefined || local === undefined || existing === undefined) {
+      missing.push(member)
+      continue
+    }
+    if (compareVersions(entry.version, local.manifest.version) <= 0) {
+      unchanged.push(member)
+      continue
+    }
+    updated.push({ name: member, version: await updatePack(deps, member) })
+  }
+  return { suite: detail, updated, unchanged, missing }
+}
+
+/**
+ * Delete a suite: the installed members are the unit. A member that packs
+ * OUTSIDE the suite consume is kept (its consumer's chain would break); the
+ * rest go through the existing deletePack — force: true internally, because
+ * sibling suite members legitimately consume each other and the per-pack
+ * packInUse guard must not fire on them. With opts.force the kept members go
+ * too (the single-pack force semantics: downstream packs keep loading and
+ * fail loud on their next generation). Members never installed are skipped;
+ * the market only supplies the member list.
+ */
+export async function deleteSuite(deps: {
+  readonly packs: Map<string, Pack>
+  readonly builtinRoot: string
+  readonly packsDir?: string | undefined
+  readonly marketUrl: string
+  readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+  readonly fetchImpl?: typeof fetch
+}, suite: string, opts: { force?: boolean } = {}): Promise<{ deleted: readonly string[]; kept: readonly { name: string; consumers: readonly string[] }[] }> {
+  const detail = await fetchSuiteDetail(deps.marketUrl, suite, deps.fetchImpl ?? fetch)
+  if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
+  const memberSet = new Set(detail.members)
+  const consumersOf = (name: string): string[] => [...deps.packs.values()]
+    .filter(p => p.manifest.name !== name && !memberSet.has(p.manifest.name) && p.manifest.consumes.includes(name))
+    .map(p => p.manifest.name).sort()
+  const deleted: string[] = []
+  const kept: { name: string; consumers: readonly string[] }[] = []
+  for (const member of detail.members) {
+    const installed = deps.packs.has(member) && await findManagedPackDir(deps.packsDir ?? '', member) !== undefined
+    if (!installed) continue
+    const consumers = consumersOf(member)
+    if (consumers.length > 0 && opts.force !== true) {
+      kept.push({ name: member, consumers })
+      continue
+    }
+    await deletePack(deps, member, { force: true })
+    deleted.push(member)
+  }
+  return { deleted, kept }
+}
+
+/** Per-member standing of one suite against the local packsDir and the
+ * market index (the settings page's Suites tab rows). */
+export interface SuiteMemberStatus {
+  readonly name: string
+  readonly localVersion?: string
+  readonly marketVersion?: string
+  /** True when the member is neither installed locally nor on the market. */
+  readonly missing: boolean
+  readonly updateAvailable: boolean
+}
+
+export interface SuiteStatus {
+  readonly name: string
+  readonly version: string
+  readonly description: unknown
+  readonly category: string
+  readonly members: readonly SuiteMemberStatus[]
+  /** True when at least one member pack is not installed. */
+  readonly incomplete: boolean
+  readonly updateAvailable: boolean
+}
+
+/**
+ * Suite standing for the settings UI: the market's suite list projected onto
+ * the local packsDir (per-member local vs market version, missing members,
+ * update availability). A market that does not know suites answers an EMPTY
+ * list (the UI shows one explanatory line, no error); an unreachable market
+ * throws marketUnreachable (the route degrades to a coded 200 envelope).
+ */
+export async function checkSuiteStatus(deps: {
+  readonly packs: ReadonlyMap<string, Pack>
+  readonly packsDir?: string | undefined
+  readonly marketUrl: string
+  readonly fetchImpl?: typeof fetch
+}): Promise<readonly SuiteStatus[]> {
+  const fetchImpl = deps.fetchImpl ?? fetch
+  let rows: MarketSuiteRecord[]
+  try {
+    const response = await fetchImpl(`${deps.marketUrl}/api/suites`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (response.status === 404) return [] // old market: the suite lane simply has nothing to show
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const body = await response.json() as { suites?: unknown }
+    rows = Array.isArray(body.suites) ? body.suites as MarketSuiteRecord[] : []
+  } catch (error) {
+    throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); suite status is unavailable`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
+  }
+  let index: MarketIndex
+  try {
+    const response = await fetchImpl(`${deps.marketUrl}/api/index`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    index = await response.json() as MarketIndex
+  } catch (error) {
+    throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); suite status is unavailable`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
+  }
+  const marketVersions = new Map(index.packs.map(e => [e.name, e.version]))
+  // Local placement is the packsDir scan (manifest-name keyed) — NOT the
+  // loaded pack map, which also contains builtin packs a suite member must
+  // not be credited against.
+  const localVersions = new Map<string, string>()
+  if (deps.packsDir !== undefined && deps.packsDir.length > 0) {
+    let entries: Dirent[]
+    try {
+      entries = await readdir(deps.packsDir, { withFileTypes: true })
+    } catch {
+      entries = []
+    }
+    for (const dirent of entries) {
+      if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+      const dir = join(deps.packsDir, dirent.name)
+      const manifest = await manifestNameOf(dir)
+      if (manifest === null || localVersions.has(manifest)) continue
+      try {
+        const read = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as { version?: unknown }
+        if (typeof read.version === 'string') localVersions.set(manifest, read.version)
+      } catch { /* unparseable manifest version: treat as absent */ }
+    }
+  }
+  return rows.map(record => {
+    const suite = suiteRecordOf(record)
+    const members: SuiteMemberStatus[] = suite.members.map(member => {
+      const localVersion = localVersions.get(member)
+      const marketVersion = marketVersions.get(member)
+      return {
+        name: member,
+        ...(localVersion === undefined ? {} : { localVersion }),
+        ...(marketVersion === undefined ? {} : { marketVersion }),
+        missing: localVersion === undefined && marketVersion === undefined,
+        updateAvailable: localVersion !== undefined && marketVersion !== undefined && compareVersions(marketVersion, localVersion) > 0,
+      }
+    })
+    return {
+      name: suite.name,
+      version: suite.version,
+      description: suite.description,
+      category: suite.category,
+      members,
+      incomplete: members.some(m => m.localVersion === undefined),
+      updateAvailable: members.some(m => m.updateAvailable),
+    }
+  })
 }

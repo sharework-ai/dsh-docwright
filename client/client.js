@@ -117,6 +117,32 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				})
 			}));
 		}
+		/** Suite standing for the Suites tab: the market's suite list with each
+		* member's local placement. An empty array means the market has no suites
+		* (or does not support them) — a one-line note, never an error. */
+		async function fetchSuiteStatus() {
+			return (await parse(await fetch("/api/docwright/suites", { headers: { accept: "application/json" } }))).suites;
+		}
+		/** Update a suite: refresh each outdated member to its market version. */
+		async function updateSuite(suite) {
+			return parse(await fetch("/api/docwright/suite-update", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ suite })
+			}));
+		}
+		/** Delete a suite's installed members. Members consumed by packs outside the
+		* suite are kept (their consumers are named in the result) unless `force`. */
+		async function deleteSuite(suite, force = false) {
+			return parse(await fetch("/api/docwright/suite-delete", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					suite,
+					force
+				})
+			}));
+		}
 		//#endregion
 		//#region src/client/locales.ts
 		const en = {
@@ -177,6 +203,21 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmDeleteBreaks: "Confirm delete ({packs} consume it — their chains break)",
 			updatedDone: "Updated to v{version}.",
 			deletedDone: "Deleted.",
+			viewSuites: "Suites",
+			suitesEmpty: "The market lists no suites (or this market does not support suites). Single-pack installs are unaffected.",
+			suitesUnreachable: "Could not reach the pack market; suite status is unavailable.",
+			suitesOf: "Suites:",
+			suiteIncomplete: "incomplete",
+			suiteMemberMissing: "missing",
+			suiteUpdateBtn: "Update suite",
+			suiteUpdateDone: "Updated: {packs}.",
+			suiteDeleteConfirm: "Confirm delete suite",
+			suiteDeleteColumn: "Will delete",
+			suiteKeepColumn: "Will keep",
+			suiteKeptBy: "consumed by {packs}",
+			suiteForce: "Also delete members consumed outside the suite (force)",
+			suiteDeletedDone: "Deleted: {packs}.",
+			suiteFillHint: "Members are missing. Ask the session: doc_market_install { \"suite\": \"<name>\" } installs the rest.",
 			"err.gateRejected": "The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.",
 			"err.crossSiteWrite": "Write refused: the request origin does not match the deployment host (cross-site request). Operate from the dsh web UI.",
 			"err.bodyTooLarge": "The request body exceeds the {max}-byte limit; nothing was written. Reduce the request size.",
@@ -197,7 +238,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.integrityFailed": "Integrity check failed for \"{pack}\" ({why}); nothing was written. Never force-install when the market index and the download disagree.",
 			"err.updateFailed": "Pack \"{pack}\" update failed; the installed version is unchanged.",
 			"err.absentFromMarket": "Pack \"{pack}\" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.",
-			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it."
+			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it.",
+			"err.suiteLaneMissing": "The suite lane is not wired on this deployment; nothing was written."
 		};
 		const zh = {
 			nav: "Docwright 参数",
@@ -257,6 +299,21 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmDeleteBreaks: "确认删除（{packs} 消费它，删除将断链）",
 			updatedDone: "已更新到 v{version}。",
 			deletedDone: "已删除。",
+			viewSuites: "套件",
+			suitesEmpty: "市场没有套件（或该市场不支持套件）。单个 pack 的安装不受影响。",
+			suitesUnreachable: "无法连接 pack 市场，套件状态不可用。",
+			suitesOf: "所属套件：",
+			suiteIncomplete: "不完整",
+			suiteMemberMissing: "缺失",
+			suiteUpdateBtn: "更新套件",
+			suiteUpdateDone: "已更新：{packs}。",
+			suiteDeleteConfirm: "确认删除套件",
+			suiteDeleteColumn: "将删除",
+			suiteKeepColumn: "将保留",
+			suiteKeptBy: "被 {packs} 消费",
+			suiteForce: "同时删除被套件外 pack 消费的成员（强制）",
+			suiteDeletedDone: "已删除：{packs}。",
+			suiteFillHint: "成员未装齐。请在会话中执行 doc_market_install { \"suite\": \"<名称>\" } 补齐。",
 			"err.gateRejected": "请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。",
 			"err.crossSiteWrite": "写入被拒绝：请求来源与部署主机不一致（跨站请求）。请从 dsh web 界面发起操作。",
 			"err.bodyTooLarge": "请求体超过 {max} 字节上限，未写入任何内容。请缩小请求内容。",
@@ -277,7 +334,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.integrityFailed": "「{pack}」完整性校验失败（{why}），未写入任何内容。市场索引与下载内容不一致时请勿强行安装。",
 			"err.updateFailed": "pack「{pack}」更新失败，已装版本未变。",
 			"err.absentFromMarket": "pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。",
-			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。"
+			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。",
+			"err.suiteLaneMissing": "该部署未接入套件通道，未做任何改动。"
 		};
 		function translate(dict) {
 			return (key) => {
@@ -302,16 +360,19 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		//#endregion
 		//#region src/client/ParamsSection.tsx
 		/**
-		* The Docwright params section: three views over one catalog fetch —
-		* shared-param groups (the aggregation with effective-source resolution),
-		* per-pack flat view, and the plugin Config form. Controls map from the
+		* The Docwright params section: four views over one catalog fetch — per-pack
+		* flat view, the suite overview (docs/designs/pack-suites.md), shared-param
+		* groups (the aggregation with effective-source resolution), and the plugin
+		* Config form. Controls map from the
 		* ParamSpec type (number → numeric input, enum → select, boolean → switch,
 		* object → JSON-per-value with endpoints read-only); every parameter shows
 		* its author's description inline beneath the name, resolved to the active
 		* locale by the host's `locale.resolveText` (LocalizedText from the RPC,
 		* en-fallback semantics of src/description.ts). Writes go through the
 		* plugin's own routes (src/http.ts), never the conversation; their error
-		* envelopes render through the locale catalog (locales.ts renderError).
+		* envelopes render through the locale catalog (locales.ts renderError). Any
+		* change in ANY view re-fetches the whole block, so the Packs and Suites
+		* tabs can never disagree.
 		*
 		* Typography follows the host conversation body, not ad-hoc sizes: one
 		* family and size for all running text (`--dsw-font-family` +
@@ -653,6 +714,17 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t
 			}))));
 		}
+		/** Which installed suites a pack belongs to, keyed by pack name (derived
+		* once per suites fetch; a pure display marker on the pack card). */
+		function suitesByPack(rows) {
+			const map = /* @__PURE__ */ new Map();
+			for (const suite of rows) for (const member of suite.members) {
+				const list = map.get(member.name);
+				if (list === void 0) map.set(member.name, [suite.name]);
+				else if (!list.includes(suite.name)) list.push(suite.name);
+			}
+			return map;
+		}
 		/** Per-pack flat view (pack-author / troubleshooting perspective). Each card
 		* opens with a full-width blue-wash header band — pack identity reads as a
 		* section of its own. The card is the overview: identity, description, and
@@ -694,6 +766,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				resolveText: props.resolveText,
 				onSaved: props.onSaved,
 				installed: installedNames,
+				suites: props.suites.get(p.name) ?? [],
 				consumers: payload.packs.filter((other) => other.name !== p.name && other.consumes.includes(p.name)).map((other) => other.name),
 				onDone: (text) => {
 					setLaneDone(text);
@@ -716,7 +789,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					color: "var(--dsw-alias-state-error-primary, crimson)",
 					whiteSpace: "pre-wrap"
 				}
-			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, (0, react.createElement)("div", { style: {
+			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, props.suites.length > 0 ? (0, react.createElement)("div", { style: muted }, t("suitesOf"), props.suites.join(", ")) : null, (0, react.createElement)("div", { style: {
 				marginTop: "4px",
 				display: "flex",
 				gap: "8px",
@@ -806,6 +879,124 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				...coded.params !== void 0 ? { params: coded.params } : {},
 				...coded.detail !== void 0 ? { detail: coded.detail } : {}
 			}, lang);
+		}
+		/** Suites view (docs/designs/pack-suites.md): one card per market suite,
+		* each member row showing local vs market version. An empty list (the market
+		* has no suites or does not support them) and an unreachable market each
+		* render one explanatory line — never an error wall. Every action goes
+		* through the section-level refresh, so the Packs tab re-renders in sync. */
+		function SuitesView(props) {
+			const { lane, t } = props;
+			if (lane === void 0) return null;
+			if (lane.state === "unreachable") return (0, react.createElement)("p", { style: muted }, t("suitesUnreachable"));
+			if (lane.rows.length === 0) return (0, react.createElement)("p", { style: muted }, t("suitesEmpty"));
+			return (0, react.createElement)("div", null, lane.rows.map((s) => (0, react.createElement)(SuiteCard, {
+				key: s.name,
+				suite: s,
+				packs: props.payload.packs,
+				t,
+				lang: props.lang,
+				resolveText: props.resolveText,
+				onSaved: props.onSaved
+			})));
+		}
+		/** One suite card: identity + bilingual description + the member list (each
+		* row local vs market version; a laggard is marked updatable; a member
+		* missing locally reads 缺失), then the actions: 更新套件 (one click; the
+		* server only touches outdated members) and the two-step delete whose
+		* confirm names the two columns — members that go, and members kept because
+		* packs OUTSIDE the suite consume them (force collapses the keep column). */
+		function SuiteCard(props) {
+			const { suite, t } = props;
+			const [armedDelete, setArmedDelete] = (0, react.useState)(false);
+			const [force, setForce] = (0, react.useState)(false);
+			const [busy, setBusy] = (0, react.useState)(false);
+			const [error, setError] = (0, react.useState)(void 0);
+			const [done, setDone] = (0, react.useState)(void 0);
+			const memberSet = (0, react.useMemo)(() => new Set(suite.members.map((m) => m.name)), [suite]);
+			const outsideConsumers = (0, react.useCallback)((name) => props.packs.filter((p) => !memberSet.has(p.name) && p.consumes.includes(name)).map((p) => p.name), [props.packs, memberSet]);
+			const installed = suite.members.filter((m) => m.localVersion !== void 0);
+			const deleteList = force ? installed : installed.filter((m) => outsideConsumers(m.name).length === 0);
+			const keepList = force ? [] : installed.filter((m) => outsideConsumers(m.name).length > 0);
+			const runUpdate = () => {
+				setBusy(true);
+				setError(void 0);
+				updateSuite(suite.name).then((result) => {
+					setDone(fill(t("suiteUpdateDone"), { packs: result.updated.map((u) => `${u.name}@${u.version}`).join(", ") || t("upToDate") }));
+					props.onSaved();
+				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
+			};
+			const runDelete = () => {
+				setBusy(true);
+				setError(void 0);
+				deleteSuite(suite.name, force).then((result) => {
+					setDone(fill(t("suiteDeletedDone"), { packs: result.deleted.join(", ") }));
+					setArmedDelete(false);
+					props.onSaved();
+				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
+			};
+			const rendered = rendered_error(error, props.lang);
+			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, suite.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${suite.version}`), suite.category.length > 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, suite.category) : null, suite.incomplete ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("suiteIncomplete")) : null, suite.updateAvailable ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("updateBtn")) : null), (0, react.createElement)("div", { style: {
+				...desc,
+				marginBottom: "4px"
+			} }, props.resolveText(suite.description)), suite.members.map((m) => (0, react.createElement)("div", {
+				key: m.name,
+				style: row
+			}, (0, react.createElement)("span", { style: {
+				...nameStyle,
+				fontWeight: 400
+			} }, m.name), (0, react.createElement)("span", { style: m.localVersion === void 0 ? { color: "var(--dsw-alias-state-error-primary, crimson)" } : valueStyle }, m.localVersion ?? t("suiteMemberMissing")), (0, react.createElement)("span", { style: muted }, m.marketVersion === void 0 ? "" : `v${m.marketVersion}`), m.updateAvailable ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, fill(t("updateTo"), { version: m.marketVersion ?? "" })) : null)), suite.incomplete ? (0, react.createElement)("p", { style: muted }, t("suiteFillHint")) : null, (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: runUpdate
+			}, t("suiteUpdateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: () => setArmedDelete((v) => !v)
+			}, armedDelete ? t("suiteDeleteConfirm") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: muted }, done) : null), armedDelete ? (0, react.createElement)("div", { style: {
+				marginTop: "6px",
+				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
+				paddingTop: "6px",
+				display: "flex",
+				gap: "16px",
+				flexWrap: "wrap"
+			} }, (0, react.createElement)("div", { style: {
+				flex: 1,
+				minWidth: "180px"
+			} }, (0, react.createElement)("div", { style: {
+				...nameStyle,
+				marginBottom: "2px"
+			} }, t("suiteDeleteColumn")), deleteList.length === 0 ? (0, react.createElement)("div", { style: muted }, "—") : null, deleteList.map((m) => (0, react.createElement)("div", {
+				key: m.name,
+				style: valueStyle
+			}, m.name))), (0, react.createElement)("div", { style: {
+				flex: 1,
+				minWidth: "180px"
+			} }, (0, react.createElement)("div", { style: {
+				...nameStyle,
+				marginBottom: "2px"
+			} }, t("suiteKeepColumn")), keepList.length === 0 ? (0, react.createElement)("div", { style: muted }, "—") : null, keepList.map((m) => (0, react.createElement)("div", {
+				key: m.name,
+				style: valueStyle
+			}, `${m.name} (${fill(t("suiteKeptBy"), { packs: outsideConsumers(m.name).join(", ") })})`))), (0, react.createElement)("div", null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Switch, {
+				checked: force,
+				onChange: (next) => setForce(next),
+				label: t("suiteForce")
+			}), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				disabled: busy || deleteList.length === 0,
+				onClick: runDelete
+			}, t("suiteDeleteConfirm")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: () => setArmedDelete(false)
+			}, t("cancel"))))) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
+				error,
+				lang: props.lang
+			}) : null);
 		}
 		/** Config form: top-level keys as rows, oscillation.* folded under Advanced. */
 		function ConfigView(props) {
@@ -917,11 +1108,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				lang: props.lang
 			}) : null));
 		}
-		/** The section: one fetch, three views. */
+		/** The section: one fetch cycle, four views (docs/designs/pack-suites.md). */
 		function ParamsSection(props) {
 			const lang = props.lang === "zh" ? "zh" : "en";
 			const t = (0, react.useMemo)(() => translate(lang === "zh" ? zh : en), [lang]);
 			const [payload, setPayload] = (0, react.useState)(void 0);
+			const [suites, setSuites] = (0, react.useState)(void 0);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [view, setView] = (0, react.useState)("packs");
 			const refresh = (0, react.useCallback)(() => {
@@ -929,10 +1121,18 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					setPayload(p);
 					setError(void 0);
 				}).catch((e) => setError(e));
+				fetchSuiteStatus().then((rows) => setSuites({
+					state: "ok",
+					rows
+				})).catch(() => setSuites((prev) => ({
+					state: "unreachable",
+					rows: prev?.rows ?? []
+				})));
 			}, []);
 			(0, react.useEffect)(() => {
 				refresh();
 			}, [refresh]);
+			const suiteMarkers = (0, react.useMemo)(() => suitesByPack(suites?.rows ?? []), [suites]);
 			if (error !== void 0) return (0, react.createElement)("div", { style: baseText }, (0, react.createElement)("p", { style: {
 				color: "var(--dsw-alias-state-error-primary, crimson)",
 				whiteSpace: "pre-wrap"
@@ -950,6 +1150,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					label: t("viewPacks"),
 					id: `${NS$1}-packs`,
 					panelId: `${NS$1}-packs-panel`
+				},
+				{
+					value: "suites",
+					label: t("viewSuites"),
+					id: `${NS$1}-suites`,
+					panelId: `${NS$1}-suites-panel`
 				},
 				{
 					value: "groups",
@@ -986,6 +1192,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				resolveText: props.resolveText,
 				onSaved: refresh
 			}) : null, view === "packs" ? (0, react.createElement)(PacksView, {
+				payload,
+				suites: suiteMarkers,
+				t,
+				lang,
+				resolveText: props.resolveText,
+				onSaved: refresh
+			}) : null, view === "suites" ? (0, react.createElement)(SuitesView, {
+				lane: suites,
 				payload,
 				t,
 				lang,

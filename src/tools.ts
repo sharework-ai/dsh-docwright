@@ -7,8 +7,8 @@ import { generateDocument, getDocService, parseUpstreamArtifacts, summarizeArtif
 import { buildExtractionFile, extractionFilePath, extractableParams, processProposals, readExtractionFile, verifyExtraction, writeExtractionFile } from './extract.ts'
 import { materialAnchors, readMaterialEntries } from './materials.ts'
 import { createLlmPort } from './llm-port.ts'
-import { installPack, marketUrlOf } from './pack-manage.ts'
-import { fetchInstallPlan, searchMarket } from './market-search.ts'
+import { installPack, installSuite, marketUrlOf } from './pack-manage.ts'
+import { fetchInstallPlan, fetchSuiteInstallPlan, searchMarket } from './market-search.ts'
 import { previewParams, resolveEffectiveParams, type ExtractionView, type ParamDrift, type ParamRow } from './params.ts'
 import type { Pack } from './pack.ts'
 import { effectiveWorkspaceRoot, normalizeWindowsPath, resolveRootWithin, type SessionWorkspaceCarrier } from './paths.ts'
@@ -274,7 +274,7 @@ export function defineDocPacksTool(deps: ToolDeps) {
 export function defineMarketSearchTool(deps: ToolDeps) {
   return defineTool({
     name: 'doc_market_search',
-    description: 'Search the docwright pack market for document packs by keyword. Use it when the user asks for a document type the installed packs cannot serve (doc_packs found no fit): compose the terms from the user\'s intent — domain words and document genre ("COSMIC function point estimation", "meeting minutes", "resume") — never guessed pack names. Returns per hit: name, one-line description, version, languages, consumed upstream types. To act on a hit, install it with doc_market_install (the user confirms first; the pack is usable in this session right after) — never fabricate a local pack from a search hit.',
+    description: 'Search the docwright pack market for document packs by keyword. Use it when the user asks for a document type the installed packs cannot serve (doc_packs found no fit): compose the terms from the user\'s intent — domain words and document genre ("COSMIC function point estimation", "meeting minutes", "resume") — never guessed pack names. Returns per hit: name, one-line description, version, languages, consumed upstream types, and the suites the pack belongs to; hits matching a whole SUITE also carry a suites card (members list) — when the user wants the whole set, install it with doc_market_install { "suite": "<name>" }. To act on a hit, install it with doc_market_install (the user confirms first; the pack is usable in this session right after) — never fabricate a local pack from a search hit.',
     parameters: {
       query: { type: 'string', required: true, description: 'Free-text keywords, whitespace-separated; ALL terms must match. Compose from document genre and domain words; English matches best (descriptions are matched in en and zh)' },
       limit: { type: 'number', description: 'Max hits to return (default 20, cap 50)' },
@@ -289,27 +289,32 @@ export function defineMarketSearchTool(deps: ToolDeps) {
   })
 }
 
-/** The install half of market discovery: lands a market pack into the
- * packsDir behind the SAME confirmation grammar as doc_generate — the first
- * call (no confirm) returns a pendingConfirmation table the model presents;
- * the user's approval is the second call with confirm: true. The install
- * hot-reloads the pack map in place, so the pack is usable in THIS session
- * immediately — no restart, no new session. */
+/** The install half of market discovery: lands a market pack — or a whole
+ * market SUITE (docs/designs/pack-suites.md) — into the packsDir behind the
+ * SAME confirmation grammar as doc_generate — the first call (no confirm)
+ * returns a pendingConfirmation table the model presents; the user's approval
+ * is the second call with confirm: true. The install hot-reloads the pack map
+ * in place, so the packs are usable in THIS session immediately — no restart,
+ * no new session. */
 export function defineMarketInstallTool(deps: ToolDeps) {
   return defineTool({
     name: 'doc_market_install',
-    description: 'Install a pack from the docwright pack market into the deployment\'s packsDir. Use it when the user asks to install/add/fetch a pack by name or need ("帮我安装 cosmic-context", "install the resume pack"), and for doc_market_search hits. CONFIRMATION GATE: call without confirm first — the result is a pendingConfirmation table (pack, version, source market, target packsDir); present it to the user and only re-call with confirm: true after they approve (never self-confirm). The install verifies the tarball against the market index (sha256 + manifest name + content hash), lands atomically, and hot-reloads the pack map — doc_packs lists the pack in THIS session right after, no restart needed. Installing an already-installed pack name updates it in place.',
+    description: 'Install a pack from the docwright pack market into the deployment\'s packsDir. Use it when the user asks to install/add/fetch a pack by name or need ("帮我安装 cosmic-context", "install the resume pack"), and for doc_market_search hits. A whole SUITE installs with { "suite": "<name>" } (mutually exclusive with pack): every member pack plus their consumed upstreams lands in one confirmed call. CONFIRMATION GATE: call without confirm first — the result is a pendingConfirmation table (pack/suite, versions, source market, target packsDir); present it to the user and only re-call with confirm: true after they approve (never self-confirm). The install verifies the tarball against the market index (sha256 + manifest name + content hash), lands atomically, and hot-reloads the pack map — doc_packs lists the packs in THIS session right after, no restart needed. Installing an already-installed pack name updates it in place; members already current are skipped.',
     parameters: {
-      pack: { type: 'string', required: true, description: 'Pack name exactly as doc_market_search reported it' },
+      pack: { type: 'string', description: 'Pack name exactly as doc_market_search reported it (mutually exclusive with suite)' },
+      suite: { type: 'string', description: 'Suite name exactly as doc_market_search reported it — installs EVERY member pack plus their consumed upstreams (mutually exclusive with pack)' },
       confirm: { type: 'boolean', description: 'Set true only after the user approved the pendingConfirmation table' },
     },
     output: {
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute(args: { pack: string; confirm?: boolean }) {
+    async execute(args: { pack?: string; suite?: string; confirm?: boolean }) {
       if (deps.builtinRoot === undefined || deps.loadPacks === undefined) {
         throw new Error('doc_market_install requires the plugin wiring (builtinRoot/loadPacks); nothing was written')
+      }
+      if ((args.pack === undefined) === (args.suite === undefined)) {
+        throw new Error('doc_market_install takes exactly one of pack or suite (pass "pack": "<name>" for one pack, or "suite": "<name>" for every member pack of a suite); nothing was written')
       }
       const laneDeps = {
         packs: deps.packs as Map<string, Pack>,
@@ -318,15 +323,20 @@ export function defineMarketInstallTool(deps: ToolDeps) {
         marketUrl: marketUrlOf(deps.config),
         loadPacks: deps.loadPacks,
       }
+      const suite = args.suite
       if (args.confirm !== true) {
-        // The pending table reads the market index so the user approves a
-        // CONCRETE plan — the consumes closure, each member at its market
-        // version. An unreachable market or an absent member surfaces here,
-        // before anything is asked or written.
-        const plan = await fetchInstallPlan(laneDeps.marketUrl, args.pack)
-        const rows: string[] = plan.members.map(m => `${m.name}@${m.version}${m.requested ? ' (requested)' : ' (consumed upstream)'}`)
+        // The pending table reads the market index (and the suite detail) so
+        // the user approves a CONCRETE plan: for a pack, its consumes closure;
+        // for a suite, every member plus the upstreams members pull in —
+        // suite MEMBERS and consumed upstreams are labeled differently. An
+        // unreachable market or an absent member surfaces here, before
+        // anything is asked or written.
+        const plan = suite !== undefined
+          ? await fetchSuiteInstallPlan(laneDeps.marketUrl, suite)
+          : await fetchInstallPlan(laneDeps.marketUrl, args.pack!)
+        const rows: string[] = plan.members.map(m => `${m.name}@${m.version}${m.requested ? (suite !== undefined ? ' (suite member)' : ' (requested)') : ' (consumed upstream)'}`)
         const table: Record<string, string | string[]> = {
-          requested: args.pack,
+          ...(suite !== undefined ? { requestedSuite: suite } : { requested: args.pack! }),
           sourceMarket: laneDeps.marketUrl,
           target: deps.config.packsDir !== undefined && deps.config.packsDir.length > 0 ? deps.config.packsDir : '(no packsDir configured — set config.packsDir first)',
           installs: rows,
@@ -337,11 +347,13 @@ export function defineMarketInstallTool(deps: ToolDeps) {
           note: 'Present this table to the user; re-call with confirm: true after they approve.',
         }
       }
-      const { installed } = await installPack(laneDeps, args.pack)
+      const { installed } = suite !== undefined
+        ? await installSuite(laneDeps, suite)
+        : await installPack(laneDeps, args.pack!)
       const unchanged = installed.filter(o => o.unchanged)
       return {
         status: 'installed',
-        pack: args.pack,
+        ...(suite !== undefined ? { suite } : { pack: args.pack! }),
         installed: installed.map(o => `${o.name}@${o.version}${o.unchanged ? ' (already current)' : o.existed ? ' (updated in place)' : ''}`),
         ...(unchanged.length === installed.length ? { note: 'everything already current; nothing was downloaded' } : {}),
         sessionNote: 'the packs are usable in this session immediately (doc_packs lists them now)',

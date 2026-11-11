@@ -261,6 +261,17 @@ closes its own loop (generate → validate → repair).
   org-specific tuning of an existing type = same-name packsDir override, not
   a fork. Chain-level shared params (numbering conventions, tree depth) are
   declared once at the chain head and inherited via receipts.
+- **Suite question**: when the decomposition produced several interrelated
+  packs, answer whether a SUITE should be defined alongside them (a suite is
+  a market-side named set — one install lands every member). Judge by three
+  questions: do the packs serve ONE complete scenario? Will the user most
+  likely want all of them installed at once? Does installing only one or two
+  of them still make sense on its own? All three leaning yes → recommend
+  defining a suite with these packs as members; a consumes chain by itself is
+  NOT a suite justification (dependencies install along anyway). Present the
+  conclusion to the user explicitly in this stage's output — recommended or
+  not, with a one-sentence reason — and only put it on the publish checklist
+  after the user agrees.
 
 ### Stage 6 — Design the params
 
@@ -345,6 +356,13 @@ shape; no validation semantics.
   build), merge, README/manual section, changelog entry. packsDir lane: the
   health sheet from `pack:check` plus the real e2e observation log are the
   deliverable record.
+- Publishing: packs go to the market's review queue one by one, unchanged.
+  When Stage 5 concluded (and the user agreed) that the decomposition is a
+  suite, ALSO submit the suite form into the same review queue — name,
+  bilingual description, category, version, and the member list taken
+  directly from this decomposition's result (no tarball: the suite is a
+  form submission, not an archive). The suite goes live only after the
+  review passes.
 
 ## Final gate (every box checked)
 

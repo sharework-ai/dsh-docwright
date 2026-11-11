@@ -6,7 +6,7 @@ import { Config, type Config as DocwrightConfig } from './config.ts'
 import { mountParamsRoutes, type ConnectionLike, type WebServerLike, type WriteChannels } from './http.ts'
 import { loadPacks } from './pack-loader.ts'
 import { buildParamsPayload } from './params-rpc.ts'
-import { checkPackUpdates, deletePack, marketUrlOf, updatePack } from './pack-manage.ts'
+import { checkPackUpdates, checkSuiteStatus, deletePack, deleteSuite, marketUrlOf, updatePack, updateSuite } from './pack-manage.ts'
 import { setPackParamDefault, updateConfigViaEditor, type ConfigEditorLike } from './params-writes.ts'
 import { defineDocChainStatusTool, defineDocExtractTool, defineDocGenerateTool, defineDocPacksTool, defineDocValidateTool, defineMarketInstallTool, defineMarketSearchTool } from './tools.ts'
 
@@ -124,6 +124,11 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
         checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }, pack),
         updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack) }),
         deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks: loadPacksConfigured }, pack, opts),
+        // The suite lane (docs/designs/pack-suites.md): status read + per-suite
+        // update/delete, same packsDir, same market, same hot-reload contract.
+        suiteStatus: () => checkSuiteStatus({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }),
+        updateSuite: suite => updateSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
+        deleteSuite: (suite, opts) => deleteSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite, opts),
       },
     }
     host.effect(() => mountParamsRoutes(host.webServer, {

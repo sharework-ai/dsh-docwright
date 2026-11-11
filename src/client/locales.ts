@@ -61,6 +61,22 @@ export const en = {
   confirmDeleteBreaks: 'Confirm delete ({packs} consume it — their chains break)',
   updatedDone: 'Updated to v{version}.',
   deletedDone: 'Deleted.',
+  // Suites tab (docs/designs/pack-suites.md).
+  viewSuites: 'Suites',
+  suitesEmpty: 'The market lists no suites (or this market does not support suites). Single-pack installs are unaffected.',
+  suitesUnreachable: 'Could not reach the pack market; suite status is unavailable.',
+  suitesOf: 'Suites:',
+  suiteIncomplete: 'incomplete',
+  suiteMemberMissing: 'missing',
+  suiteUpdateBtn: 'Update suite',
+  suiteUpdateDone: 'Updated: {packs}.',
+  suiteDeleteConfirm: 'Confirm delete suite',
+  suiteDeleteColumn: 'Will delete',
+  suiteKeepColumn: 'Will keep',
+  suiteKeptBy: 'consumed by {packs}',
+  suiteForce: 'Also delete members consumed outside the suite (force)',
+  suiteDeletedDone: 'Deleted: {packs}.',
+  suiteFillHint: 'Members are missing. Ask the session: doc_market_install { "suite": "<name>" } installs the rest.',
   // Server error codes (src/coded-error.ts): what happened / why / what to do.
   'err.gateRejected': 'The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.',
   'err.crossSiteWrite': 'Write refused: the request origin does not match the deployment host (cross-site request). Operate from the dsh web UI.',
@@ -84,6 +100,7 @@ export const en = {
   'err.updateFailed': 'Pack "{pack}" update failed; the installed version is unchanged.',
   'err.absentFromMarket': 'Pack "{pack}" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.',
   'err.packInUse': 'Pack "{pack}" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it.',
+  'err.suiteLaneMissing': 'The suite lane is not wired on this deployment; nothing was written.',
 }
 
 export const zh: Record<string, string> = {
@@ -145,6 +162,21 @@ export const zh: Record<string, string> = {
   confirmDeleteBreaks: '确认删除（{packs} 消费它，删除将断链）',
   updatedDone: '已更新到 v{version}。',
   deletedDone: '已删除。',
+  viewSuites: '套件',
+  suitesEmpty: '市场没有套件（或该市场不支持套件）。单个 pack 的安装不受影响。',
+  suitesUnreachable: '无法连接 pack 市场，套件状态不可用。',
+  suitesOf: '所属套件：',
+  suiteIncomplete: '不完整',
+  suiteMemberMissing: '缺失',
+  suiteUpdateBtn: '更新套件',
+  suiteUpdateDone: '已更新：{packs}。',
+  suiteDeleteConfirm: '确认删除套件',
+  suiteDeleteColumn: '将删除',
+  suiteKeepColumn: '将保留',
+  suiteKeptBy: '被 {packs} 消费',
+  suiteForce: '同时删除被套件外 pack 消费的成员（强制）',
+  suiteDeletedDone: '已删除：{packs}。',
+  suiteFillHint: '成员未装齐。请在会话中执行 doc_market_install { "suite": "<名称>" } 补齐。',
   // 服务端错误码（src/coded-error.ts）：发生了什么 / 为什么 / 怎么办。
   'err.gateRejected': '请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。',
   'err.crossSiteWrite': '写入被拒绝：请求来源与部署主机不一致（跨站请求）。请从 dsh web 界面发起操作。',
@@ -168,6 +200,7 @@ export const zh: Record<string, string> = {
   'err.updateFailed': 'pack「{pack}」更新失败，已装版本未变。',
   'err.absentFromMarket': 'pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。',
   'err.packInUse': 'pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。',
+  'err.suiteLaneMissing': '该部署未接入套件通道，未做任何改动。',
 }
 
 export function translate(dict: Record<string, unknown>): Translate {

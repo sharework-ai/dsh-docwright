@@ -1,14 +1,17 @@
 /**
- * The Docwright params section: three views over one catalog fetch —
- * shared-param groups (the aggregation with effective-source resolution),
- * per-pack flat view, and the plugin Config form. Controls map from the
+ * The Docwright params section: four views over one catalog fetch — per-pack
+ * flat view, the suite overview (docs/designs/pack-suites.md), shared-param
+ * groups (the aggregation with effective-source resolution), and the plugin
+ * Config form. Controls map from the
  * ParamSpec type (number → numeric input, enum → select, boolean → switch,
  * object → JSON-per-value with endpoints read-only); every parameter shows
  * its author's description inline beneath the name, resolved to the active
  * locale by the host's `locale.resolveText` (LocalizedText from the RPC,
  * en-fallback semantics of src/description.ts). Writes go through the
  * plugin's own routes (src/http.ts), never the conversation; their error
- * envelopes render through the locale catalog (locales.ts renderError).
+ * envelopes render through the locale catalog (locales.ts renderError). Any
+ * change in ANY view re-fetches the whole block, so the Packs and Suites
+ * tabs can never disagree.
  *
  * Typography follows the host conversation body, not ad-hoc sizes: one
  * family and size for all running text (`--dsw-font-family` +
@@ -20,9 +23,9 @@
  */
 import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
-import { deleteManagedPack, fetchPackUpdates, fetchParams, saveConfigPatch, savePackParam, updateManagedPack } from './api.ts'
+import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSuiteStatus, saveConfigPatch, savePackParam, updateManagedPack, updateSuite } from './api.ts'
 import type { ApiError } from './api.ts'
-import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration } from './api.ts'
+import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration, UiSuiteStatus } from './api.ts'
 import { en, fill, renderError, translate, zh } from './locales.ts'
 import type { Translate } from './locales.ts'
 import { resolveLocalized } from '../description.ts'
@@ -284,6 +287,20 @@ function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 
         h(ConstraintLine, { d, t }))))
 }
 
+/** Which installed suites a pack belongs to, keyed by pack name (derived
+ * once per suites fetch; a pure display marker on the pack card). */
+function suitesByPack(rows: readonly UiSuiteStatus[]): ReadonlyMap<string, readonly string[]> {
+  const map = new Map<string, string[]>()
+  for (const suite of rows) {
+    for (const member of suite.members) {
+      const list = map.get(member.name)
+      if (list === undefined) map.set(member.name, [suite.name])
+      else if (!list.includes(suite.name)) list.push(suite.name)
+    }
+  }
+  return map
+}
+
 /** Per-pack flat view (pack-author / troubleshooting perspective). Each card
  * opens with a full-width blue-wash header band — pack identity reads as a
  * section of its own. The card is the overview: identity, description, and
@@ -291,7 +308,7 @@ function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 
  * the installed-pack list reads at a glance. Market standing is CHECK-ON-DEMAND
  * (检查更新) — never fetched on view mount, and the button only turns into
  * 更新 after a check reports a newer version. */
-function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, readonly string[]>; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { payload, t } = props
   // Market standing, fetched ONLY when a card's 检查更新 is clicked — and
   // scoped to THAT card: one click answers exactly one pack (the server
@@ -309,7 +326,7 @@ function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | '
     lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
     payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
-      resolveText: props.resolveText, onSaved: props.onSaved, installed: installedNames,
+      resolveText: props.resolveText, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(p.name) ?? [],
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
       onDone: text => { setLaneDone(text); props.onSaved(); checkOne(p.name) } })))
 }
@@ -329,6 +346,8 @@ function PackCard(props: {
   onSaved: () => void
   /** Installed pack names — a dependency outside this set renders red. */
   installed: ReadonlySet<string>
+  /** Suite names this pack belongs to (display-only marker). */
+  suites: readonly string[]
   consumers: readonly string[]
   onDone: (doneText: string) => void
 }) {
@@ -348,6 +367,9 @@ function PackCard(props: {
           key: dep,
           style: props.installed.has(dep) ? undefined : { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties,
         }, `${index > 0 ? ', ' : ''}${dep}${props.installed.has(dep) ? '' : t('missingDep')}`)))
+      : null,
+    props.suites.length > 0
+      ? h('div', { style: muted }, t('suitesOf'), props.suites.join(', '))
       : null,
     h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
@@ -437,6 +459,100 @@ function rendered_error(error: Error | undefined, lang: 'zh' | 'en'): { text: st
     ...(coded.params !== undefined ? { params: coded.params } : {}),
     ...(coded.detail !== undefined ? { detail: coded.detail } : {}),
   }, lang)
+}
+
+/** Suites-tab lane state: the suite status rows, or the unreachable note. */
+type SuitesLane = { state: 'ok' | 'unreachable'; rows: readonly UiSuiteStatus[] }
+
+/** Suites view (docs/designs/pack-suites.md): one card per market suite,
+ * each member row showing local vs market version. An empty list (the market
+ * has no suites or does not support them) and an unreachable market each
+ * render one explanatory line — never an error wall. Every action goes
+ * through the section-level refresh, so the Packs tab re-renders in sync. */
+function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+  const { lane, t } = props
+  if (lane === undefined) return null
+  if (lane.state === 'unreachable') return h('p', { style: muted }, t('suitesUnreachable'))
+  if (lane.rows.length === 0) return h('p', { style: muted }, t('suitesEmpty'))
+  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
+}
+
+/** One suite card: identity + bilingual description + the member list (each
+ * row local vs market version; a laggard is marked updatable; a member
+ * missing locally reads 缺失), then the actions: 更新套件 (one click; the
+ * server only touches outdated members) and the two-step delete whose
+ * confirm names the two columns — members that go, and members kept because
+ * packs OUTSIDE the suite consume them (force collapses the keep column). */
+function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+  const { suite, t } = props
+  const [armedDelete, setArmedDelete] = useState(false)
+  const [force, setForce] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | undefined>(undefined)
+  const [done, setDone] = useState<string | undefined>(undefined)
+  const memberSet = useMemo(() => new Set(suite.members.map(m => m.name)), [suite])
+  const outsideConsumers = useCallback((name: string) =>
+    props.packs.filter(p => !memberSet.has(p.name) && p.consumes.includes(name)).map(p => p.name),
+  [props.packs, memberSet])
+  const installed = suite.members.filter(m => m.localVersion !== undefined)
+  const deleteList = force ? installed : installed.filter(m => outsideConsumers(m.name).length === 0)
+  const keepList = force ? [] : installed.filter(m => outsideConsumers(m.name).length > 0)
+  const runUpdate = () => {
+    setBusy(true); setError(undefined)
+    void updateSuite(suite.name).then(result => {
+      setDone(fill(t('suiteUpdateDone'), { packs: result.updated.map(u => `${u.name}@${u.version}`).join(', ') || t('upToDate') }))
+      props.onSaved()
+    }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
+  }
+  const runDelete = () => {
+    setBusy(true); setError(undefined)
+    void deleteSuite(suite.name, force).then(result => {
+      setDone(fill(t('suiteDeletedDone'), { packs: result.deleted.join(', ') }))
+      setArmedDelete(false)
+      props.onSaved()
+    }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
+  }
+  const rendered = rendered_error(error, props.lang)
+  return h('div', { style: card },
+    h('div', { style: packHead },
+      h('span', { style: nameStyle }, suite.name),
+      h(Pill, {}, `v${suite.version}`),
+      suite.category.length > 0 ? h(Pill, {}, suite.category) : null,
+      suite.incomplete ? h(Pill, {}, t('suiteIncomplete')) : null,
+      suite.updateAvailable ? h(Pill, {}, t('updateBtn')) : null),
+    h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(suite.description)),
+    suite.members.map(m => h('div', { key: m.name, style: row },
+      h('span', { style: { ...nameStyle, fontWeight: 400 } }, m.name),
+      h('span', { style: m.localVersion === undefined
+        ? { color: 'var(--dsw-alias-state-error-primary, crimson)' } satisfies CSSProperties
+        : valueStyle }, m.localVersion ?? t('suiteMemberMissing')),
+      h('span', { style: muted }, m.marketVersion === undefined ? '' : `v${m.marketVersion}`),
+      m.updateAvailable ? h(Pill, {}, fill(t('updateTo'), { version: m.marketVersion ?? '' })) : null)),
+    suite.incomplete ? h('p', { style: muted }, t('suiteFillHint')) : null,
+    h('div', { style: actions },
+      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
+      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
+        armedDelete ? t('suiteDeleteConfirm') : t('deleteBtn')),
+      busy ? h('span', { style: muted }, t('saving')) : null,
+      done !== undefined && !busy ? h('span', { style: muted }, done) : null),
+    armedDelete
+      ? h('div', { style: { marginTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l4, transparent)', paddingTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' } satisfies CSSProperties },
+          h('div', { style: { flex: 1, minWidth: '180px' } },
+            h('div', { style: { ...nameStyle, marginBottom: '2px' } }, t('suiteDeleteColumn')),
+            deleteList.length === 0 ? h('div', { style: muted }, '—') : null,
+            deleteList.map(m => h('div', { key: m.name, style: valueStyle }, m.name))),
+          h('div', { style: { flex: 1, minWidth: '180px' } },
+            h('div', { style: { ...nameStyle, marginBottom: '2px' } }, t('suiteKeepColumn')),
+            keepList.length === 0 ? h('div', { style: muted }, '—') : null,
+            keepList.map(m => h('div', { key: m.name, style: valueStyle },
+              `${m.name} (${fill(t('suiteKeptBy'), { packs: outsideConsumers(m.name).join(', ') })})`))),
+          h('div', null,
+            h(Switch, { checked: force, onChange: (next: boolean) => setForce(next), label: t('suiteForce') }),
+            h('div', { style: actions },
+              h(Button, { size: 'sm', disabled: busy || deleteList.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
+              h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(false) }, t('cancel')))))
+      : null,
+    rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null)
 }
 
 /** Config form: top-level keys as rows, oscillation.* folded under Advanced. */
@@ -531,20 +647,28 @@ function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 
       error !== undefined ? h(ErrorLine, { error, lang: props.lang }) : null))
 }
 
-/** The section: one fetch, three views. */
+/** The section: one fetch cycle, four views (docs/designs/pack-suites.md). */
 export function ParamsSection(props: { lang: string; resolveText: (value: unknown) => string }) {
   const lang = props.lang === 'zh' ? 'zh' : 'en'
   const t = useMemo<Translate>(() => translate(lang === 'zh' ? zh : en), [lang])
   const [payload, setPayload] = useState<ParamsPayload | undefined>(undefined)
+  const [suites, setSuites] = useState<SuitesLane | undefined>(undefined)
   const [error, setError] = useState<Error | undefined>(undefined)
-  const [view, setView] = useState<'packs' | 'groups' | 'config'>('packs')
+  const [view, setView] = useState<'packs' | 'suites' | 'groups' | 'config'>('packs')
   const refresh = useCallback(() => {
     fetchParams().then(p => {
       setPayload(p)
       setError(undefined)
     }).catch((e: Error) => setError(e))
+    // The suite status rides the same refresh: any change in any view re-runs
+    // BOTH fetches, so the Packs and Suites tabs always read the same state.
+    // A suite-status failure is NOT a section failure — the Suites tab shows
+    // one note while the other three views keep working.
+    fetchSuiteStatus().then(rows => setSuites({ state: 'ok', rows }))
+      .catch(() => setSuites(prev => ({ state: 'unreachable', rows: prev?.rows ?? [] })))
   }, [])
   useEffect(() => { refresh() }, [refresh])
+  const suiteMarkers = useMemo(() => suitesByPack(suites?.rows ?? []), [suites])
   if (error !== undefined) {
     return h('div', { style: baseText },
       h('p', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } },
@@ -553,10 +677,11 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
       h(Button, { size: 'sm', onClick: refresh }, t('retry')))
   }
   if (payload === undefined) return h('p', { style: { ...baseText, ...muted } }, t('loading'))
-  // Packs first: the installed-pack overview is the landing view; params
-  // groups and the plugin form follow.
+  // Packs first: the installed-pack overview is the landing view; suites,
+  // params groups and the plugin form follow (docs/designs/pack-suites.md).
   const tabs = [
     { value: 'packs', label: t('viewPacks'), id: `${NS}-packs`, panelId: `${NS}-packs-panel` },
+    { value: 'suites', label: t('viewSuites'), id: `${NS}-suites`, panelId: `${NS}-suites-panel` },
     { value: 'groups', label: t('viewGroups'), id: `${NS}-groups`, panelId: `${NS}-groups-panel` },
     { value: 'config', label: t('viewConfig'), id: `${NS}-config`, panelId: `${NS}-config-panel` },
   ] as const
@@ -564,8 +689,9 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
     h('h3', { style: { margin: '0 0 4px', ...baseText, fontWeight: 600 } }, t('title')),
     h('p', { style: { ...muted, margin: '0 0 8px' } }, t('intro')),
     h('div', { style: { margin: '8px 0 12px' } },
-      h(SegmentedTabs, { items: [...tabs], value: view, onChange: v => setView(v as 'groups' | 'packs' | 'config'), label: t('title') })),
+      h(SegmentedTabs, { items: [...tabs], value: view, onChange: v => setView(v as 'groups' | 'packs' | 'suites' | 'config'), label: t('title') })),
     view === 'groups' ? h(GroupsView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
-    view === 'packs' ? h(PacksView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
+    view === 'packs' ? h(PacksView, { payload, suites: suiteMarkers, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
+    view === 'suites' ? h(SuitesView, { lane: suites, payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
     view === 'config' ? h(ConfigView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null)
 }

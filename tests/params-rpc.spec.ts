@@ -439,6 +439,61 @@ describe('POST write routes', () => {
     await param.handler(req('POST', 'https://h', 'h', JSON.stringify({ pack: 'wp' })), missing.typed as never)
     expect(missing.res.statusCode).toBe(422)
   })
+  it('routes suite bodies to the suite lane: status read, update, delete with force', async () => {
+    const { webServer, routes } = fakeServer()
+    const calls: string[] = []
+    mountParamsRoutes(webServer, {
+      payload: () => ({}),
+      writes: {
+        updateConfig: () => Promise.resolve(),
+        setPackParamDefault: () => Promise.resolve(),
+        packLane: {
+          checkUpdates: () => Promise.resolve([]),
+          updatePack: () => Promise.resolve({ version: '1' }),
+          deletePack: () => Promise.resolve(),
+          suiteStatus: () => { calls.push('status'); return Promise.resolve([{ name: 'cosmic', members: [] }]) },
+          updateSuite: suite => { calls.push(`update:${suite}`); return Promise.resolve({ updated: [{ name: 'cosmic-plan', version: '2' }], unchanged: [], missing: [] }) },
+          deleteSuite: (suite, opts) => { calls.push(`delete:${suite}:${String(opts?.force === true)}`); return Promise.resolve({ deleted: ['cosmic-plan'], kept: [] }) },
+        },
+      },
+    })
+    expect(routes.map(r => r.path)).toContain('/api/docwright/suites')
+    const status = routes.find(r => r.path === '/api/docwright/suites')!
+    const resStatus = fakeRes()
+    await status.handler(req('GET'), resStatus.typed as never)
+    expect(resStatus.res.statusCode).toBe(200)
+    expect(JSON.parse(resStatus.res.body).suites).toEqual([{ name: 'cosmic', members: [] }])
+    const update = routes.find(r => r.path === '/api/docwright/suite-update')!
+    const resUpdate = fakeRes()
+    await update.handler(req('POST', 'https://h', 'h', JSON.stringify({ suite: 'cosmic' })), resUpdate.typed as never)
+    expect(resUpdate.res.statusCode).toBe(200)
+    expect(JSON.parse(resUpdate.res.body)).toMatchObject({ ok: true, updated: [{ name: 'cosmic-plan', version: '2' }] })
+    const del = routes.find(r => r.path === '/api/docwright/suite-delete')!
+    const resDelete = fakeRes()
+    await del.handler(req('POST', 'https://h', 'h', JSON.stringify({ suite: 'cosmic', force: true })), resDelete.typed as never)
+    expect(resDelete.res.statusCode).toBe(200)
+    expect(JSON.parse(resDelete.res.body)).toMatchObject({ ok: true, deleted: ['cosmic-plan'] })
+    expect(calls).toEqual(['status', 'update:cosmic', 'delete:cosmic:true'])
+    // A coded lane failure keeps the 422 envelope contract.
+    mountParamsRoutes(webServer, {
+      payload: () => ({}),
+      writes: {
+        updateConfig: () => Promise.resolve(),
+        setPackParamDefault: () => Promise.resolve(),
+        packLane: {
+          checkUpdates: () => Promise.resolve([]),
+          updatePack: () => Promise.resolve({ version: '1' }),
+          deletePack: () => Promise.resolve(),
+          updateSuite: () => Promise.reject(new CodedError('absentFromMarket', 'suite "x" is not offered', { params: { pack: 'x' } })),
+        },
+      },
+    })
+    const failing = routes.filter(r => r.path === '/api/docwright/suite-update').at(-1)!
+    const resFail = fakeRes()
+    await failing.handler(req('POST', 'https://h', 'h', JSON.stringify({ suite: 'x' })), resFail.typed as never)
+    expect(resFail.res.statusCode).toBe(422)
+    expect(JSON.parse(resFail.res.body).code).toBe('absentFromMarket')
+  })
 })
 
 describe('registerTools wiring: the pack lane', () => {
@@ -468,7 +523,7 @@ describe('registerTools wiring: the pack lane', () => {
     }
     const laneConfig: Record<string, unknown> = { workspaceRoot: '/w', packsDir: dir, marketUrl: 'http://127.0.0.1:1' }
     await registerTools(ctx as never, laneConfig as never, packsRoot)
-    const paths = ['params', 'config', 'pack-param', 'pack-updates', 'pack-update', 'pack-delete']
+    const paths = ['pack-updates', 'pack-update', 'pack-delete', 'suites', 'suite-update', 'suite-delete']
     const byPath = (suffix: string) => handlers[handlers.length - 6 + paths.findIndex(p => suffix.endsWith(p))]!
     const fakeRes = () => { const res = { statusCode: 0, body: '', writeHead(s: number) { res.statusCode = s }, end(b: string) { res.body = b } }; return res }
     const req = (method: string, body?: unknown) => ({ method, headers: { origin: 'https://h', host: 'h' }, async *[Symbol.asyncIterator]() { if (body !== undefined) yield Buffer.from(JSON.stringify(body)) } })
@@ -510,6 +565,22 @@ describe('registerTools wiring: the pack lane', () => {
     await byPath('pack-update')(req('POST', { pack: 'gw' }), resUpdate)
     expect(resUpdate.statusCode).toBe(200)
     expect(JSON.parse(resUpdate.body)).toMatchObject({ ok: true, version: '1' })
+
+    // The suite lane rides the same wiring: this fake market answers /api/suites
+    // with garbage (a market older than suites would 404 → []), so the read
+    // degrades to the coded 200 envelope — never error UI.
+    const resSuites = fakeRes()
+    await byPath('suites')(req('GET'), resSuites)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(resSuites.statusCode).toBe(200)
+    expect(JSON.parse(resSuites.body).code).toBe('marketUnreachable')
+    const resSuiteUpdate = fakeRes()
+    await byPath('suite-update')(req('POST', { suite: 'gw' }), resSuiteUpdate)
+    expect(resSuiteUpdate.statusCode).toBe(422)
+    expect(JSON.parse(resSuiteUpdate.body).code).toBe('marketUnreachable')
+    const resSuiteDelete = fakeRes()
+    await byPath('suite-delete')(req('POST', { suite: 'gw' }), resSuiteDelete)
+    expect(resSuiteDelete.statusCode).toBe(422)
     market.close()
 
     // Delete needs no market: the directory goes, the reload succeeds.
@@ -542,10 +613,10 @@ describe('registerTools wiring: lane gates and bad bodies', () => {
     await registerTools(ctx as never, { workspaceRoot: '/w', packsDir: '/tmp/docwright-lane-gate' } as never, packsRoot)
     const fakeRes = () => { const res = { statusCode: 0, body: '', writeHead(s: number) { res.statusCode = s }, end(b: string) { res.body = b } }; return res }
     const req = (method: string, body?: unknown) => ({ method, headers: { origin: 'https://h', host: 'h' }, async *[Symbol.asyncIterator]() { if (body !== undefined) yield Buffer.from(JSON.stringify(body)) } })
-    const lane = handlers.slice(handlers.length - 3)
+    const lane = handlers.slice(handlers.length - 6)
     const [updates, update, del] = lane
 
-    // Host gate on the read (updates) and on the delete write.
+    // Host gate on the read (updates, suite status) and on the delete writes.
     const resUpdates = fakeRes()
     await updates!(req('GET'), resUpdates)
     expect(resUpdates.statusCode).toBe(401)
@@ -553,9 +624,16 @@ describe('registerTools wiring: lane gates and bad bodies', () => {
     const resDelete = fakeRes()
     await del!(req('POST', { pack: 'x' }), resDelete)
     expect(resDelete.statusCode).toBe(401)
+    const resSuiteStatus = fakeRes()
+    await lane[3]!(req('GET'), resSuiteStatus)
+    expect(resSuiteStatus.statusCode).toBe(401)
+    const resSuiteDelete = fakeRes()
+    await lane[5]!(req('POST', { suite: 'x' }), resSuiteDelete)
+    expect(resSuiteDelete.statusCode).toBe(401)
 
     // A missing pack name in the write body names the shape (422) — on a
-    // NON-gated mount, since the gate outranks body validation.
+    // NON-gated mount, since the gate outranks body validation. The suite
+    // writes demand a non-empty suite name the same way.
     const plainHandlers: Array<(req: unknown, res: unknown) => Promise<void> | void> = []
     const plainCtx = {
       tools: { register: () => {} },
@@ -564,8 +642,24 @@ describe('registerTools wiring: lane gates and bad bodies', () => {
     }
     await registerTools(plainCtx as never, { workspaceRoot: '/w', packsDir: '/tmp/docwright-lane-gate' } as never, packsRoot)
     const resUpdate = fakeRes()
-    await plainHandlers[plainHandlers.length - 2]!(req('POST', {}), resUpdate)
+    await plainHandlers[plainHandlers.length - 5]!(req('POST', {}), resUpdate)
     expect(resUpdate.statusCode).toBe(422)
     expect(JSON.parse(resUpdate.body).code).toBe('invalidParamBody')
+    const resSuiteUpdate = fakeRes()
+    await plainHandlers[plainHandlers.length - 2]!(req('POST', {}), resSuiteUpdate)
+    expect(resSuiteUpdate.statusCode).toBe(422)
+    expect(JSON.parse(resSuiteUpdate.body).code).toBe('invalidParamBody')
+    // A packLane without the suite functions: the status read answers an
+    // empty list rather than an error (deployment-level graceful degrade).
+    const { mountParamsRoutes } = await import('../src/http.ts')
+    const bareHandlers: Array<(req: unknown, res: unknown) => Promise<void> | void> = []
+    mountParamsRoutes({ register: (r: { handler: (req: unknown, res: unknown) => Promise<void> | void }) => { bareHandlers.push(r.handler); return () => {} } } as never, {
+      payload: () => ({}),
+      writes: { updateConfig: async () => {}, setPackParamDefault: async () => {}, packLane: { checkUpdates: async () => [], updatePack: async () => ({ version: '1' }), deletePack: async () => {} } },
+    })
+    const resEmpty = fakeRes()
+    await bareHandlers[bareHandlers.length - 3]!(req('GET'), resEmpty)
+    expect(resEmpty.statusCode).toBe(200)
+    expect(JSON.parse(resEmpty.body)).toEqual({ suites: [] })
   })
 })
