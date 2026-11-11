@@ -1,5 +1,3 @@
-![docwright](/assets/images/logo.svg)
-
 # Docwright 文档生成插件
 
 pack 定义一种文档生成场景（或其中的一个环节），它包括了 JSON Schema、参数定义、校验规则、生成提示等信息，多个 pack 可串接成多阶段场景。生成过程中的参数通常经用户确认后才开始使用，每份文档附带可复验的校验回执。完整说明见 npm 或 GitHub 上的 [README 文档](https://github.com/sharework-ai/dsh-docwright)。
