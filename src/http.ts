@@ -213,7 +213,7 @@ export function mountParamsRoutes(
     // a coded envelope the UI renders inline, so a poll never spins error UI.
     disposePackUpdate = post('/api/docwright/pack-update', async body => {
       const pack = packName(body)
-      const version = await lane.updatePack(pack)
+      const { version } = await lane.updatePack(pack)
       return { status: 200, payload: { ok: true, version } }
     })
     disposePackDelete = post('/api/docwright/pack-delete', async body => {

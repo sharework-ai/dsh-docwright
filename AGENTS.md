@@ -6,7 +6,7 @@ docwright is a deepseek-harness (dsh) plugin: closed-loop document generation wi
 
 ```
 src/        plugin code (entry: index.ts; loop.ts is the core repair loop)
-packs/      built-in packs (cosmic-plan/req/func/tech; hybrid JSON rules + JS functions)
+packs/      the COSMIC pack source (authoring + verification fixture; NOT shipped in the npm package — packs are market-distributed, the plugin boots with zero builtin packs)
 examples/   runnable examples — packsdir/task-card is a NON-builtin pack consuming the builtin cosmic chain (see below)
 tests/      vitest; coverage gate 100% lines/functions/statements, 80% branches
 docs/       design doc + test plan

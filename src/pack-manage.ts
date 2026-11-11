@@ -21,6 +21,7 @@ import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { cp, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import type { Dirent } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { CodedError } from './coded-error.ts'
@@ -248,6 +249,21 @@ export async function updatePack(deps: {
   if (entry === undefined) {
     throw new CodedError('absentFromMarket', `pack "${name}" is not listed on the market at ${deps.marketUrl}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly`, { params: { pack: name, url: deps.marketUrl } })
   }
+  const packsDir = deps.packsDir
+  return swapFromMarket({ ...deps, packsDir }, name, entry, dest)
+}
+
+/** The shared download → verify → stage → swap → reload pipeline behind
+ * updatePack and installPack (the params-writes hot-swap contract: the SAME
+ * Map instance the tools hold, so the change is visible mid-session). */
+async function swapFromMarket(deps: {
+  readonly packs: Map<string, Pack>
+  readonly builtinRoot: string
+  readonly packsDir: string
+  readonly marketUrl: string
+  readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+  readonly fetchImpl?: typeof fetch
+}, name: string, entry: MarketIndexEntry, dest: string): Promise<string> {
   const bytes = await fetchTarball(deps.marketUrl, entry, deps.fetchImpl ?? fetch)
   const staging = join(deps.packsDir, `.${name}.staging`)
   const tmpRoot = await mkdtemp(join(tmpdir(), `docwright-update-${name}-`))
@@ -283,6 +299,60 @@ export async function updatePack(deps: {
   }
   await reloadPacksInPlace(deps)
   return installedVersion
+}
+
+/**
+ * Install one pack from the market into the packsDir (the doc_market_install
+ * lane): same verified pipeline as update; lands at packsDir/<name>, or —
+ * when a directory declaring that manifest name already exists — swaps that
+ * directory in place (install ≡ update for an existing pack). The caller owns
+ * the user-confirmation gate; this function executes.
+ */
+export async function installPack(deps: {
+  readonly packs: Map<string, Pack>
+  readonly builtinRoot: string
+  readonly packsDir?: string | undefined
+  readonly marketUrl: string
+  readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+  readonly fetchImpl?: typeof fetch
+}, name: string): Promise<{ version: string; dest: string; existed: boolean }> {
+  if (deps.packsDir === undefined || deps.packsDir.length === 0) {
+    throw new CodedError('packNotManaged', `pack "${name}" cannot be installed: no packsDir is configured (set config.packsDir — packs install there and join the builtin merge)`, { params: { pack: name } })
+  }
+  let index: MarketIndex
+  try {
+    const response = await (deps.fetchImpl ?? fetch)(`${deps.marketUrl}/api/index`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    index = await response.json() as MarketIndex
+  } catch (error) {
+    throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
+  }
+  const entry = index.packs.find(e => e.name === name)
+  if (entry === undefined) {
+    throw new CodedError('absentFromMarket', `pack "${name}" is not listed on the market at ${deps.marketUrl}, so there is nothing to install; nothing was written`, { params: { pack: name, url: deps.marketUrl } })
+  }
+  const existing = await findManagedPackDir(deps.packsDir, name)
+  const dest = existing ?? join(deps.packsDir, name)
+  const version = await swapFromMarket({ ...deps, packsDir: deps.packsDir }, name, entry, dest)
+  return { version, dest, existed: existing !== undefined }
+}
+
+/** Manifest-name scan without the throw (install's existing-vs-new branch).
+ * A packsDir that does not exist yet simply has no existing pack — the swap
+ * stage creates it (staging copy + rename). */
+async function findManagedPackDir(packsDir: string, name: string): Promise<string | undefined> {
+  let entries: Dirent[]
+  try {
+    entries = await readdir(packsDir, { withFileTypes: true })
+  } catch {
+    return undefined
+  }
+  for (const dirent of entries) {
+    if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+    const dir = join(packsDir, dirent.name)
+    if (await manifestNameOf(dir) === name) return dir
+  }
+  return undefined
 }
 
 /** Hot-swap the pack map in place (params-writes contract: the SAME Map instance the tools hold). */

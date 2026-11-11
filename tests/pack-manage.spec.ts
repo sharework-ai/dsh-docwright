@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkPackUpdates, compareVersions, deletePack, dirHash, resolveManagedPackDir, updatePack } from '../src/pack-manage.ts'
+import { checkPackUpdates, compareVersions, deletePack, dirHash, installPack, resolveManagedPackDir, updatePack } from '../src/pack-manage.ts'
 import { loadPacks } from '../src/pack-loader.ts'
 import type { Pack } from '../src/pack.ts'
 
@@ -254,5 +254,185 @@ describe('deletePack', () => {
     marketStack.push(fx)
     await expect(deletePack({ ...fx.deps, packsDir: undefined }, 'ext')).rejects.toThrow(/no packsDir is configured/)
     await expect(deletePack(fx.deps, 'ghost')).rejects.toThrow(/not managed here/)
+  })
+})
+
+describe('updatePack failure branches (integrity ladder coverage)', () => {
+  it('maps tarball fetch refusal and download failure to their codes', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'ext', '2')
+    const market = await marketServer([{ name: 'ext', version: '2', dir: newer }])
+    // Refused connection -> marketUnreachable.
+    fx.deps.marketUrl = 'http://127.0.0.1:1'
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/could not reach the pack market/)
+    // Index ok but tarball 404s -> updateFailed with the status in the detail.
+    const genuineFetch = fetch
+    fx.deps.fetchImpl = async (input, init) => {
+      const url = String(input)
+      if (url.endsWith('/api/index')) return genuineFetch(`${market.url}/api/index`, { headers: { accept: 'application/json' }, ...(init ?? {}) })
+      return new Response('gone', { status: 404 })
+    }
+    fx.deps.marketUrl = market.url
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/tarball download failed \(HTTP 404\)/)
+  })
+
+  it('maps archive-shape failures to integrityFailed', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'ext', '2')
+    const market = await marketServer([{ name: 'ext', version: '2', dir: newer }])
+    const lie = (packs: unknown[]) => {
+      const raw = createServer((request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ ok: true, packs }))
+      })
+      marketStack.push({ dispose: async () => raw.close() })
+      return new Promise<string>(resolve => { raw.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(raw.address() as { port: number }).port}`)) })
+    }
+    // The fetch stub serves a lying index plus EXACT tarball bytes we control,
+    // so each integrity branch can be exercised independently.
+    const withIndex = (packs: unknown[], tarball: Buffer) => {
+      fx.deps.fetchImpl = async input => {
+        const target = String(input)
+        if (target.endsWith('/api/index')) return new Response(JSON.stringify({ ok: true, packs }), { headers: { 'content-type': 'application/json' } })
+        return new Response(tarball, { headers: { 'content-type': 'application/gzip' } })
+      }
+    }
+    const shaOf = (b: Buffer) => `sha256:${createHash('sha256').update(b).digest('hex')}`
+    const tarballBytes = market.tarballs.get('/tarballs/ext-2.tgz')!
+    const baseEntry = { name: 'ext', version: '2', tarball: '/tarballs/ext-2.tgz', tarballSha256: shaOf(tarballBytes), contentHash: 'sha256:x' }
+    await withIndex([baseEntry], tarballBytes)
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/content hash mismatch/)
+    // Unparseable manifest + name mismatch + no-single-dir via raw tarballs.
+    const rawTar = async (build: (dir: string) => Promise<void>): Promise<Buffer> => {
+      const parent = await mkdtemp(join(tmpdir(), 'docwright-rawtar-'))
+      const content = join(parent, 'content')
+      await mkdir(content, { recursive: true })
+      await build(content)
+      await execFileAsync('tar', ['-czf', join(parent, 'a.tgz'), '-C', content, '.'])
+      const bytes = await readFile(join(parent, 'a.tgz'))
+      await rm(parent, { recursive: true, force: true })
+      return bytes
+    }
+    const sha = (b: Buffer) => `sha256:${createHash('sha256').update(b).digest('hex')}`
+    // 1. no manifest anywhere (empty dir archive)
+    let bytes = await rawTar(async dir => { await mkdir(join(dir, 'a'), { recursive: true }); await mkdir(join(dir, 'b'), { recursive: true }) })
+    await withIndex([{ ...baseEntry, tarballSha256: shaOf(bytes), contentHash: 'sha256:x' }], bytes)
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/no single pack directory/)
+    // 2. single dir without manifest
+    bytes = await rawTar(async dir => { await mkdir(join(dir, 'only'), { recursive: true }) })
+    await withIndex([{ ...baseEntry, tarballSha256: shaOf(bytes), contentHash: 'sha256:x' }], bytes)
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/contains no manifest\.json/)
+    // 3. manifest not parseable
+    bytes = await rawTar(async dir => { await mkdir(join(dir, 'p'), { recursive: true }); await writeFile(join(dir, 'p', 'manifest.json'), 'not-json', 'utf8') })
+    await withIndex([{ ...baseEntry, tarballSha256: shaOf(bytes), contentHash: 'sha256:x' }], bytes)
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/manifest is not valid JSON/)
+    // 4b. not-a-gzip archive -> extraction failure
+    bytes = Buffer.from('definitely-not-a-gzip-archive')
+    await withIndex([{ ...baseEntry, tarballSha256: shaOf(bytes), contentHash: 'sha256:x' }], bytes)
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/tarball extraction failed/)
+    // 4. manifest name mismatch
+    bytes = await rawTar(async dir => {
+      await mkdir(join(dir, 'p'), { recursive: true })
+      await writeFile(join(dir, 'p', 'manifest.json'), JSON.stringify({ name: 'other', version: '2' }), 'utf8')
+    })
+    await withIndex([{ ...baseEntry, tarballSha256: shaOf(bytes), contentHash: 'sha256:x' }], bytes)
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/manifest declares "other"/)
+  })
+
+  it('distinguishes the tarball-stage failures: network refusal vs HTTP error', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'ext', '2')
+    const market = await marketServer([{ name: 'ext', version: '2', dir: newer }])
+    fx.deps.marketUrl = market.url
+    // Index answers, tarball fetch refuses: fetchTarball's own catch.
+    fx.deps.fetchImpl = async input => {
+      if (String(input).endsWith('/api/index')) return new Response(JSON.stringify({ packs: [{ name: 'ext', version: '2', tarball: '/tarballs/ext-2.tgz', tarballSha256: 'sha256:x', contentHash: 'sha256:x' }] }), { headers: { 'content-type': 'application/json' } })
+      throw new Error('ECONNRESET')
+    }
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/could not fetch the ext tarball.*nothing was written/)
+    // Tarball answers with an HTTP error: the updateFailed branch.
+    fx.deps.fetchImpl = async input => {
+      if (String(input).endsWith('/api/index')) return new Response(JSON.stringify({ packs: [{ name: 'ext', version: '2', tarball: '/tarballs/ext-2.tgz', tarballSha256: 'sha256:x', contentHash: 'sha256:x' }] }), { headers: { 'content-type': 'application/json' } })
+      return new Response('nope', { status: 503 })
+    }
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/tarball download failed \(HTTP 503\)/)
+  })
+
+  it('compares non-numeric segments lexically', async () => {
+    expect(compareVersions('1.2.alpha', '1.2.beta')).toBeLessThan(0)
+    expect(compareVersions('1.2.beta', '1.2.alpha')).toBeGreaterThan(0)
+    expect(compareVersions('1.2.same', '1.2.same')).toBe(0)
+  })
+})
+
+describe('installPack', () => {
+  it('lands a new pack at packsDir/<name> and hot-reloads the SAME map (usable mid-session)', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const source = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'fresh', '3')
+    const market = await marketServer([{ name: 'fresh', version: '3', dir: source }])
+    fx.deps.marketUrl = market.url
+    const packsRef = fx.deps.packs
+    const out = await installPack(fx.deps, 'fresh')
+    expect(out).toMatchObject({ version: '3', dest: join(fx.packsDir, 'fresh'), existed: false })
+    expect(fx.deps.packs).toBe(packsRef)
+    expect(fx.deps.packs.get('fresh')?.manifest.version).toBe('3')
+    expect(fx.deps.packs.has('ext')).toBe(true)
+  })
+
+  it('treats an already-installed name as an in-place update', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'ext', '4')
+    const market = await marketServer([{ name: 'ext', version: '4', dir: newer }])
+    fx.deps.marketUrl = market.url
+    const out = await installPack(fx.deps, 'ext')
+    expect(out.existed).toBe(true)
+    expect(fx.deps.packs.get('ext')?.manifest.version).toBe('4')
+  })
+
+  it('refuses without a packsDir and when the market does not list the pack', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const market = await marketServer([])
+    fx.deps.marketUrl = market.url
+    await expect(installPack({ ...fx.deps, packsDir: undefined }, 'ext')).rejects.toThrow(/no packsDir is configured/)
+    await expect(installPack(fx.deps, 'ext')).rejects.toThrow(/not listed on the market/)
+    await expect(installPack(fx.deps, 'ghost')).rejects.toThrow(/not listed on the market/)
+  })
+})
+
+describe('installPack edge coverage', () => {
+  it('creates a missing packsDir on install and reports market-unreachable distinctly', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const { mkdtemp: mkTmp, rm } = await import('node:fs/promises')
+    const fresh = await mkTmp(join(tmpdir(), 'docwright-install-fresh-'))
+    await rm(fresh, { recursive: true, force: true }) // the dir does not exist yet
+    const source = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-market-')), 'solo', '1')
+    const market = await marketServer([{ name: 'solo', version: '1', dir: source }])
+    fx.deps.marketUrl = market.url
+    const out = await installPack({ ...fx.deps, packsDir: fresh }, 'solo')
+    expect(out.existed).toBe(false)
+    expect(fx.deps.packs.get('solo')?.manifest.version).toBe('1')
+    await rm(fresh, { recursive: true, force: true })
+    // Dead market on the install lane: marketUnreachable, not absentFromMarket.
+    fx.deps.marketUrl = 'http://127.0.0.1:1'
+    await expect(installPack(fx.deps, 'ext')).rejects.toThrow(/could not reach the pack market/)
+  })
+
+  it('skips unparseable and dot directories during the manifest scan', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    await mkdir(join(fx.packsDir, 'junk'), { recursive: true })
+    await writeFile(join(fx.packsDir, 'junk', 'manifest.json'), 'not-json', 'utf8')
+    await mkdir(join(fx.packsDir, '.hidden'), { recursive: true })
+    // 'ext' still resolves; junk/.hidden never abort the scan.
+    expect(await resolveManagedPackDir(fx.packsDir, 'ext')).toBe(join(fx.packsDir, 'ext'))
+    await expect(resolveManagedPackDir(fx.packsDir, 'junk')).rejects.toThrow(/not managed here/)
   })
 })

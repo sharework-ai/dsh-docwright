@@ -7,7 +7,7 @@ import { loadPacks } from './pack-loader.ts'
 import { buildParamsPayload } from './params-rpc.ts'
 import { checkPackUpdates, deletePack, marketUrlOf, updatePack } from './pack-manage.ts'
 import { setPackParamDefault, updateConfigViaEditor, type ConfigEditorLike } from './params-writes.ts'
-import { defineDocChainStatusTool, defineDocExtractTool, defineDocGenerateTool, defineDocPacksTool, defineDocValidateTool } from './tools.ts'
+import { defineDocChainStatusTool, defineDocExtractTool, defineDocGenerateTool, defineDocPacksTool, defineDocValidateTool, defineMarketInstallTool, defineMarketSearchTool } from './tools.ts'
 
 /**
  * docwright — closed-loop document generation for deepseek-harness.
@@ -47,22 +47,29 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
   // Mutable copy: the params-UI write channel hot-swaps THIS instance in
   // place (clear + refill) so the tools and the RPC payload see a new pack
   // manifest default without a restart; Map satisfies every ReadonlyMap dep.
+  // Zero installed packs is a legal state since the cosmic packs moved to
+  // the market: the plugin loads, doc_packs lists nothing, and (with
+  // marketSearch on) the discovery layer points at the market.
   const packs = new Map(await loadPacks(builtinRoot, { extra: config.packsDir === undefined || config.packsDir.length === 0 ? undefined : [config.packsDir] }))
-  if (packs.size === 0) {
-    throw new Error(`docwright: no packs found under ${builtinRoot}`)
-  }
   if (config.defaultLanguage !== undefined && config.defaultLanguage.length > 0) {
     const missing = [...packs.values()].filter(p => !p.manifest.languages.includes(config.defaultLanguage ?? ''))
     if (missing.length > 0) {
       throw new Error(`docwright: defaultLanguage "${config.defaultLanguage}" missing from packs: ${missing.map(p => p.manifest.name).join(', ')} (available per pack: ${[...packs.values()].map(p => `${p.manifest.name}=[${p.manifest.languages.join(',')}]`).join(' ')})`)
     }
   }
-  const deps = { packs, config, ctx }
+  const deps = { packs, config, ctx, builtinRoot, loadPacks }
   ctx.tools.register(defineDocPacksTool(deps))
   ctx.tools.register(defineDocGenerateTool(deps))
   ctx.tools.register(defineDocExtractTool(deps))
   ctx.tools.register(defineDocValidateTool(deps))
   ctx.tools.register(defineDocChainStatusTool(deps))
+  // Layer-3 capability discovery: the market-search tool exists only when
+  // the deployment enables it (default on); its absence is the off signal —
+  // no copy changes at runtime.
+  if (config.marketSearch !== false) {
+    ctx.tools.register(defineMarketSearchTool(deps))
+    ctx.tools.register(defineMarketInstallTool(deps))
+  }
   // Pack-authoring skill (docs/designs/pack-authoring.md): the model face
   // teaches authoring, not only consuming. The guide is read eagerly — a
   // broken package fails loud even on hosts where the skill stays dormant.
