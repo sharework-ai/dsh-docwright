@@ -439,7 +439,7 @@ describe('POST write routes', () => {
     await param.handler(req('POST', 'https://h', 'h', JSON.stringify({ pack: 'wp' })), missing.typed as never)
     expect(missing.res.statusCode).toBe(422)
   })
-  it('routes suite bodies to the suite lane: status read, update, delete with force', async () => {
+  it('routes suite bodies to the suite lane: status read, update, delete', async () => {
     const { webServer, routes } = fakeServer()
     const calls: string[] = []
     mountParamsRoutes(webServer, {
@@ -453,7 +453,7 @@ describe('POST write routes', () => {
           deletePack: () => Promise.resolve(),
           suiteStatus: () => { calls.push('status'); return Promise.resolve([{ name: 'cosmic', members: [] }]) },
           updateSuite: suite => { calls.push(`update:${suite}`); return Promise.resolve({ updated: [{ name: 'cosmic-plan', version: '2' }], unchanged: [], missing: [] }) },
-          deleteSuite: (suite, opts) => { calls.push(`delete:${suite}:${String(opts?.force === true)}`); return Promise.resolve({ deleted: ['cosmic-plan'], kept: [] }) },
+          deleteSuite: suite => { calls.push(`delete:${suite}`); return Promise.resolve({ deleted: ['cosmic-plan'] }) },
         },
       },
     })
@@ -470,10 +470,10 @@ describe('POST write routes', () => {
     expect(JSON.parse(resUpdate.res.body)).toMatchObject({ ok: true, updated: [{ name: 'cosmic-plan', version: '2' }] })
     const del = routes.find(r => r.path === '/api/docwright/suite-delete')!
     const resDelete = fakeRes()
-    await del.handler(req('POST', 'https://h', 'h', JSON.stringify({ suite: 'cosmic', force: true })), resDelete.typed as never)
+    await del.handler(req('POST', 'https://h', 'h', JSON.stringify({ suite: 'cosmic' })), resDelete.typed as never)
     expect(resDelete.res.statusCode).toBe(200)
     expect(JSON.parse(resDelete.res.body)).toMatchObject({ ok: true, deleted: ['cosmic-plan'] })
-    expect(calls).toEqual(['status', 'update:cosmic', 'delete:cosmic:true'])
+    expect(calls).toEqual(['status', 'update:cosmic', 'delete:cosmic'])
     // A coded lane failure keeps the 422 envelope contract.
     mountParamsRoutes(webServer, {
       payload: () => ({}),

@@ -190,12 +190,12 @@ export async function updateSuite(suite: string): Promise<{ updated: readonly { 
   }))
 }
 
-/** Delete a suite's installed members. Members consumed by packs outside the
- * suite are kept (their consumers are named in the result) unless `force`. */
-export async function deleteSuite(suite: string, force = false): Promise<{ deleted: readonly string[]; kept: readonly { name: string; consumers: readonly string[] }[] }> {
+/** Delete a suite's installed members — all of them; suite members are
+ * consumed inside their suite by design, so there is no keep/force split. */
+export async function deleteSuite(suite: string): Promise<{ deleted: readonly string[] }> {
   return parse(await fetch('/api/docwright/suite-delete', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ suite, force }),
+    body: JSON.stringify({ suite }),
   }))
 }

@@ -867,10 +867,12 @@ describe('updateSuite', () => {
 })
 
 describe('deleteSuite', () => {
-  it('deletes installed members, keeps the ones packs outside the suite consume, and force removes those too', async () => {
+  it('deletes EVERY installed member, even one consumed by a pack outside the suite', async () => {
     const fx = await managedFixture()
     marketStack.push(fx)
-    // packsDir: a and b are the suite; c (outside) consumes a.
+    // packsDir: a and b are the suite; c (outside) consumes a — a still goes:
+    // members are consumed inside their suite by design, so there is no
+    // keep/force split. c keeps loading and fails loud on its next generation.
     await packFixtureConsuming(fx.packsDir, 'a', '1', [])
     await packFixtureConsuming(fx.packsDir, 'b', '1', [])
     await packFixtureConsuming(fx.packsDir, 'c', '1', ['a'])
@@ -879,17 +881,14 @@ describe('deleteSuite', () => {
     for (const [name, pack] of reloaded) fx.packs.set(name, pack)
     const market = await suiteMarketServer([], [{ name: 'pair', version: '1', members: ['a', 'b', 'never-installed'] }])
     marketStack.push(market)
-    const kept = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')
-    expect(kept.deleted).toEqual(['b'])
-    expect(kept.kept).toEqual([{ name: 'a', consumers: ['c'] }])
-    await expect(readdir(join(fx.packsDir, 'a'))).resolves.toBeTruthy()
-    await expect(readdir(join(fx.packsDir, 'b'))).rejects.toThrow()
-    // The forced pass only sees 'a' again: 'b' is already gone, so the unit
-    // is "installed members" — retrying a delete never double-deletes.
-    const forced = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair', { force: true })
-    expect(forced.deleted).toEqual(['a'])
-    expect(forced.kept).toEqual([])
+    const result = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')
+    expect([...result.deleted].sort()).toEqual(['a', 'b'])
     await expect(readdir(join(fx.packsDir, 'a'))).rejects.toThrow()
+    await expect(readdir(join(fx.packsDir, 'b'))).rejects.toThrow()
+    await expect(readdir(join(fx.packsDir, 'c'))).resolves.toBeTruthy()
+    // Retrying never double-deletes: the unit is "installed members".
+    const again = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')
+    expect(again.deleted).toEqual([])
   })
 })
 

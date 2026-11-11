@@ -827,28 +827,22 @@ export async function deleteSuite(deps: {
   readonly marketUrl: string
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
   readonly fetchImpl?: typeof fetch
-}, suite: string, opts: { force?: boolean } = {}): Promise<{ deleted: readonly string[]; kept: readonly { name: string; consumers: readonly string[] }[] }> {
+}, suite: string): Promise<{ deleted: readonly string[] }> {
   const detail = await fetchSuiteDetail(deps.marketUrl, suite, deps.fetchImpl ?? fetch)
   if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
-  const memberSet = new Set(detail.members)
-  const consumersOf = (name: string): string[] => [...deps.packs.values()]
-    .filter(p => p.manifest.name !== name && !memberSet.has(p.manifest.name) && p.manifest.consumes.includes(name))
-    .map(p => p.manifest.name).sort()
+  // EVERY installed member goes — no keep/force split. Suite members are
+  // consumers INSIDE their suite by design; a member that something outside
+  // the suite consumes is a modeling smell, and the downstream pack keeps
+  // loading and fails loud on its next generation.
   const deleted: string[] = []
-  const kept: { name: string; consumers: readonly string[] }[] = []
   for (const member of detail.members) {
     const installed = deps.packs.has(member) && await findManagedPackDir(deps.packsDir ?? '', member) !== undefined
     if (!installed) continue
-    const consumers = consumersOf(member)
-    if (consumers.length > 0 && opts.force !== true) {
-      kept.push({ name: member, consumers })
-      continue
-    }
     await deletePack(deps, member, { force: true, bypassSuiteGuard: true })
     deleted.push(member)
   }
   await recordSuiteRemoved(deps.packsDir, detail.name)
-  return { deleted, kept }
+  return { deleted }
 }
 
 /** Per-member standing of one suite against the local packsDir and the

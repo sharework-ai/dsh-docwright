@@ -522,17 +522,10 @@ function memberText(m: { name: string; localVersion?: string; marketVersion?: st
 function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; onSaved: () => void }) {
   const { suite, t } = props
   const [armedDelete, setArmedDelete] = useState(false)
-  const [force, setForce] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | undefined>(undefined)
   const [done, setDone] = useState<string | undefined>(undefined)
-  const memberSet = useMemo(() => new Set(suite.members.map(m => m.name)), [suite])
-  const outsideConsumers = useCallback((name: string) =>
-    props.packs.filter(p => !memberSet.has(p.name) && p.consumes.includes(name)).map(p => p.name),
-  [props.packs, memberSet])
   const installed = suite.members.filter(m => m.localVersion !== undefined)
-  const deleteList = force ? installed : installed.filter(m => outsideConsumers(m.name).length === 0)
-  const keepList = force ? [] : installed.filter(m => outsideConsumers(m.name).length > 0)
   const runUpdate = () => {
     setBusy(true); setError(undefined)
     void updateSuite(suite.name).then(result => {
@@ -542,7 +535,7 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
   }
   const runDelete = () => {
     setBusy(true); setError(undefined)
-    void deleteSuite(suite.name, force).then(result => {
+    void deleteSuite(suite.name).then(result => {
       setDone(fill(t('suiteDeletedDone'), { packs: result.deleted.join(', ') }))
       setArmedDelete(false)
       props.onSaved()
@@ -564,15 +557,9 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
       done !== undefined && !busy ? h('span', { style: muted }, done) : null))
   const confirmRow = !armedDelete ? null : h('tr', null,
     h('td', { colSpan: 4, style: { ...tdStyle, background: 'var(--dsw-alias-bg-subtle, rgba(127,127,127,0.06))' } },
-      h('div', null, fill(t('suiteDeleteSummary'), { packs: deleteList.map(m => m.name).join('、') || '—' })),
-      keepList.length > 0 ? h('div', { style: muted },
-        fill(t('suiteKeepSummary'), {
-          packs: keepList.map(m => `${m.name}(${t('suiteKeptBy').replace('{packs}', outsideConsumers(m.name).join(', '))})`).join('、'),
-        }),
-        ' ',
-        h(Switch, { checked: force, onChange: (next: boolean) => setForce(next), label: t('suiteForce') })) : null,
+      h('div', null, fill(t('suiteDeleteSummary'), { packs: installed.map(m => m.name).join('、') || '—' })),
       h('div', { style: { ...actions, marginTop: '6px' } },
-        h(Button, { size: 'sm', disabled: busy || deleteList.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
+        h(Button, { size: 'sm', disabled: busy || installed.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
         rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null)))
   return h('tbody', null,
     h('tr', null,

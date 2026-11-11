@@ -131,16 +131,13 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				body: JSON.stringify({ suite })
 			}));
 		}
-		/** Delete a suite's installed members. Members consumed by packs outside the
-		* suite are kept (their consumers are named in the result) unless `force`. */
-		async function deleteSuite(suite, force = false) {
+		/** Delete a suite's installed members — all of them; suite members are
+		* consumed inside their suite by design, so there is no keep/force split. */
+		async function deleteSuite(suite) {
 			return parse(await fetch("/api/docwright/suite-delete", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({
-					suite,
-					force
-				})
+				body: JSON.stringify({ suite })
 			}));
 		}
 		//#endregion
@@ -950,15 +947,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		function SuiteRows(props) {
 			const { suite, t } = props;
 			const [armedDelete, setArmedDelete] = (0, react.useState)(false);
-			const [force, setForce] = (0, react.useState)(false);
 			const [busy, setBusy] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [done, setDone] = (0, react.useState)(void 0);
-			const memberSet = (0, react.useMemo)(() => new Set(suite.members.map((m) => m.name)), [suite]);
-			const outsideConsumers = (0, react.useCallback)((name) => props.packs.filter((p) => !memberSet.has(p.name) && p.consumes.includes(name)).map((p) => p.name), [props.packs, memberSet]);
 			const installed = suite.members.filter((m) => m.localVersion !== void 0);
-			const deleteList = force ? installed : installed.filter((m) => outsideConsumers(m.name).length === 0);
-			const keepList = force ? [] : installed.filter((m) => outsideConsumers(m.name).length > 0);
 			const runUpdate = () => {
 				setBusy(true);
 				setError(void 0);
@@ -970,7 +962,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const runDelete = () => {
 				setBusy(true);
 				setError(void 0);
-				deleteSuite(suite.name, force).then((result) => {
+				deleteSuite(suite.name).then((result) => {
 					setDone(fill(t("suiteDeletedDone"), { packs: result.deleted.join(", ") }));
 					setArmedDelete(false);
 					props.onSaved();
@@ -1003,16 +995,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					...tdStyle,
 					background: "var(--dsw-alias-bg-subtle, rgba(127,127,127,0.06))"
 				}
-			}, (0, react.createElement)("div", null, fill(t("suiteDeleteSummary"), { packs: deleteList.map((m) => m.name).join("、") || "—" })), keepList.length > 0 ? (0, react.createElement)("div", { style: muted }, fill(t("suiteKeepSummary"), { packs: keepList.map((m) => `${m.name}(${t("suiteKeptBy").replace("{packs}", outsideConsumers(m.name).join(", "))})`).join("、") }), " ", (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Switch, {
-				checked: force,
-				onChange: (next) => setForce(next),
-				label: t("suiteForce")
-			})) : null, (0, react.createElement)("div", { style: {
+			}, (0, react.createElement)("div", null, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" })), (0, react.createElement)("div", { style: {
 				...actions,
 				marginTop: "6px"
 			} }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
-				disabled: busy || deleteList.length === 0,
+				disabled: busy || installed.length === 0,
 				onClick: runDelete
 			}, t("suiteDeleteConfirm")), rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
 				error,

@@ -128,7 +128,7 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
         // update/delete, same packsDir, same market, same hot-reload contract.
         suiteStatus: () => checkSuiteStatus({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }),
         updateSuite: suite => updateSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
-        deleteSuite: (suite, opts) => deleteSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite, opts),
+        deleteSuite: suite => deleteSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
       },
     }
     host.effect(() => mountParamsRoutes(host.webServer, {

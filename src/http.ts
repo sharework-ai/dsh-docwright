@@ -93,7 +93,7 @@ export interface WriteChannels {
     /** Suite lane (docs/designs/pack-suites.md): market suite list projected onto the local packsDir. */
     readonly suiteStatus?: () => Promise<unknown>
     readonly updateSuite?: (suite: string) => Promise<unknown>
-    readonly deleteSuite?: (suite: string, opts?: { force?: boolean }) => Promise<unknown>
+    readonly deleteSuite?: (suite: string) => Promise<unknown>
   } | undefined
 }
 
@@ -107,7 +107,7 @@ export interface WriteChannels {
  * - `POST /api/docwright/pack-delete` — `{ pack }` deletes one packsDir pack directory.
  * - `GET  /api/docwright/suites` — market suites projected onto the local packsDir (read; mounted with the pack lane).
  * - `POST /api/docwright/suite-update` — `{ suite }` updates the suite's outdated members from the market.
- * - `POST /api/docwright/suite-delete` — `{ suite, force? }` deletes the suite's installed members (outside-consumer protection).
+ * - `POST /api/docwright/suite-delete` — `{ suite }` deletes the suite's installed members (all of them).
  */
 export function mountParamsRoutes(
   webServer: WebServerLike,
@@ -276,7 +276,7 @@ export function mountParamsRoutes(
       if (lane.deleteSuite === undefined) throw new CodedError('suiteLaneMissing', 'the suite lane is not wired on this deployment; nothing was written')
       const suite = suiteName(body)
       const { force } = body as { force?: unknown }
-      const result = await lane.deleteSuite(suite, { force: force === true })
+      const result = await lane.deleteSuite(suite)
       return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
     })
   }
