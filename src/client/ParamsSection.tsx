@@ -517,7 +517,7 @@ function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayloa
       h('th', { style: thStyle }, t('colSuite')),
       h('th', { style: thStyle }, t('colMembers')),
       h('th', { style: thStyle }, t('actions')))),
-    h('tbody', null, lane.rows.map(s => h(SuiteRows, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, onSaved: props.onSaved }))))
+    h('tbody', null, lane.rows.map(s => h(SuiteRows, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved }))))
 }
 
 function memberText(m: { name: string; localVersion?: string; marketVersion?: string; missing: boolean; updateAvailable: boolean }): ReturnType<typeof h> {
@@ -531,8 +531,8 @@ function memberText(m: { name: string; localVersion?: string; marketVersion?: st
   return h('div', { key: m.name }, m.name, '@', m.localVersion, arrow)
 }
 
-function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; onSaved: () => void }) {
-  const { suite, t } = props
+function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+  const { suite, t, resolveText } = props
   const [armedDelete, setArmedDelete] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | undefined>(undefined)
@@ -567,13 +567,21 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
       h('div', { style: { ...actions, marginTop: '6px' } },
         h(Button, { size: 'sm', disabled: busy || installed.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')),
         rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null)))
+  // Row 1: suite identity in column 1, the description owning columns 2-4.
+  // Row 2: the member packs. Row 3: actions. The confirm row spans all four.
   return h(Fragment, null,
     h('tr', null,
       h('td', { style: tdStyle },
         h('div', { style: { fontWeight: 600 } }, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
         suite.incomplete ? h('div', { style: muted }, t('suiteFillHint')) : null),
-      h('td', { style: tdStyle }, suite.members.map(memberText)),
-      actionsCell),
+      h('td', { colSpan: 3, style: { ...tdStyle, color: secondary, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } },
+        resolveText(suite.description))),
+    h('tr', null,
+      h('td', { style: tdStyle }, h('span', { style: muted }, t('colMembers'))),
+      h('td', { colSpan: 3, style: tdStyle }, suite.members.map(memberText))),
+    h('tr', null,
+      h('td', { style: tdStyle }),
+      h('td', { colSpan: 3, style: tdStyle }, actionsCell)),
     confirmRow)
 }
 

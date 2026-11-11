@@ -228,8 +228,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			suiteMemberMissing: "missing",
 			suiteUpdateBtn: "Update suite",
 			suiteUpdateDone: "Updated: {packs}.",
+			colSuite: "Suite",
+			colMembers: "Members",
+			actions: "Actions",
+			suiteDeleteSummary: "Delete members: {packs}",
 			suiteDeleteConfirm: "Confirm delete suite",
-			suiteDeleteColumn: "Will delete",
 			suiteKeepColumn: "Will keep",
 			suiteKeptBy: "consumed by {packs}",
 			suiteForce: "Also delete members consumed outside the suite (force)",
@@ -324,8 +327,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			suiteMemberMissing: "缺失",
 			suiteUpdateBtn: "更新套件",
 			suiteUpdateDone: "已更新：{packs}。",
+			colSuite: "套件",
+			colMembers: "成员",
+			actions: "操作",
+			suiteDeleteSummary: "删除成员：{packs}",
 			suiteDeleteConfirm: "确认删除套件",
-			suiteDeleteColumn: "将删除",
 			suiteKeepColumn: "将保留",
 			suiteKeptBy: "被 {packs} 消费",
 			suiteForce: "同时删除被套件外 pack 消费的成员（强制）",
@@ -976,6 +982,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				packs: props.payload.packs,
 				t,
 				lang: props.lang,
+				resolveText: props.resolveText,
 				onSaved: props.onSaved
 			}))));
 		}
@@ -991,7 +998,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			return (0, react.createElement)("div", { key: m.name }, m.name, "@", m.localVersion, arrow);
 		}
 		function SuiteRows(props) {
-			const { suite, t } = props;
+			const { suite, t, resolveText } = props;
 			const [armedDelete, setArmedDelete] = (0, react.useState)(false);
 			const [busy, setBusy] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(void 0);
@@ -1048,7 +1055,21 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				error,
 				lang: props.lang
 			}) : null)));
-			return (0, react.createElement)(react.Fragment, null, (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: { fontWeight: 600 } }, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("td", { style: tdStyle }, suite.members.map(memberText)), actionsCell), confirmRow);
+			return (0, react.createElement)(react.Fragment, null, (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("div", { style: { fontWeight: 600 } }, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("td", {
+				colSpan: 3,
+				style: {
+					...tdStyle,
+					color: secondary$1,
+					whiteSpace: "pre-wrap",
+					wordBreak: "break-word"
+				}
+			}, resolveText(suite.description))), (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }, (0, react.createElement)("span", { style: muted }, t("colMembers"))), (0, react.createElement)("td", {
+				colSpan: 3,
+				style: tdStyle
+			}, suite.members.map(memberText))), (0, react.createElement)("tr", null, (0, react.createElement)("td", { style: tdStyle }), (0, react.createElement)("td", {
+				colSpan: 3,
+				style: tdStyle
+			}, actionsCell)), confirmRow);
 		}
 		function ConfigView(props) {
 			const { payload, t } = props;
