@@ -71,7 +71,7 @@ docwright 的差异化就在"内容合格性"这一层，由三件事组成：
 
 行为：素材读取与首 prompt token 预检 → 闭环（3.2）→ 落盘三个文件（产物 JSON、sidecar 回执、Markdown 渲染），全部 tmp+rename 原子写、产物先于回执落盘（崩溃只会留下可读草稿，不会留下孤儿回执）。
 
-**复用预检**：`reuse: true` 的 pack（workspace 级默认开）在生成前扫描产物根，命中需过全部门关卡：同 pack + 绿回执 + 版本一致 + 产物 hash 一致 + 素材清单逐项相等 + （链式 pack）upstream 锚点相等与寻址产物名一致 + 显式非寻址 params 不在场 → 直接返回该产物（`reused: true` + 原回执），零 LLM 开销；任一漂移或 `force: true` 落正常生成。机制细节以 docs/designs/cosmic-context.md 复用预检节为准。
+**复用预检**：`reuse: true` 的 pack（workspace 级默认开）在生成前扫描产物根，命中需过全部检查项：同 pack + 绿回执 + 版本一致 + 产物 hash 一致 + 素材清单逐项相等 + （链式 pack）upstream 锚点相等与寻址产物名一致 + 显式非寻址 params 不在场 → 直接返回该产物（`reused: true` + 原回执），零 LLM 开销；任一漂移或 `force: true` 落正常生成。机制细节以 docs/designs/cosmic-context.md 复用预检节为准。
 
 返回 `{ artifactPath, markdownPath, receipt, summary }`（回执内联全量；`summary` 为产物关键计数——functions/processes/subProcesses/totalCfps，按字段存在性给出，省一次文件回读）；warn 策略下追加 `upstreamWarnings`；per-function pack 追加 `coverage`（本阶段绿色产物相对参照功能集的 `{ covered, total, missing }`——req 参照 plan functions，func/tech 参照上游阶段已覆盖集）。required 的 `targetIndex` 缺失时 fail loud 并列出上游全部候选（index、funcId、l2Name），pendingConfirmation 同样携带 `candidates`。全绿时产物是正式产物；**迭代耗尽时工具抛错（fail loud），但草稿 + 红回执（`isValid: false` + 全部未解决 Issue）保留在磁盘上**，供人工救援，绝不静默采用最后一轮。
 
@@ -216,7 +216,7 @@ workspaceRoot/
 插件的模型面同时教"用 pack"与"造 pack"（docs/designs/pack-authoring.md）：
 
 - **运行时技能 `docwright-pack-authoring`**：apply 期读随包 guide `guides/pack-authoring.md`（九阶段 playbook，自包含——不引用仓库侧 docs），经 `ctx.inject(['skills'], ...)` 可选注入（无 skills 服务的宿主休眠）在宿主技能注册表注册；guide 文件缺失 apply fail loud。`doc_packs` 描述含一句静态邀请：无 pack 覆盖所需文档类型时加载该技能。
-- **`pnpm run pack:check -- <packs-dir> [--with <root>]...`**（authoring 验证梯子第 1-2 层）：对目标根跑真实装载门，随后逐 pack 逐语言用真实 DocService 验证 golden 全绿——生效参数经 `resolveEffectiveParams` 解析（声明默认 + 可选 `samples/golden.params.json`，服务 golden 验证的 required 无默认参数取值），链式 pack 以 consumed pack 的 golden 样本为 upstream（consumed 不在检查根时报错并指路 `--with`）；输出体检单（规则清单/严重度分布/参数表）。`checkPacks` / `renderPackCheckReport` / `loadPacks` / `assertManifest` 已从包入口导出，供编程复用；与装载门同源，零第二套校验逻辑。宿主冒烟（`smoke:host`）断言技能已在真实宿主注册且 model-invocable。
+- **`pnpm run pack:check -- <packs-dir> [--with <root>]...`**（authoring 验证梯子第 1-2 层）：对目标根跑真实装载期校验，随后逐 pack 逐语言用真实 DocService 验证 golden 全绿——生效参数经 `resolveEffectiveParams` 解析（声明默认 + 可选 `samples/golden.params.json`，服务 golden 验证的 required 无默认参数取值），链式 pack 以 consumed pack 的 golden 样本为 upstream（consumed 不在检查根时报错并指路 `--with`）；输出体检单（规则清单/严重度分布/参数表）。`checkPacks` / `renderPackCheckReport` / `loadPacks` / `assertManifest` 已从包入口导出，供编程复用；与装载期校验同源，零第二套校验逻辑。宿主冒烟（`smoke:host`）断言技能已在真实宿主注册且 model-invocable。
 
 ## 4. Pack 契约（内容层，作者视角）
 
@@ -254,7 +254,7 @@ packs/<name>/
 
 1. **每条规则（声明式与函数）必须带 `suggestion`**——修复 prompt 的质量不随 pack 作者漂移（加载期强制）。
 2. **golden.json 必须全绿**；每条规则族至少配一种"故意损坏"的变异测试，断言 checker 全部抓住——抓不住损坏样本的 checker 是摆设（内置 pack 由测试套件强制，外部 pack 为约定契约）。
-3. `version` 是破坏性变更的逃生门：改规则语义必须升版本，旧产物回执会被 `packVersionStale` / 链式校验识别为过期。
+3. `version` 是破坏性变更的逃生通道：改规则语义必须升版本，旧产物回执会被 `packVersionStale` / 链式校验识别为过期。
 
 ### 4.5 现有 pack：cosmic-plan（v0.7.1，consumes cosmic-context，requiresTopic）
 
@@ -299,9 +299,9 @@ COSMIC 项目上下文——场景链的第一个产物、项目知识的唯一�
 | 能力发现 | `doc_packs` 工具、三处静态邀请文案、manifest.description 加载期校验 | `description` 的一句话内容 |
 | 参数旋钮 | 解析/校验/钳制、`{{params}}` 渲染、回执 as-run、复验按当时参数 | `manifest.params` 声明与默认值、`manifest.maxRounds` 领域默认 |
 
-## 6. 质量门与验收基线
+## 6. 质量标准与验收基线
 
-- Vitest；每文件 100% 行/函数/语句覆盖门。
+- Vitest；每文件 100% 行/函数/语句覆盖率阈值。
 - 变异测试（mutation tests）证明护栏非摆设：golden 样本按规则族故意损坏，checker 必须全抓住。
 - 闭环行为用确定性策略测试：注入损坏 JSON + LLM seam 按脚本返回，断言循环与回执；真实模型端到端属 e2e（有 API key 才跑）。
 - 预发布宿主冒烟（`scripts/host-smoke.ts`，`pnpm run smoke:host`）：npm tarball → 真实 dsh 宿主 boot → 三工具注册断言，无模型调用、无 API key。

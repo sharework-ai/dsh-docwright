@@ -28,7 +28,7 @@ interface RuleContext {
 
 ## 迁移差异（相对 cosmic-claude Req 审计）
 
-- E301/E302/E303 在原系统进 `audit_comments`，只降分不翻转 is_valid（完整性问题才阻断）；docwright 语义是"护栏即闸门"，三条全部 error 阻断生成。
+- E301/E302/E303 在原系统进 `audit_comments`，只降分不翻转 is_valid（完整性问题才阻断）；docwright 语义是"护栏即阻断"，三条全部 error 阻断生成。
 - 参数化差异：`COSMIC_PLAN_CFPS_PER_FUNC`（env，10-100）→ pack 参数 `cfpsPerFunc`（10-100，as-run 入回执）；`system_roles.local.json`（部署期文件）→ pack 参数 `functionalUserRoles` 白名单。
 - 评分体系不迁移：原系统 300/100/50 按 item 归一，docwright 用内置严重度评分（10/3/1 百分制）。
 - golden 样例对齐：req/func/tech 的 golden funcId 与 cosmic-plan golden 对应函数精确对齐（funcId / index / estimatedCfps 三点一致），链规则自过。

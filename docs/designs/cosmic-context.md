@@ -60,7 +60,7 @@ workspaceRoot/
 
 ### 1. cosmic-context pack（新链头）
 
-- manifest：`name: "cosmic-context"`、`consumes: []`、`scope: "workspace"`、`reuse: true`、双语、参数 `moduleLevels`（共享，见下）。description（见"description 文案"节）。plan 声明 `materialsRoot: "input"`（需求文档是用户输入，落 `input/` 不落 `references/`，见工作区布局节）；req/func/tech 声明 `reuse: true`（链式复用，输入类全部有锚：materials 清单、upstream 锚点、params 漂移策略、pack 版本门）。
+- manifest：`name: "cosmic-context"`、`consumes: []`、`scope: "workspace"`、`reuse: true`、双语、参数 `moduleLevels`（共享，见下）。description（见"description 文案"节）。plan 声明 `materialsRoot: "input"`（需求文档是用户输入，落 `input/` 不落 `references/`，见工作区布局节）；req/func/tech 声明 `reuse: true`（链式复用，输入类全部有锚：materials 清单、upstream 锚点、params 漂移策略、pack 版本校验）。
 - schema（`docType: "context"`，顶层字段）：
   - `projectName`（string，非空）
   - `background`（string，业务背景，minLength 20）
@@ -170,7 +170,7 @@ plan 规划通过并落地后，把"本次 topic 修改/新增的模块"合并�
 7. **复用**：已有绿 context（回执 valid、hash 一致、素材清单与本次调用逐项相等）时再调 doc_generate 不调 LLM、返回 `reused: true`；素材被改/多传/少传、产物被改（hash 不符）或回执红时重新生成；无 `materials` 字段的旧回执不复用；`force: true` 强制重建；seal 回签后的产物重新可复用；cosmic-context-sync 不受预检拦截（`reuse: false`）。
 8. **同步**：sync 以旧 context + topic 的绿 plan 生成合并 context；plan 中 added/modified 模块缺失触发 `context-sync/coverage` error；旧模块丢失触发 `context-sync/preserve` warning。
 9. 引擎改动仅限 pack-loader 与 tools/doc-service（scope/reuse 校验、topic 解析、复用预检）。
-10. 全部测试 + 覆盖门 + typecheck + build + host-smoke PASS。
+10. 全部测试 + 覆盖率阈值 + typecheck + build + host-smoke PASS。
 
 ## 开放问题
 
@@ -188,7 +188,7 @@ plan 规划通过并落地后，把"本次 topic 修改/新增的模块"合并�
 
 ### 已否决：项目知识做成生成参数（params）
 
-- 否决原则：**参数是标量旋钮，不是知识载体**——模块树/角色清单是变长结构，params 走确认门会把它变成每次生成的交互负担，且无法回签修正。
+- 否决原则：**参数是标量旋钮，不是知识载体**——模块树/角色清单是变长结构，params 走确认流程会把它变成每次生成的交互负担，且无法回签修正。
 
 ### 已否决：大而全的"领域词典素材"注入各阶段
 

@@ -19,7 +19,7 @@ dsh-market（~/projects/lab/dsh-market）是 dsh web 内嵌 UI 插件的完整�
 
 ## 参数纳入判据（什么才进维护界面）
 
-界面维护的是**"声明的缺省行为"**——即有 `default` 的 ParamSpec 与 Config 键。会话中的值（显式传参/链继承/素材抽取）有自己的通道（确认门、抽取、回执），不进维护面：
+界面维护的是**"声明的缺省行为"**——即有 `default` 的 ParamSpec 与 Config 键。会话中的值（显式传参/链继承/素材抽取）有自己的通道（确认、抽取、回执），不进维护面：
 
 | 参数类 | 例 | 判定 | 理由 |
 |---|---|---|---|
@@ -27,11 +27,11 @@ dsh-market（~/projects/lab/dsh-market）是 dsh web 内嵌 UI 插件的完整�
 | 声明且有 default | cfpPerFunc、cfpPerSubProc、topicNoPattern、funcDescMaxLength | **展现 + 编辑** | 有现役值可维护；改的是声明的缺省行为，影响后续生成、不追溯已产物 |
 | 声明但无 default | cfpTotal、targetIndex | **不展现** | 界面上没有可维护的现役值：cfpTotal 的值来自素材抽取或对话确认（会话行为），targetIndex 是调用路由——都留给各自的通道 |
 | 引擎派生 | topicNo | **不展现** | 不可配置，展现即噪音（同差距 4：语义无作用） |
-| 调用级 / 回执 as-run | params 入参、receipt.params、*.receipt.json | **不展现** | 单次调用语义走对话 + 确认门；回执唯一写通道是 doc_validate seal——审计数据不进维护面 |
+| 调用级 / 回执 as-run | params 入参、receipt.params、*.receipt.json | **不展现** | 单次调用语义走对话 + 确认；回执唯一写通道是 doc_validate seal——审计数据不进维护面 |
 
 ## manifest 信息充分性盘点
 
-现有 ParamSpec（type/default/required/confirm/overridable/extractable/enum/min/max/description）**基本够统一展现**：类型、值域、枚举、门属性齐全；单位与人话语义由 description 承担（现有 pack 写得好）——不加结构化 unit/label 字段。
+现有 ParamSpec（type/default/required/confirm/overridable/extractable/enum/min/max/description）**基本够统一展现**：类型、值域、枚举、确认属性齐全；单位与人话语义由 description 承担（现有 pack 写得好）——不加结构化 unit/label 字段。
 
 **一个真缺口：object 参数的内部形状无 schema**（`cfpPerFunc = {value, min, max}` 哪个是目标、哪个是容差，声明面不知道）。机制层其实已硬约定：prompt 投影只取 `value`（Mind the gap，`src/prompt.ts` generationParams）。解法**不给 ParamSpec 加 object schema**（声明负担大于收益），而是 UI 与 prompt 同一投影语义：**object 参数只编辑 `value`**（控件按 value 的现役类型推断：数值/文本），区间端点（min/max/downFactor/upFactor）只读展示。
 
@@ -90,7 +90,7 @@ dsh-market（~/projects/lab/dsh-market）是 dsh web 内嵌 UI 插件的完整�
 ### 写面（v1 两类）
 
 1. **Config 编辑** → 写 `cordis.patch.yml` 的 docwright 段。保存即 HMR 生效（~1s）；patch 行 badge 可一键还原（删行）。provider/model 影响后续 promptHash，就地说明（不追溯已产物）。
-2. **pack 参数 default 编辑** → 写 `manifest.json` 的 `params.<name>.default`，仅限判据表中"编辑"类（有 default、非派生、非寻址、生效源即该 pack）。**结构只读**：增删参数、改 type、改门属性不进 UI——结构性改动必须伴随版本升级，属 pack 作者职责，界面指路"编辑 manifest 文件并升版"。改 default 不升版、不追溯已产物（旧回执照常复用）。
+2. **pack 参数 default 编辑** → 写 `manifest.json` 的 `params.<name>.default`，仅限判据表中"编辑"类（有 default、非派生、非寻址、生效源即该 pack）。**结构只读**：增删参数、改 type、改确认属性不进 UI——结构性改动必须伴随版本升级，属 pack 作者职责，界面指路"编辑 manifest 文件并升版"。改 default 不升版、不追溯已产物（旧回执照常复用）。
 
 ### 不变量前置校验（写请求被拒绝，不是等下次加载炸）
 
@@ -98,7 +98,7 @@ dsh-market（~/projects/lab/dsh-market）是 dsh web 内嵌 UI 插件的完整�
 
 ### 非目标（v1）
 
-- 会话级参数不进界面（显式 params 走对话 + 确认门；确认权属用户的本质优势不因此改变）。
+- 会话级参数不进界面（显式 params 走对话 + 确认；确认权属用户的本质优势不因此改变）。
 - 派生参数（topicNo）、寻址参数（targetIndex）不展现。
 - 无 default 声明参数（cfpTotal、targetIndex）、派生 topicNo 不展现。
 - 回执不可编辑（唯一通道是 doc_validate seal）。

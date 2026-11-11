@@ -16,9 +16,9 @@ Date: 2026-10-30
 
 ## 预研对照基准（驱动者私有，不入会话提示词）
 
-驱动者预先研读原型后的期望分解（仅作会话产出的评估 rubric——机制决策点清单：链头 / 扇出 / 参数门 / 跨产物对账 / 复用 / 继承参数 / 正则参数各至少行使一次；不作为正确答案灌输给会话）：
+驱动者预先研读原型后的期望分解（仅作会话产出的评估 rubric——机制决策点清单：链头 / 扇出 / 参数确认 / 跨产物对账 / 复用 / 继承参数 / 正则参数各至少行使一次；不作为正确答案灌输给会话）：
 
-- 四 pack 形态：context（workspace 链头）→ requirements（需求清单，整批）→ plan（epic 规划，整批，确认门参数）→ design（per-epic 卡片，扇出）。
+- 四 pack 形态：context（workspace 链头）→ requirements（需求清单，整批）→ plan（epic 规划，整批，确认型参数）→ design（per-epic 卡片，扇出）。
 - **引擎扇出寻址硬耦合 `functions`/`funcId` 字段名**（`planCandidates`，src/tools.ts:307）：领域词汇不同构时扇出走「寻址参数 + 确定性 artifactName」模式 B；引擎泛化是后续增强候选，S2 不做。
 - storiesPerEpic 型 {value,min,max} 参数是 cfp 族的自然对位；epicCode 是 targetIndex 的寻址对位。
 
@@ -34,7 +34,7 @@ Date: 2026-10-30
 - **O5（guide 缺口，已修；引擎语义发现）**：模型想实现 coveragePolicy（strict=error / tolerant=warning）先在单规则内按条目降级 severity，被引擎打回——函数规则 issue 的 severity 钉死为规则声明值（rule-engine.ts:126），条目级覆盖被忽略。模型读引擎源码确诊后改为双规则（blocking/gap，参数选择走哪条）。guide 阶段 3 已写明"severity 是规则级"+ 双规则配方。
 - **O6（guide 缺口，已修）**：模型声明了 artifactPrefix（REQ/DES）但链头未声明 topicNoPattern → 无 topicNo → 引擎命名静默降级为时间戳名（落盘产物 `req-analysis-1793374028425.json` 实证）。guide 阶段 4 已写明"prefix 与 topicNoPattern 契约成对声明，否则降级时间戳"。
 - **O7（guide 缺口，已修）**：`doc_chain_status` 对非 functions[] 链返回"declares no functions[]"——模型正确理解并改用逐条对账表代替，但如果作者在 description/prompt 里承诺链对账矩阵就会落空。guide 阶段 5 已写明模式 A/B 与 chain_status 的适用边界。
-- 正面观察（guide 已覆盖、无需改）：写资产前先读 cosmic 同构文件作格式模板；模板里 Handlebars 无 eq helper 被自查发现并改写（"cosmic templates avoid such"——guide 的"跟随 schema 形状"起效）；确认门两次拦截均转呈用户未自答；doc_extract_params 附逐字引文抽取 reqCount；重载纪律自述正确（"本会话内不可用，需重载"）；交付记录 packs-record.md 自发产出（guide 阶段 9 的 health sheet 要求）。
+- 正面观察（guide 已覆盖、无需改）：写资产前先读 cosmic 同构文件作格式模板；模板里 Handlebars 无 eq helper 被自查发现并改写（"cosmic templates avoid such"——guide 的"跟随 schema 形状"起效）；确认两次拦截均转呈用户未自答；doc_extract_params 附逐字引文抽取 reqCount；重载纪律自述正确（"本会话内不可用，需重载"）；交付记录 packs-record.md 自发产出（guide 阶段 9 的 health sheet 要求）。
 - 引擎/工具观察（非缺口）：todo 工具两报参数错（purpose/revision 未声明属性）——dsh 宿主侧问题，与 docwright 无关，记录备查。
 
 ## 生成 e2e（R1 后驱动者发起，协议的终局验收）
@@ -42,7 +42,7 @@ Date: 2026-10-30
 素材 `input/requirement-sample.md`（6 条工单系统需求，文档写明条数）。新会话单一提示词（生成两步 + 对账）：
 
 - doc_packs 可见新 pack（重载生效）✅；模型读素材 → 发现 extractable reqCount → doc_extract_params 附逐字引文（"本批需求共 6 条（REQ-2026-001 至 REQ-2026-006）"）✅。
-- **确认门**：pendingConfirmation 参数表呈现（topic 显式 / reqIdPattern 默认 / reqCount 抽取值带引文引文出处），模型 ask_user 转呈未自答，用户签字后执行 ✅。
+- **确认**：pendingConfirmation 参数表呈现（topic 显式 / reqIdPattern 默认 / reqCount 抽取值带引文引文出处），模型 ask_user 转呈未自答，用户签字后执行 ✅。
 - 生成：req-analysis 绿回执（1 iteration 收敛）；req-design 以登记册为 upstream，回执 upstreamHashes 锚定 ✅；6/6 需求覆盖对账（模型自制的逐条表）✅。
 - 落盘核验（驱动者）：双回执 `isValid: true`、各 1 轮、抽取缓存 `req-analysis.extracted.json`、话题目录产物+markdown+回执齐全 ✅。
 
@@ -52,7 +52,7 @@ Date: 2026-10-30
 - packsDir lane 全流程首航成功：write-path 判读、pack:check 自读自修、变异自测、交付记录 ✅。
 - pack:check 双 pack 全绿 + 真实模型生成收敛绿产物 + 覆盖对账 ✅（验收标准 2/3 的 packsDir 版）。
 - 观察记录非空（O1-O7），guide 已回修 6 处 ✅（"技能被证明可优化且已优化"）。
-- 机制决策点行使情况：参数门（confirm+extractable+确认转呈）✅、跨产物对账（引用存在 + 覆盖 + 三方一致）✅、继承（design 读 analysis 回执锚定）✅、正则参数（reqIdPattern）✅；扇出与 workspace 复用未需求化（分解判据正常工作，不强塞）——引擎扇出寻址泛化（functions[] 耦合）记为后续增强候选。
+- 机制决策点行使情况：参数确认（confirm+extractable+确认转呈）✅、跨产物对账（引用存在 + 覆盖 + 三方一致）✅、继承（design 读 analysis 回执锚定）✅、正则参数（reqIdPattern）✅；扇出与 workspace 复用未需求化（分解判据正常工作，不强塞）——引擎扇出寻址泛化（functions[] 耦合）记为后续增强候选。
 
 ## fix 记录（驱动结束回修 guide）
 

@@ -42,7 +42,7 @@ manifest 增 `params` 声明：
 - 加载期校验参数 schema 本身合法（misconfiguration fails loud）；`doc_generate` 调用期校验传入值：未知参数、越界/出枚举 → 报错并列出可用参数（错误内容契约）。
 - **clamp 来源按声明者走**：pack 参数用声明里的 min/max/enum（作者钳制），`maxRounds` 用 ceiling（运维钳制）——每个值都被它的声明者钳住。
 - 注入：`{{params}}` 槽位把生效值（含默认）渲染进生成 prompt，模型看得见有哪些旋钮、当前是什么值；规则可引用参数名替代字面量（如 maxLength 规则引用 `cfpUpper`）。
-- **闸门边界**：params 只能调 pack 声明的数值/枚举旋钮，不能增删规则、不能改 schema、不能降严重度——校验的**结构**始终是 pack 作者与运维的领地。
+- **边界**：params 只能调 pack 声明的数值/枚举旋钮，不能增删规则、不能改 schema、不能降严重度——校验的**结构**始终是 pack 作者与运维的领地。
 
 ### 3. 回执与复验（as-run 快照）
 

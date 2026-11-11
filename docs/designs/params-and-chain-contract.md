@@ -2,7 +2,7 @@
 
 Status: implemented（2026-10-13 定稿并当日落地：D5 参数治理 / D6 扇出契约与覆盖账目 / D7 seal 与 API 便利性；packs v0.2.0；scripts/e2e-real-llm.ts 真实模型全链 PASS）
 
-参数的层级归属、属性全集、生命周期矩阵与全量清单见 `param-object-model.md`（界面管理设计地基）；本文负责机制语义（门控、漂移、Mind the gap、topic 确认）。
+参数的层级归属、属性全集、生命周期矩阵与全量清单见 `param-object-model.md`（界面管理设计地基）；本文负责机制语义（确认、漂移、Mind the gap、topic 确认）。
 
 ## 问题
 
@@ -44,16 +44,16 @@ Status: implemented（2026-10-13 定稿并当日落地：D5 参数治理 / D6 �
 
 | 属性 | 语义 |
 |---|---|
-| `required` | 无默认值时：未经显式 params 提供即拒绝执行；带默认值时：链级必备契约参数——默认值即现役值、永远可解析、沿回执继承，自身不确定门 |
-| `overridable` | prompt 中渲染"素材内容可调整此参数"提示（内层生成许可，一句话提示；不是解析层覆盖，不放松任何校验）。显式 params（对话转译/CLI）是正门，不需要任何属性许可 |
+| `required` | 无默认值时：未经显式 params 提供即拒绝执行；带默认值时：链级必备契约参数——默认值即现役值、永远可解析、沿回执继承，自身不要求确认 |
+| `overridable` | prompt 中渲染"素材内容可调整此参数"提示（内层生成许可，一句话提示；不是解析层覆盖，不放松任何校验）。显式 params（对话转译/CLI）是正式入口，不需要任何属性许可 |
 | `confirm` | 进执行前确认表；参数总数超过 10 时确认表只列 `confirm: true` 项 |
-| `extractable` | 可由 `doc_extract_params` 从素材抽取：模型提 `{value, quote}`，引擎机检引文后值入解析第三档。装载期必须同时 `confirm: true`（抽取值的自证通道就是确认表的引文列；扇出寻址参数永不立门故不可抽取） |
+| `extractable` | 可由 `doc_extract_params` 从素材抽取：模型提 `{value, quote}`，引擎机检引文后值入解析第三档。装载期必须同时 `confirm: true`（抽取值的自证通道就是确认表的引文列；扇出寻址参数无需确认故不可抽取） |
 
 解析顺序：**显式 params > 上游回执继承 > 抽取值（仅 `extractable` 项，须过引文复验）> 声明默认值 > required 缺失即 fail loud**。对话中用户陈述的意图由 agent 转译为显式 params——这是意图的正道；materials 散文默认无权配置 pack，防止素材内容静默改写配置。
 
 **继承参数的声明最佳实践（pack 作者）**：设计为沿链继承的参数（下游 pack 声明上游已声明的参数名），**声明不填 default**——链上运行时回执继承永远优先，default 永不生效，写了只是误导性的死数据。default 的剩余语义是"该链式 pack 独立使用（上游缺失该键）时的兜底值"——确需支持此形态才填。内置 cosmic 链已按此对齐：req/func/tech 的 cfp* 族、plan 的 moduleLevels/topicNoPattern 等继承声明均无 default（版本 0.6.1/0.5.1）。参数维护界面把这一语义显式化：被遮蔽的声明以删除线展示并标注"由 X 管理——此处声明不生效"。
 
-**装载期不变量（可调参数基线必过人）**：`overridable: true` 必须同时 `confirm: true`，违者 pack 加载即报错。门控语义"confirm 参数未经上游确认即立门"由此保证：任何可被素材调整的参数，其基线值至少一次呈现在用户面前并被确认——"采用的值不是声称的值"从不透明收敛为仅剩内层偏移量不可见（as-run 值记录是开放方向）。`confirmPolicy: "none"` 的无人通道从不起门，此不变量在其上不提供保证。配套约束：被声明式规则引用（数值边界 `resolveBound` 或 pattern 正则源）的参数**禁 `overridable`**——内层调整必然撞自身规则进修复循环，许可与校验不得扭结；`overridable` 只对生成目标型参数（值是软目标而非硬边界，如角色清单、均值目标）有意义。
+**装载期不变量（可调参数基线必过人）**：`overridable: true` 必须同时 `confirm: true`，违者 pack 加载即报错。确认语义（confirm 参数未经上游确认时即要求确认）由此保证：任何可被素材调整的参数，其基线值至少一次呈现在用户面前并被确认——"采用的值不是声称的值"从不透明收敛为仅剩内层偏移量不可见（as-run 值记录是开放方向）。`confirmPolicy: "none"` 的无人通道从不要求确认，此不变量在其上不提供保证。配套约束：被声明式规则引用（数值边界 `resolveBound` 或 pattern 正则源）的参数**禁 `overridable`**——内层调整必然撞自身规则进修复循环，许可与校验不得扭结；`overridable` 只对生成目标型参数（值是软目标而非硬边界，如角色清单、均值目标）有意义。
 
 ## 素材参数抽取（extract-params）
 
@@ -64,34 +64,34 @@ Status: implemented（2026-10-13 定稿并当日落地：D5 参数治理 / D6 �
 - **未找到是一等结果**：引文不在任何素材中、模型未提出、素材没写——都记 `notFound`，不报错、不代答。required 参数 notFound 时前置检查在花费生成成本之前拦截，请用户给出或明确认可建议值（fail-loud 错误逐参数携带抽取结果与建议）。**素材缺值被模型代答必须防止，不以模型能力提升为豁免理由。**
 - **持久化与缓存**：抽取结果落 `outputRoot/<pack>.extracted.json`（pack、packVersion、素材清单 anchors、逐参数记录），重抽取整体覆盖；文件损坏/缺失 = 无抽取层（与损坏回执照常生成同语义）。
 - **消费侧复验**：`doc_generate` 解析前对**本次调用的素材**重验每条引文——素材变了/引文失配/spec 收紧（pack 升版）的值一律丢弃，落回下一档解析。抽取文件是缓存，不是契约。
-- **确认表**：`source` 增 `extracted` 档，行带 `quote` + `extractionRef`（引文自证）；unset 行可带 `suggestion`/`suggestionRationale`。门控不新增门种——extractable 必 confirm，链头首调照旧立门，抽取值在表中以引文自证，继承豁免照旧。
-- **复用对账**：复用预检额外比对抽取值与回执 as-run params——重抽取出不同值即拒绝复用，新值经链头 confirm 门到用户面前（抽取层在解析序中位于回执继承之下，故上游已记录的参数不受抽取影响；抽取值的变化面就在复用预检 + 链头门）。
+- **确认表**：`source` 增 `extracted` 档，行带 `quote` + `extractionRef`（引文自证）；unset 行可带 `suggestion`/`suggestionRationale`。确认不新增确认类型——extractable 必 confirm，链头首调照旧要求确认，抽取值在表中以引文自证，继承豁免照旧。
+- **复用对账**：复用预检额外比对抽取值与回执 as-run params——重抽取出不同值即拒绝复用，新值经链头 确认流程到用户面前（抽取层在解析序中位于回执继承之下，故上游已记录的参数不受抽取影响；抽取值的变化面就在复用预检 + 链头确认）。
 - **链路位置**：抽取发生在链头生成之前、扇出之前，一次抽取保护整条链（抽取值经链头回执 as-run params 沿链继承）。
 
-## 确认门控
+## 参数确认
 
 ```
 需要用户确认 ⟺ (本次调用显式传了 params) ∨ (存在 confirm: true 的参数且未经上游回执确认)
 ```
 
-- 门控命中且未确认时，`doc_generate` 返回结构化 `pendingConfirmation`（附生效参数表，零 LLM 成本，不执行）；调用方带 `confirm: true` 重发同一调用即执行。
+- 确认命中且未确认时，`doc_generate` 返回结构化 `pendingConfirmation`（附生效参数表，零 LLM 成本，不执行）；调用方带 `confirm: true` 重发同一调用即执行。
 - 确认面**只有生效参数表**：每行含生效值（尚无值的行省略 `value` 字段——显式 `undefined` 不是 lossless JSON，会令整个工具返回值被 dsh 运行时拒绝；缺失态由来源标注 `unset` 与必填缺失标记承载）、来源标注（pack 默认 / 显式传入 / 上游继承 / 抽取引文——抽取行附 `quote` 与 `extractionRef`，unset 行可附 `suggestion`/`suggestionRationale`）、必填缺失标记、参数漂移影响预判。注入的校验规则清单与 prompt 骨架哈希不进用户视野，仅存在于工具返回值与回执（审计可重建）。
-- **沿链继承**：共享参数在链头声明一次，执行后写入上游回执 as-run params；下游阶段从上游回执继承，继承不是新的参数输入，不再触发门控。全链用户交互恰一次，位置在链头。下游显式传 params 且与上游回执不一致视为改参数，重新触发门控；与回执完全一致（键序无关）视为继承回显，不立门。
+- **沿链继承**：共享参数在链头声明一次，执行后写入上游回执 as-run params；下游阶段从上游回执继承，继承不是新的参数输入，不再触发确认。全链用户交互恰一次，位置在链头。下游显式传 params 且与上游回执不一致视为改参数，重新触发确认；与回执完全一致（键序无关）视为继承回显，无需确认。
 
 ### topic 确认（链首次进入）
 
-`requiresTopic` pack 的调用若满足：传了 `topic`、且**尚无任何上游回执记录其 `topicNo`**（topic 首次进入链），则 `topic` 本身按 confirm 参数处理：`pendingConfirmation` 的参数表以 topic 行开头（`confirm: true`），调用方必须转呈用户确认或纠正（用户未命名 topic 时调用方可从输入推断缺省值，但由用户签字）——实现"用户给 topic 直接用，没给默认一个再确认"。上游回执记录 `topicNo` 后，下游阶段继承值、永不重立此门（全链一次交互）。workspace 级 pack 忽略 topic，也绝不把某个 topic 的编号写进共享回执（派生只在 topic 级 pack 发生）。
+`requiresTopic` pack 的调用若满足：传了 `topic`、且**尚无任何上游回执记录其 `topicNo`**（topic 首次进入链），则 `topic` 本身按 confirm 参数处理：`pendingConfirmation` 的参数表以 topic 行开头（`confirm: true`），调用方必须转呈用户确认或纠正（用户未命名 topic 时调用方可从输入推断缺省值，但由用户签字）——实现"用户给 topic 直接用，没给默认一个再确认"。上游回执记录 `topicNo` 后，下游阶段继承值、此后不再要求确认（全链一次交互）。workspace 级 pack 忽略 topic，也绝不把某个 topic 的编号写进共享回执（派生只在 topic 级 pack 发生）。
 
-### 门控档位（confirmPolicy）
+### 确认档位（confirmPolicy）
 
-插件配置 `confirmPolicy`（每次调用可用同名入参覆盖，未知取值 fail loud）决定**门立不立**；怎么过门（把参数表转呈用户）始终是调用方的职责，不得自答用户未见表格的门：
+插件配置 `confirmPolicy`（每次调用可用同名入参覆盖，未知取值 fail loud）决定**是否需要确认**；怎么完成确认（把参数表转呈用户）始终是调用方的职责，不得自答用户未见过的确认：
 
-- `"standard"`（默认）：显式改参或 confirm 参数未经上游确认时立门；required 且非 confirm 的参数（如扇出寻址的 `targetIndex`）是调用路由而非策略，其出现永不立门。
-- `"none"`：永不立门（headless/CI）。required 缺失仍 fail loud；as-run params 照常入回执，审计性不变。
-- `"strict"`：只要有参数表可展示就立门，每阶段都过一遍用户确认。
+- `"standard"`（默认）：显式改参或 confirm 参数未经上游确认时要求确认；required 且非 confirm 的参数（如扇出寻址的 `targetIndex`）是调用路由而非策略，其出现无需确认。
+- `"none"`：无需确认（headless/CI）。required 缺失仍 fail loud；as-run params 照常入回执，审计性不变。
+- `"strict"`：只要有参数表可展示就要求确认，每阶段都过一遍用户确认。
 
 确认的可信度由"模型可见 ⟺ 日志可重建"兜底：谁批的、批了什么，session log 可完整重建；standard 档下模型未转呈用户就 `confirm: true` 属调用方违规，凭日志审计追责。
-- 门控不命中的 pack（无 params、无 confirm 参数）单次调用直接执行，零额外往返。
+- 确认不命中的 pack（无 params、无 confirm 参数）单次调用直接执行，零额外往返。
 
 ## 参数漂移
 
@@ -135,13 +135,13 @@ plan 整需求一份；req/func/tech 与 plan 的 functions **一一对应，份
 
 ## API 便利性修订
 
-- 链式 pack 提供 `upstream` 时 `materials` 改为可选（上游产物文本已入 prompt），消除"撞两次门各得一条线索"的调用摩擦。
+- 链式 pack 提供 `upstream` 时 `materials` 改为可选（上游产物文本已入 prompt），消除"两次确认各得一条线索"的调用摩擦。
 - `doc_generate`/`doc_validate` 返回值增加产物摘要：关键计数（功能数/过程数/子过程数）、totalCfps、得分、各严重度 issue 数，免除调用方回读产物文件。
 
 ## 已否决（不再重开）
 
 - **req 收拢为 all-functions 单产物**：覆盖确可降为普通规则，但违背 1:N:N:N 对应形态；req 与 func/tech 粒度分裂的认知成本高于一个确定性覆盖工具。正解：扇出契约 + `doc_chain_status` 集合级对账。
-- **独立 preflight 工具**：要求 agent 预先声明链，链作为执行计划可能中途伸缩；参数解析逻辑被复制到 doc_generate 之外。正解：门控内建于 `doc_generate`，参数沿回执继承，全链一次交互。
-- **`contextOverridable` 命名**：语义方向易读反（像"覆盖上下文"）。正解：`overridable`，属性只管"素材可否覆盖该参数"一条旁路；显式 params 永远是正门。
+- **独立 preflight 工具**：要求 agent 预先声明链，链作为执行计划可能中途伸缩；参数解析逻辑被复制到 doc_generate 之外。正解：确认机制内建于 `doc_generate`，参数沿回执继承，全链一次交互。
+- **`contextOverridable` 命名**：语义方向易读反（像"覆盖上下文"）。正解：`overridable`，属性只管"素材可否覆盖该参数"一条旁路；显式 params 永远是正式入口。
 - **`revalidate` 作为漂移默认档**：产品立场质量优先于效率。`regenerate` 为默认，`revalidate` 是产物昂贵 pack 的显式选择。
 - **required 无默认时强制 overridable**：二者正交——`required` 管来源（必须显式提供），`overridable` 管素材权限（可否覆盖）；预算类参数的正确组合恰是 required + 不可覆盖。

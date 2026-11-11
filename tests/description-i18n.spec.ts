@@ -83,7 +83,7 @@ describe('Config schema descriptions travel as LocalizedText', () => {
     const { Config } = await import('../src/config.ts')
     const entries = buildConfigCatalog(Config as unknown as SchemaNode, {})
     const confirmPolicy = entries.find(e => e.key === 'confirmPolicy')!
-    expect(confirmPolicy.description && typeof confirmPolicy.description === 'object' && confirmPolicy.description.zh).toContain('确认门策略')
-    expect(resolveLocalized(confirmPolicy.description, 'en')).toContain('Confirmation-gate policy')
+    expect(confirmPolicy.description && typeof confirmPolicy.description === 'object' && confirmPolicy.description.zh).toContain('确认策略')
+    expect(resolveLocalized(confirmPolicy.description, 'en')).toContain('Confirmation policy')
   })
 })
