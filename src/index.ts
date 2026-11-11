@@ -123,7 +123,7 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       packLane: packsDirConfigured === undefined ? undefined : {
         checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }, pack),
         updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack) }),
-        deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, loadPacks: loadPacksConfigured }, pack, opts),
+        deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack, opts),
         // The suite lane (docs/designs/pack-suites.md): status read + per-suite
         // update/delete, same packsDir, same market, same hot-reload contract.
         suiteStatus: () => checkSuiteStatus({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }),

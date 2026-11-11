@@ -94,6 +94,43 @@ async function manifestNameOf(dir: string): Promise<string | null> {
 }
 
 /**
+ * Suite-membership guard for the single-pack lanes. A pack that any enabled
+ * market suite lists as a MEMBER is suite-managed: it cannot be installed,
+ * updated, or deleted on its own — the suite lane owns its lifecycle (the
+ * consumed upstreams a suite pulls in are ordinary packs and stay
+ * individually manageable). An old market (no /api/suites) or an unreachable
+ * one answers an EMPTY map: the guard fails open, because single-pack
+ * operations must keep working where suites do not exist.
+ */
+export async function suiteMembershipMap(marketUrl: string, fetchImpl: typeof fetch): Promise<Map<string, readonly string[]>> {
+  let rows: MarketSuiteRecord[] = []
+  try {
+    const response = await fetchImpl(`${marketUrl}/api/suites`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) return new Map()
+    const body = await response.json() as { suites?: unknown }
+    rows = Array.isArray(body.suites) ? body.suites as MarketSuiteRecord[] : []
+  } catch {
+    return new Map()
+  }
+  const map = new Map<string, readonly string[]>()
+  for (const row of rows) {
+    const suiteName = typeof row.name === 'string' ? row.name : ''
+    if (suiteName.length === 0) continue
+    for (const member of Array.isArray(row.members) ? row.members.filter((m): m is string => typeof m === 'string') : []) {
+      map.set(member, [...map.get(member) ?? [], suiteName])
+    }
+  }
+  return map
+}
+
+/** The guard error: names every suite claiming the pack and points at the
+ * suite lane. Thrown before anything is written. */
+function suiteManagedError(name: string, suites: readonly string[]): CodedError {
+  const lane = `doc_market_install { "suite": "${suites[0]}" }` + (suites.length > 1 ? ' (or another of its suites)' : '')
+  return new CodedError('suiteManaged', `pack "${name}" is a member of suite${suites.length > 1 ? 's' : ''} ${suites.map(s => `"${s}"`).join(', ')}: suite members install, update, and delete through the suite, not on their own — use ${lane}, or the settings page's Suites tab; nothing was written`, { params: { pack: name, suites: suites.join(', ') } })
+}
+
+/**
  * Resolve a pack name to its directory under the packsDir root by scanning
  * manifests. The managed pack set is whatever sits in packsDir right now —
  * NOT the loaded pack map (a dir the loader rejects must stay deletable, or
@@ -260,9 +297,14 @@ export async function updatePack(deps: {
   readonly marketUrl: string
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
   readonly fetchImpl?: typeof fetch
-}, name: string): Promise<string> {
+}, name: string, opts: { bypassSuiteGuard?: boolean } = {}): Promise<string> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) {
     throw new CodedError('packNotManaged', `pack "${name}" is not managed here: no packsDir is configured, and builtin packs ship with the plugin package; nothing was written`, { params: { pack: name } })
+  }
+  if (opts.bypassSuiteGuard !== true) {
+    const membership = await suiteMembershipMap(deps.marketUrl, deps.fetchImpl ?? fetch)
+    const suites = membership.get(name)
+    if (suites !== undefined && suites.length > 0) throw suiteManagedError(name, suites)
   }
   const dest = await resolveManagedPackDir(deps.packsDir, name)
   let index: MarketIndex
@@ -384,6 +426,12 @@ export async function installPack(deps: {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) {
     throw new CodedError('packNotManaged', `pack "${name}" cannot be installed: no packsDir is configured (set config.packsDir — packs install there and join the builtin merge)`, { params: { pack: name } })
   }
+  // Suite-member guard on the REQUESTED pack only: its consumed upstreams may
+  // themselves belong to other suites — being pulled in as a dependency is
+  // ordinary chain install, not a single-pack install of the member.
+  const membership = await suiteMembershipMap(deps.marketUrl, deps.fetchImpl ?? fetch)
+  const memberOf = membership.get(name)
+  if (memberOf !== undefined && memberOf.length > 0) throw suiteManagedError(name, memberOf)
   let index: MarketIndex
   try {
     const response = await (deps.fetchImpl ?? fetch)(`${deps.marketUrl}/api/index`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
@@ -479,10 +527,19 @@ export async function deletePack(deps: {
   readonly packs: Map<string, Pack>
   readonly builtinRoot: string
   readonly packsDir?: string | undefined
+  /** When configured, enables the suite-member guard (marketUrl-less callers
+   * — legacy lanes — delete without the guard, as before). */
+  readonly marketUrl?: string | undefined
+  readonly fetchImpl?: typeof fetch
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
-}, name: string, opts: { force?: boolean } = {}): Promise<void> {
+}, name: string, opts: { force?: boolean; bypassSuiteGuard?: boolean } = {}): Promise<void> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) {
     throw new CodedError('packNotManaged', `pack "${name}" is not managed here: no packsDir is configured, and builtin packs ship with the plugin package; nothing was written`, { params: { pack: name } })
+  }
+  if (opts.bypassSuiteGuard !== true && deps.marketUrl !== undefined) {
+    const membership = await suiteMembershipMap(deps.marketUrl, deps.fetchImpl ?? fetch)
+    const suites = membership.get(name)
+    if (suites !== undefined && suites.length > 0) throw suiteManagedError(name, suites)
   }
   // Deleting a pack other installed packs consume breaks their chains (their
   // next generation loses the upstream stage). Refuse unless the caller
@@ -658,7 +715,7 @@ export async function updateSuite(deps: {
       unchanged.push(member)
       continue
     }
-    updated.push({ name: member, version: await updatePack(deps, member) })
+    updated.push({ name: member, version: await updatePack(deps, member, { bypassSuiteGuard: true }) })
   }
   return { suite: detail, updated, unchanged, missing }
 }
@@ -697,7 +754,7 @@ export async function deleteSuite(deps: {
       kept.push({ name: member, consumers })
       continue
     }
-    await deletePack(deps, member, { force: true })
+    await deletePack(deps, member, { force: true, bypassSuiteGuard: true })
     deleted.push(member)
   }
   return { deleted, kept }

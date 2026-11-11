@@ -258,6 +258,48 @@ describe('deletePack', () => {
   })
 })
 
+describe('suite-member guard (single-pack lanes refuse suite members)', () => {
+  it('refuses install, update, and delete of a pack a suite lists as a member, writing nothing', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-guard-')), 'ext', '2')
+    const wpDir = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-guard-wp-')), 'wp', '1')
+    const market = await suiteMarketServer([{ name: 'ext', version: '2', dir: newer }, { name: 'wp', version: '1', dir: wpDir }], [{ name: 'pair', version: '1', members: ['ext'] }])
+    const deps = { ...fx.deps, marketUrl: market.url }
+    marketStack.push(market)
+    await expect(installPack(deps, 'ext')).rejects.toThrow(/suiteManaged|member of suite "pair"/)
+    await expect(updatePack(deps, 'ext')).rejects.toThrow(/suiteManaged|member of suite "pair"/)
+    await expect(deletePack(deps, 'ext')).rejects.toThrow(/suiteManaged|member of suite "pair"/)
+    // Nothing was written: ext still installed at its old version.
+    expect(fx.deps.packs.get('ext')?.manifest.version).toBe('1')
+    // A pack NO suite lists stays manageable through every single-pack lane.
+    await expect(installPack(deps, 'wp')).resolves.toBeTruthy()
+  })
+
+  it('fails open on an old market or an unreachable one (single-pack lanes keep working)', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-guard-open-')), 'ext', '2')
+    const oldMarket = await marketServer([{ name: 'ext', version: '2', dir: newer }])
+    marketStack.push(oldMarket)
+    const version = await updatePack({ ...fx.deps, marketUrl: oldMarket.url }, 'ext')
+    expect(version).toBe('2')
+    await expect(deletePack(fx.deps, 'ext')).resolves.toBeUndefined()
+  })
+
+  it('lets the suite lanes manage their own members (bypass)', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-guard-bypass-')), 'ext', '2')
+    const market = await suiteMarketServer([{ name: 'ext', version: '2', dir: newer }], [{ name: 's', version: '1', members: ['ext'] }])
+    marketStack.push(market)
+    const deps = { ...fx.deps, marketUrl: market.url }
+    expect(await updateSuite(deps, 's').then(r => r.updated)).toEqual([{ name: 'ext', version: '2' }])
+    const { deleted } = await deleteSuite(deps, 's')
+    expect(deleted).toEqual(['ext'])
+  })
+})
+
 describe('updatePack failure branches (integrity ladder coverage)', () => {
   it('maps tarball fetch refusal and download failure to their codes', async () => {
     const fx = await managedFixture()

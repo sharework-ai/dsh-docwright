@@ -271,7 +271,11 @@ closes its own loop (generate → validate → repair).
   NOT a suite justification (dependencies install along anyway). Present the
   conclusion to the user explicitly in this stage's output — recommended or
   not, with a one-sentence reason — and only put it on the publish checklist
-  after the user agrees.
+  after the user agrees. Warn the user about the lifecycle cost before they
+  agree: suite MEMBERS are suite-managed on every deployment — once the suite
+  is live they can no longer be installed, updated, or deleted one by one,
+  only through the suite. Pack the suite around packs users will always want
+  together; leave genuinely optional or standalone variants out of it.
 
 ### Stage 6 — Design the params
 
@@ -362,7 +366,10 @@ shape; no validation semantics.
   bilingual description, category, version, and the member list taken
   directly from this decomposition's result (no tarball: the suite is a
   form submission, not an archive). The suite goes live only after the
-  review passes.
+  review passes. Remember what going live means: from then on every member
+  pack is suite-managed — single-pack install, update, and delete are refused
+  for members everywhere (session tools and settings page alike), so member
+  fixes ship by publishing the pack AND bumping the suite through review.
 
 ## Final gate (every box checked)
 

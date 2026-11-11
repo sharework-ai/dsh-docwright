@@ -22,7 +22,7 @@ export const INSTALL_SKILL_NAME = 'docwright-pack-install'
 export const INSTALL_SKILL_DESCRIPTION =
   'Install docwright scenario packs (pack) or whole suites (suite = a named set of packs) from the pack market. On "帮我安装 X / install pack X / 安装整套 X / install the X suite": call doc_packs FIRST to '
   + 'check whether X (or every suite member) is already installed (same version: say so and skip; older: it updates in place; partially installed suite: install completes it), then doc_market_search '
-  + 'by intent if the name is unknown. doc_market_install returns a pendingConfirmation table to present; only the user\'s '
+  + 'by intent if the name is unknown. Packs that BELONG to a suite are suite-managed: they install, update, and delete only through the suite — never on their own. doc_market_install returns a pendingConfirmation table to present; only the user\'s '
   + 'approval (confirm: true) executes. The market follows the deployment\'s marketUrl; packs are usable in this session '
   + 'immediately.'
 
