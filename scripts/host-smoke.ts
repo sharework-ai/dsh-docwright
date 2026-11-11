@@ -24,6 +24,7 @@ import { pathToFileURL } from 'node:url'
 const PROFILE = 'docwright-smoke'
 const EXPECTED_TOOLS = ['doc_generate', 'doc_validate', 'doc_packs', 'doc_chain_status']
 const AUTHORING_SKILL = 'docwright-pack-authoring'
+const INSTALL_SKILL = 'docwright-pack-install'
 
 /** Minimal structural view of the booted host surface the smoke needs. */
 interface SmokeHost {
@@ -138,16 +139,18 @@ if (host.skills?.list === undefined) {
   fail('the booted host exposes no skills service; the pack-authoring skill cannot be verified')
 }
 const skills = await host.skills.list()
-const skill = skills.find(entry => entry.name === AUTHORING_SKILL)
-if (skill === undefined) {
-  await dispose().catch(error => console.error(`host-smoke: dispose warning: ${(error as Error).message}`))
-  fail(`skill ${AUTHORING_SKILL} missing after boot (skills: ${skills.map(entry => entry.name).sort().join(', ')})`)
-}
-if (skill.invocation?.modelInvocable !== true) {
-  await dispose().catch(error => console.error(`host-smoke: dispose warning: ${(error as Error).message}`))
-  fail(`skill ${AUTHORING_SKILL} is not model-invocable`)
+for (const name of [AUTHORING_SKILL, INSTALL_SKILL]) {
+  const skill = skills.find(entry => entry.name === name)
+  if (skill === undefined) {
+    await dispose().catch(error => console.error(`host-smoke: dispose warning: ${(error as Error).message}`))
+    fail(`skill ${name} missing after boot (skills: ${skills.map(entry => entry.name).sort().join(', ')})`)
+  }
+  if (skill.invocation?.modelInvocable !== true) {
+    await dispose().catch(error => console.error(`host-smoke: dispose warning: ${(error as Error).message}`))
+    fail(`skill ${name} is not model-invocable`)
+  }
 }
 await dispose().catch(error => console.error(`host-smoke: dispose warning: ${(error as Error).message}`))
-console.log(`host-smoke: PASS — ${EXPECTED_TOOLS.join(', ')} + skill ${AUTHORING_SKILL} registered in a live ${PROFILE} host`)
+console.log(`host-smoke: PASS — ${EXPECTED_TOOLS.join(", ")} + skills ${AUTHORING_SKILL} and ${INSTALL_SKILL} registered in a live ${PROFILE} host`)
 
 if (!keep) rmSync(root, { recursive: true, force: true })

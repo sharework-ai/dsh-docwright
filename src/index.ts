@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { join } from 'node:path'
 import { AUTHORING_SKILL_NAME, readAuthoringGuide, registerAuthoringSkill, type SkillsHostContext } from './authoring-skill.ts'
+import { INSTALL_SKILL_NAME, readInstallGuide, registerInstallSkill } from './install-skill.ts'
 import { Config, type Config as DocwrightConfig } from './config.ts'
 import { mountParamsRoutes, type ConnectionLike, type WebServerLike, type WriteChannels } from './http.ts'
 import { loadPacks } from './pack-loader.ts'
@@ -22,6 +23,7 @@ export { Config }
 export type { DocwrightConfig }
 export * from './pack.ts'
 export { AUTHORING_SKILL_NAME, AUTHORING_SKILL_DESCRIPTION, AUTHORING_SKILL_WHEN_TO_USE } from './authoring-skill.ts'
+export { INSTALL_SKILL_NAME, INSTALL_SKILL_DESCRIPTION, INSTALL_SKILL_WHEN_TO_USE } from './install-skill.ts'
 export { createScoring, defaultScore, type Scoring } from './convergence.ts'
 export { resolveEffectiveParams, type ExtractionView } from './params.ts'
 export { readExtractionFile, writeExtractionFile, verifyExtraction, type ExtractionFile, type ExtractionRecord } from './extract.ts'
@@ -78,8 +80,13 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
   // teaches authoring, not only consuming. The guide is read eagerly — a
   // broken package fails loud even on hosts where the skill stays dormant.
   const guide = await readAuthoringGuide(guidesRoot)
+  // The install skill mirrors the authoring one for the market lane: users
+  // phrase installs as "装一个技能", which would otherwise read as
+  // filesystem-skill authoring.
+  const installGuide = await readInstallGuide(guidesRoot)
   ctx.inject(['skills'], (skillsCtx: Context) => {
     registerAuthoringSkill(skillsCtx as unknown as SkillsHostContext, guidesRoot, guide)
+    registerInstallSkill(skillsCtx as unknown as SkillsHostContext, guidesRoot, installGuide)
   })
   // Params maintenance UI (docs/designs/param-management-ui.md): mounts on
   // the host webServer when the host provides one. A headless/CLI host never

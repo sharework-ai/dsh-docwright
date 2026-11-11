@@ -95,8 +95,7 @@ describe('pack-authoring skill (docs/designs/pack-authoring.md)', () => {
       },
     }
     await registerTools(ctx as never, { provider: 'p', model: 'm' } as never, packsRoot, guidesRoot)
-    expect(captured).toHaveLength(1)
-    expect(captured[0]!.name).toBe(AUTHORING_SKILL_NAME)
+    expect(captured.map(s => s.name)).toEqual([AUTHORING_SKILL_NAME, 'docwright-pack-install'])
   })
 
   it('apply fails loud when the guides root does not carry the guide', async () => {
