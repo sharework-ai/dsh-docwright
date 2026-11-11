@@ -300,6 +300,78 @@ describe('suite-member guard (single-pack lanes refuse suite members)', () => {
   })
 })
 
+describe('local suite record (packsDir/suites.json)', () => {
+  it('writes the suite on install, refreshes member versions on update, and drops it on delete', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-rec-'))
+    marketStack.push({ dispose: async () => { await rm(parent, { recursive: true, force: true }) } })
+    const extDir = await packFixture(parent, 'ext', '1')
+    const market = await suiteMarketServer([{ name: 'ext', version: '1', dir: extDir }], [{ name: 's', version: '1', members: ['ext'] }])
+    marketStack.push(market)
+    const deps = { ...fx.deps, marketUrl: market.url }
+    const recordPath = join(fx.packsDir, 'suites.json')
+
+    await installSuite(deps, 's')
+    let record = JSON.parse(await readFile(recordPath, 'utf8')) as { suites: { name: string; version: string; members: { name: string; version: string }[] }[] }
+    expect(record.suites).toEqual([{ name: 's', version: '1', members: [{ name: 'ext', version: '1' }], updatedAt: expect.any(String) }])
+
+    // Update bumps the member's recorded version (market has ext@2).
+    const newer = await packFixture(parent, 'ext', '2')
+    const market2 = await suiteMarketServer([{ name: 'ext', version: '2', dir: newer }], [{ name: 's', version: '2', members: ['ext'] }])
+    marketStack.push(market2)
+    await updateSuite({ ...fx.deps, marketUrl: market2.url }, 's')
+    record = JSON.parse(await readFile(recordPath, 'utf8'))
+    expect(record.suites[0]).toMatchObject({ name: 's', version: '2', members: [{ name: 'ext', version: '2' }] })
+
+    // Delete removes the whole entry.
+    await deleteSuite({ ...fx.deps, marketUrl: market2.url }, 's')
+    record = JSON.parse(await readFile(recordPath, 'utf8'))
+    expect(record.suites).toEqual([])
+  })
+
+  it('answers offline from the record instead of throwing', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-off-'))
+    marketStack.push({ dispose: async () => { await rm(parent, { recursive: true, force: true }) } })
+    const extDir = await packFixture(parent, 'ext', '1')
+    const market = await suiteMarketServer([{ name: 'ext', version: '1', dir: extDir }], [{ name: 's', version: '1', members: ['ext'] }])
+    marketStack.push(market)
+    const deps = { ...fx.deps, marketUrl: market.url }
+    await installSuite(deps, 's')
+
+    // Market down: the record answers — local versions, no update claims.
+    const offline = await checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: 'http://127.0.0.1:1' })
+    expect(offline).toHaveLength(1)
+    expect(offline[0]).toMatchObject({ name: 's', version: '1', incomplete: false, updateAvailable: false })
+    expect(offline[0]!.members[0]).toMatchObject({ name: 'ext', localVersion: '1', missing: false })
+    expect(offline[0]!.members[0].marketVersion).toBeUndefined()
+
+    // No record + unreachable market stays a loud failure.
+    await rm(join(fx.packsDir, 'suites.json'))
+    await expect(checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: 'http://127.0.0.1:1' })).rejects.toThrow(/marketUnreachable|could not reach/)
+  })
+
+  it('backfills the record on a successful online check (pre-record installs)', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const parent = await mkdtemp(join(tmpdir(), 'docwright-suite-bf-'))
+    marketStack.push({ dispose: async () => { await rm(parent, { recursive: true, force: true }) } })
+    const extDir = await packFixture(parent, 'ext', '1')
+    const market = await suiteMarketServer([{ name: 'ext', version: '1', dir: extDir }], [{ name: 's', version: '1', members: ['ext'] }])
+    marketStack.push(market)
+    const deps = { ...fx.deps, marketUrl: market.url }
+    // Simulate a pre-record install: member on disk, no suites.json.
+    await installSuite(deps, 's')
+    await rm(join(fx.packsDir, 'suites.json'))
+
+    await checkSuiteStatus(deps)
+    const record = JSON.parse(await readFile(join(fx.packsDir, 'suites.json'), 'utf8'))
+    expect(record.suites).toEqual([{ name: 's', version: '1', members: [{ name: 'ext', version: '1' }], updatedAt: expect.any(String) }])
+  })
+})
+
 describe('updatePack failure branches (integrity ladder coverage)', () => {
   it('maps tarball fetch refusal and download failure to their codes', async () => {
     const fx = await managedFixture()

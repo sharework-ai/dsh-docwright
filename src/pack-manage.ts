@@ -94,6 +94,69 @@ async function manifestNameOf(dir: string): Promise<string | null> {
 }
 
 /**
+ * Local record of installed suites: packsDir/suites.json. The suite itself
+ * has no directory — this flat file is the only local trace, maintained by
+ * the suite lanes (install/update/delete) and backfilled from the market by
+ * checkSuiteStatus, so the settings page reads installed suites from disk
+ * instead of recomputing them from the market on every load. A pack the user
+ * deletes behind the tools leaves a stale member row; the next online status
+ * check prunes it.
+ */
+export interface LocalSuiteMember {
+  readonly name: string
+  readonly version: string
+}
+export interface LocalSuiteEntry {
+  readonly name: string
+  readonly version: string
+  readonly members: readonly LocalSuiteMember[]
+  readonly updatedAt: string
+}
+const SUITE_RECORD_FILE = 'suites.json'
+
+async function readSuiteRecord(packsDir: string | undefined): Promise<LocalSuiteEntry[]> {
+  if (packsDir === undefined || packsDir.length === 0) return []
+  try {
+    const body = JSON.parse(await readFile(join(packsDir, SUITE_RECORD_FILE), 'utf8')) as { suites?: unknown }
+    const rows = Array.isArray(body.suites) ? body.suites : []
+    return rows.filter((r): r is LocalSuiteEntry =>
+      r !== null && typeof r === 'object' &&
+      typeof (r as LocalSuiteEntry).name === 'string' &&
+      typeof (r as LocalSuiteEntry).version === 'string' &&
+      Array.isArray((r as LocalSuiteEntry).members))
+  } catch {
+    return [] // no record yet, or unreadable: the lanes rebuild it
+  }
+}
+
+async function writeSuiteRecord(packsDir: string | undefined, suites: readonly LocalSuiteEntry[]): Promise<void> {
+  if (packsDir === undefined || packsDir.length === 0) return
+  // Best-effort: an unwritable packsDir must not break the lane that wanted
+  // to record — the next successful write rebuilds the file.
+  try {
+    const payload = { format: 1, updatedAt: new Date().toISOString(), suites }
+    const target = join(packsDir, SUITE_RECORD_FILE)
+    const tmp = join(packsDir, `.${SUITE_RECORD_FILE}.tmp`)
+    await writeFile(tmp, JSON.stringify(payload, null, 2))
+    await rename(tmp, target)
+  } catch { /* keep going without the record */ }
+}
+
+/** Upsert one suite's entry (install/update) and persist the record. */
+async function recordSuiteInstalled(packsDir: string | undefined, entry: LocalSuiteEntry): Promise<void> {
+  const suites = (await readSuiteRecord(packsDir)).filter(s => s.name !== entry.name)
+  suites.push(entry)
+  suites.sort((a, b) => a.name.localeCompare(b.name))
+  await writeSuiteRecord(packsDir, suites)
+}
+
+/** Remove a suite's entry and persist the record. */
+async function recordSuiteRemoved(packsDir: string | undefined, name: string): Promise<void> {
+  const suites = (await readSuiteRecord(packsDir)).filter(s => s.name !== name)
+  await writeSuiteRecord(packsDir, suites)
+}
+
+/**
  * Suite-membership guard for the single-pack lanes. A pack that any enabled
  * market suite lists as a MEMBER is suite-managed: it cannot be installed,
  * updated, or deleted on its own — the suite lane owns its lifecycle (the
@@ -671,6 +734,17 @@ export async function installSuite(deps: {
   if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
   const closure = resolveSuiteInstallClosure(index, detail, new Set(deps.packs.keys()))
   const installed = await landClosure({ ...deps, packsDir: deps.packsDir }, closure, suite)
+  // Record the suite locally (packsDir/suites.json): members that actually
+  // landed with their landed versions.
+  const landedVersions = new Map(installed.map(o => [o.name, o.version]))
+  await recordSuiteInstalled(deps.packsDir, {
+    name: detail.name,
+    version: detail.version,
+    members: detail.members
+      .filter(member => landedVersions.has(member))
+      .map(member => ({ name: member, version: landedVersions.get(member)! })),
+    updatedAt: new Date().toISOString(),
+  })
   return { suite: detail, installed }
 }
 
@@ -717,6 +791,22 @@ export async function updateSuite(deps: {
     }
     updated.push({ name: member, version: await updatePack(deps, member, { bypassSuiteGuard: true }) })
   }
+  // Refresh the local record: bumped members get their new versions, and the
+  // suite's own version tracks the market's current suite version. A suite
+  // installed before this record existed gets its entry created here.
+  const record = (await readSuiteRecord(deps.packsDir)).find(s => s.name === detail.name)
+  const bumped = new Map(updated.map(u => [u.name, u.version]))
+  const memberVersions = (record?.members ?? detail.members.map(m => ({ name: m, version: '' })))
+    .map(m => ({ name: m.name, version: bumped.get(m.name) ?? deps.packs.get(m.name)?.manifest.version ?? m.version }))
+    .filter(m => m.version !== '')
+  if (memberVersions.length > 0) {
+    await recordSuiteInstalled(deps.packsDir, {
+      name: detail.name,
+      version: detail.version,
+      members: memberVersions,
+      updatedAt: new Date().toISOString(),
+    })
+  }
   return { suite: detail, updated, unchanged, missing }
 }
 
@@ -757,6 +847,7 @@ export async function deleteSuite(deps: {
     await deletePack(deps, member, { force: true, bypassSuiteGuard: true })
     deleted.push(member)
   }
+  await recordSuiteRemoved(deps.packsDir, detail.name)
   return { deleted, kept }
 }
 
@@ -796,14 +887,26 @@ export async function checkSuiteStatus(deps: {
   readonly fetchImpl?: typeof fetch
 }): Promise<readonly SuiteStatus[]> {
   const fetchImpl = deps.fetchImpl ?? fetch
+  // The local record is the offline answer: when the market is unreachable,
+  // installed suites still render from packsDir/suites.json (no market
+  // versions, no update availability). No record + unreachable market is the
+  // only combination that stays a loud failure.
+  const localRecord = await readSuiteRecord(deps.packsDir)
   let rows: MarketSuiteRecord[]
   try {
     const response = await fetchImpl(`${deps.marketUrl}/api/suites`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
-    if (response.status === 404) return [] // old market: the suite lane simply has nothing to show
+    if (response.status === 404) {
+      // Old market: the suite lane has nothing to show — but a local record
+      // (e.g. installed from a market that has since been swapped) still
+      // deserves its rows.
+      if (localRecord.length > 0) return statusesFromRecord(localRecord, new Map())
+      return []
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const body = await response.json() as { suites?: unknown }
     rows = Array.isArray(body.suites) ? body.suites as MarketSuiteRecord[] : []
   } catch (error) {
+    if (localRecord.length > 0) return statusesFromRecord(localRecord, new Map())
     throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); suite status is unavailable`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
   }
   let index: MarketIndex
@@ -837,7 +940,7 @@ export async function checkSuiteStatus(deps: {
       } catch { /* unparseable manifest version: treat as absent */ }
     }
   }
-  return rows.map(record => {
+  const statuses = rows.map(record => {
     const suite = suiteRecordOf(record)
     const members: SuiteMemberStatus[] = suite.members.map(member => {
       const localVersion = localVersions.get(member)
@@ -858,6 +961,44 @@ export async function checkSuiteStatus(deps: {
       members,
       incomplete: members.some(m => m.localVersion === undefined),
       updateAvailable: members.some(m => m.updateAvailable),
+    }
+  })
+  // Backfill the local record from a fully successful online check: any
+  // market suite with at least one member placed locally counts as installed
+  // (partial installs included — the incomplete flag reports them), and
+  // members the user deleted behind the tools drop out of the record.
+  const installedRows = statuses.filter(s => s.members.some(m => m.localVersion !== undefined))
+  if (deps.packsDir !== undefined && deps.packsDir.length > 0) {
+    await writeSuiteRecord(deps.packsDir, installedRows.map(s => ({
+      name: s.name,
+      version: s.version,
+      members: s.members.filter(m => m.localVersion !== undefined).map(m => ({ name: m.name, version: m.localVersion! })),
+      updatedAt: new Date().toISOString(),
+    })))
+  }
+  return statuses
+}
+
+/** Render statuses purely from the local record (offline mode): every member
+ * is locally present by construction, so nothing reads as missing and no
+ * update availability is claimed. */
+function statusesFromRecord(record: readonly LocalSuiteEntry[], marketVersions: Map<string, string>): readonly SuiteStatus[] {
+  return record.map(entry => {
+    const members: SuiteMemberStatus[] = entry.members.map(member => ({
+      name: member.name,
+      localVersion: member.version,
+      ...(marketVersions.get(member.name) === undefined ? {} : { marketVersion: marketVersions.get(member.name)! }),
+      missing: false,
+      updateAvailable: false,
+    }))
+    return {
+      name: entry.name,
+      version: entry.version,
+      description: {},
+      category: '',
+      members,
+      incomplete: false,
+      updateAvailable: false,
     }
   })
 }
