@@ -76,7 +76,8 @@ export const en = {
   'err.packNotManaged': 'Pack "{pack}" is not managed here: builtin packs ship with the plugin package, managed packs live under the packsDir. Nothing was written.',
   'err.marketUnreachable': 'Could not reach the pack market; nothing was written. Retry later, or point marketUrl in cordis.yml at a reachable market.',
   'err.integrityFailed': 'Integrity check failed for "{pack}" ({why}); nothing was written. Never force-install when the market index and the download disagree.',
-  'err.updateFailed': 'Pack "{pack}" update failed; the installed version is unchanged. See the detail below.',
+  'err.updateFailed': 'Pack "{pack}" update failed; the installed version is unchanged.',
+  'err.absentFromMarket': 'Pack "{pack}" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.',
 }
 
 export const zh: Record<string, string> = {
@@ -153,7 +154,8 @@ export const zh: Record<string, string> = {
   'err.packNotManaged': 'pack「{pack}」不在此处管理范围：内置 pack 随插件发行，可管理的 pack 在 packsDir 目录下。未写入任何内容。',
   'err.marketUnreachable': '无法连接 pack 市场，未做任何改动。可稍后重试，或在 cordis.yml 用 marketUrl 指向可达的市场。',
   'err.integrityFailed': '「{pack}」完整性校验失败（{why}），未写入任何内容。市场索引与下载内容不一致时请勿强行安装。',
-  'err.updateFailed': 'pack「{pack}」更新失败，已装版本未变。原因见下方详情。',
+  'err.updateFailed': 'pack「{pack}」更新失败，已装版本未变。',
+  'err.absentFromMarket': 'pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。',
 }
 
 export function translate(dict: Record<string, unknown>): Translate {

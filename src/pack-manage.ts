@@ -174,7 +174,7 @@ async function fetchTarball(marketUrl: string, entry: MarketIndexEntry, fetchImp
     throw new CodedError('marketUnreachable', `could not fetch the ${entry.name} tarball from ${url} (${(error as Error).message}); nothing was written`, { params: { url }, detail: (error as Error).message })
   }
   if (!response.ok) {
-    throw new CodedError('updateFailed', `pack "${entry.name}" tarball download failed (HTTP ${response.status}); nothing was written`, { params: { pack: entry.name } })
+    throw new CodedError('updateFailed', `pack "${entry.name}" tarball download failed (HTTP ${response.status}) from ${url}; nothing was written`, { params: { pack: entry.name, status: response.status }, detail: `HTTP ${response.status} ${url}` })
   }
   const bytes = Buffer.from(await response.arrayBuffer())
   const gotSha = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
@@ -246,7 +246,7 @@ export async function updatePack(deps: {
   }
   const entry = index.packs.find(e => e.name === name)
   if (entry === undefined) {
-    throw new CodedError('updateFailed', `pack "${name}" is not on the market (${deps.marketUrl}); nothing was written`, { params: { pack: name } })
+    throw new CodedError('absentFromMarket', `pack "${name}" is not listed on the market at ${deps.marketUrl}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly`, { params: { pack: name, url: deps.marketUrl } })
   }
   const bytes = await fetchTarball(deps.marketUrl, entry, deps.fetchImpl ?? fetch)
   const staging = join(deps.packsDir, `.${name}.staging`)

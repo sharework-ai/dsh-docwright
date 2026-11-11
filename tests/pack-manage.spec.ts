@@ -226,7 +226,7 @@ describe('updatePack', () => {
     fx.deps.marketUrl = market.url
     await expect(updatePack({ ...fx.deps, packsDir: undefined }, 'ext')).rejects.toThrow(/no packsDir is configured/)
     await expect(updatePack(fx.deps, 'ghost')).rejects.toThrow(/not managed here/)
-    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/is not on the market/)
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/not listed on the market/)
   })
 })
 

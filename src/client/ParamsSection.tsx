@@ -357,11 +357,14 @@ function PackLaneActions(props: {
       ? t('notOnMarket')
       : props.status.updateAvailable ? fill(t('updateTo'), { version: props.status.marketVersion ?? '' }) : t('upToDate'))
     : null
+  // A pack the market does not list has nothing to update from — the button
+  // states it, not the server round trip.
+  const updateImpossible = props.status !== undefined && !props.status.onMarket
   const rendered = rendered_error(error, props.lang)
   return h('div', { style: { marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' } satisfies CSSProperties },
     standing !== null ? h('div', { style: muted }, standing) : null,
     h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } satisfies CSSProperties },
-      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'update' ? run('update') : setArmed('update')) },
+      h(Button, { size: 'sm', variant: 'ghost', disabled: busy || updateImpossible, onClick: () => (armed === 'update' ? run('update') : setArmed('update')) },
         armed === 'update' ? t('confirmUpdate') : t('updateBtn')),
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
         armed === 'delete' ? t('confirmDelete') : t('deleteBtn')),
