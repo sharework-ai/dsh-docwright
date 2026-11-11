@@ -2,7 +2,7 @@
 
 # docwright
 
-Document generation for [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness): a pack defines one document type (JSON schema, validation rules, generation prompt), packs chain into multi-stage scenarios, tunable params pass a confirmation gate before generation, every document ships with a replayable validation receipt, and a bundled skill teaches the agent to author new packs.
+Document generation for [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness): a pack defines one document type (JSON schema, validation rules, generation prompt), packs chain into multi-stage scenarios and the market curates related packs into suites for one-step installation, tunable params pass a confirmation gate before generation, every document ships with a replayable validation receipt, and a bundled skill teaches the agent to author new packs.
 
 JSON is the single source of truth. Every generated document is validated against its pack's JSON Schema and rule set; failures are fed back to the model for repair until all rules pass (or the loop exhausts and keeps a red-marked draft). Every document ships with a machine-readable receipt anyone can re-verify.
 

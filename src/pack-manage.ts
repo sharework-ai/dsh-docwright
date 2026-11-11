@@ -811,13 +811,13 @@ export async function updateSuite(deps: {
 }
 
 /**
- * Delete a suite: the installed members are the unit. A member that packs
- * OUTSIDE the suite consume is kept (its consumer's chain would break); the
- * rest go through the existing deletePack — force: true internally, because
- * sibling suite members legitimately consume each other and the per-pack
- * packInUse guard must not fire on them. With opts.force the kept members go
- * too (the single-pack force semantics: downstream packs keep loading and
- * fail loud on their next generation). Members never installed are skipped;
+ * Delete a suite: the installed members are the unit — EVERY installed
+ * member goes (members are consumed inside their suite by design; a
+ * downstream pack outside the suite keeps loading and fails loud on its
+ * next generation). Members never installed are skipped; the market only
+ * supplies the member list. Internally each member deletes with force +
+ * guard bypass: sibling suite members legitimately consume each other and
+ * the per-pack guards must not fire on them.
  * the market only supplies the member list.
  */
 export async function deleteSuite(deps: {
