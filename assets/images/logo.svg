@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="docwright">
   <!--
-    docwright logo: a pair of JSON braces cradling a validation check.
-    Braces say "documents are JSON"; the check says "every artifact is
-    machine checked"; together they read as a harness holding what the
-    model writes. No document glyph: the mark stays legible at 16 px.
+    docwright logo: a convergence loop — the product's core mechanic.
+    Two arrow arcs chase each other around a rounded-square frame (the
+    document outline), and the accent check sits at the center: generate,
+    validate, repair until green. No document glyph, no braces: the mark is
+    a cycle, and stays legible at 16 px.
 
     Theme adaptation: the ink CSS variable follows the system light/dark
     preference via the embedded media query; the accent keeps enough
@@ -24,12 +25,16 @@
     .accent { stroke: var(--accent); }
   </style>
 
-  <g fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- left brace: top tip, waist spike, bottom tip -->
-    <path class="ink" d="M25 7c-7 0-5 12-12 20-1 1.1-2.2 2-3.5 2.5 1.3 0.5 2.5 1.4 3.5 2.5 7 8 5 20 12 20"/>
-    <!-- right brace: mirrored -->
-    <path class="ink" d="M39 7c7 0 5 12 12 20 1 1.1 2.2 2 3.5 2.5-1.3 0.5-2.5 1.4-3.5 2.5-7 8-5 20-12 20"/>
-    <!-- the check: a touch wider than the waist so it "locks" the braces -->
-    <path class="accent" stroke-width="7" d="M27 32.5l7.5 9L51 20"/>
+  <g fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- loop arcs: the rounded-square frame, broken where the arrows are -->
+    <path class="ink" d="M32 13h10q9 0 9 9v7"/>
+    <path class="ink" d="M51 36v6q0 9-9 9H32"/>
+    <path class="ink" d="M32 51H22q-9 0-9-9v-7"/>
+    <path class="ink" d="M13 28v-6q0-9 9-9h10"/>
+    <!-- arrowheads: clockwise chase -->
+    <path class="ink" d="M45 31l6 6-6 6"/>
+    <path class="ink" d="M19 33l-6-6 6-6"/>
+    <!-- the check at the loop's center -->
+    <path class="accent" stroke-width="7" d="M23 32.5l7 8.5L44 21"/>
   </g>
 </svg>
