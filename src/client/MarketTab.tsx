@@ -1,20 +1,26 @@
 /**
- * The Plugins-page pack-market tab: the market site (dm.shrwk.com) embedded
- * in place. The site is anonymous-readable (catalog and tarball downloads);
- * account features keep their own Supabase session inside the frame —
- * partitioned storage, so the frame signs in separately from the standalone
- * site. An always-visible header offers the standalone escape hatch, which
- * also covers deployments where the frame is refused.
+ * The Plugins-page pack-market tab: the pack market embedded in place. The
+ * site is anonymous-readable (catalog and tarball downloads); account
+ * features keep their own Supabase session inside the frame — partitioned
+ * storage, so the frame signs in separately from the standalone site. An
+ * always-visible header offers the standalone escape hatch, which also
+ * covers deployments where the frame is refused.
  *
- * No CSS modules — styles are inline host theme tokens (same discipline as
- * ParamsSection). The URL is a product constant of this bundle, mirroring
- * dsh-market's own server URL handling.
+ * The market URL is deployment state, not a bundle constant: the tab
+ * resolves it once per mount from the plugin's own params payload
+ * (Config.marketUrl, served by src/http.ts), falling back to the published
+ * default. That keeps the published default PRODUCTION (npm users get the
+ * production market with zero configuration) while a dev instance points
+ * marketUrl at its own market — the one environment knob, no build-time
+ * flavors. No CSS modules — styles are inline host theme tokens (same
+ * discipline as ParamsSection).
  */
-import { createElement as h } from 'react'
+import { createElement as h, useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { fetchParams } from './api.ts'
 import { translate, zh, en } from './locales.ts'
 
-/** The pack market this tab presents. */
+/** The published default (production market). */
 export const MARKET_URL = 'https://dm.shrwk.com/'
 
 const fontFamily = 'var(--dsw-font-family, inherit)'
@@ -55,11 +61,23 @@ const frameStyle: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-1, #fff)',
 }
 
+function normalizeMarketUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !/^https:\/\//.test(value)) return undefined
+  return value.endsWith('/') ? value : `${value}/`
+}
+
 export function MarketTab(props: { lang: 'zh' | 'en' }): ReactNode {
   const t = translate(props.lang === 'zh' ? zh : en)
+  const [url, setUrl] = useState(MARKET_URL)
+  useEffect(() => {
+    void fetchParams().then(payload => {
+      const configured = normalizeMarketUrl(payload.config.find(e => e.key === 'marketUrl')?.value)
+      if (configured !== undefined) setUrl(configured)
+    }).catch(() => {})
+  }, [])
   return h('div', { style: rootStyle },
     h('div', { style: barStyle },
       h('span', { style: titleStyle }, t('marketTitle')),
-      h('a', { href: MARKET_URL, target: '_blank', rel: 'noreferrer', style: linkStyle }, t('openExternal'))),
-    h('iframe', { src: MARKET_URL, title: t('marketTitle'), style: frameStyle }))
+      h('a', { href: url, target: '_blank', rel: 'noreferrer', style: linkStyle }, t('openExternal'))),
+    h('iframe', { key: url, src: url, title: t('marketTitle'), style: frameStyle }))
 }

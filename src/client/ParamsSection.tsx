@@ -353,7 +353,9 @@ function PackLaneActions(props: {
     })
   }
   const standing = props.laneState === 'ready'
-    ? (props.status === undefined ? t('notOnMarket') : props.status.updateAvailable ? fill(t('updateTo'), { version: props.status.marketVersion ?? '' }) : t('upToDate'))
+    ? (props.status === undefined || !props.status.onMarket
+      ? t('notOnMarket')
+      : props.status.updateAvailable ? fill(t('updateTo'), { version: props.status.marketVersion ?? '' }) : t('upToDate'))
     : null
   const rendered = rendered_error(error, props.lang)
   return h('div', { style: { marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' } satisfies CSSProperties },

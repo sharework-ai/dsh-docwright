@@ -39,7 +39,9 @@ export function marketUrlOf(config: { marketUrl?: string }): string {
 export interface PackUpdateStatus {
   readonly name: string
   readonly localVersion: string
-  /** Absent when the market has no pack under this name (or the market is unreachable). */
+  /** False when the market has no pack under this name. */
+  readonly onMarket: boolean
+  /** Absent when the market has no pack under this name. */
   readonly marketVersion?: string
   readonly updateAvailable: boolean
 }
@@ -135,6 +137,7 @@ export async function checkPackUpdates(deps: {
     return {
       name: p.manifest.name,
       localVersion: p.manifest.version,
+      onMarket: marketVersion !== undefined,
       ...(marketVersion === undefined ? {} : { marketVersion }),
       updateAvailable: marketVersion !== undefined && compareVersions(marketVersion, p.manifest.version) > 0,
     }

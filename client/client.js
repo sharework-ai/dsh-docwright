@@ -703,7 +703,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					setArmed(void 0);
 				});
 			};
-			const standing = props.laneState === "ready" ? props.status === void 0 ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
+			const standing = props.laneState === "ready" ? props.status === void 0 || !props.status.onMarket ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
 			const rendered = rendered_error(error, props.lang);
 			return (0, react.createElement)("div", { style: {
 				marginTop: "4px",
@@ -938,18 +938,23 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		//#endregion
 		//#region src/client/MarketTab.tsx
 		/**
-		* The Plugins-page pack-market tab: the market site (dm.shrwk.com) embedded
-		* in place. The site is anonymous-readable (catalog and tarball downloads);
-		* account features keep their own Supabase session inside the frame —
-		* partitioned storage, so the frame signs in separately from the standalone
-		* site. An always-visible header offers the standalone escape hatch, which
-		* also covers deployments where the frame is refused.
+		* The Plugins-page pack-market tab: the pack market embedded in place. The
+		* site is anonymous-readable (catalog and tarball downloads); account
+		* features keep their own Supabase session inside the frame — partitioned
+		* storage, so the frame signs in separately from the standalone site. An
+		* always-visible header offers the standalone escape hatch, which also
+		* covers deployments where the frame is refused.
 		*
-		* No CSS modules — styles are inline host theme tokens (same discipline as
-		* ParamsSection). The URL is a product constant of this bundle, mirroring
-		* dsh-market's own server URL handling.
+		* The market URL is deployment state, not a bundle constant: the tab
+		* resolves it once per mount from the plugin's own params payload
+		* (Config.marketUrl, served by src/http.ts), falling back to the published
+		* default. That keeps the published default PRODUCTION (npm users get the
+		* production market with zero configuration) while a dev instance points
+		* marketUrl at its own market — the one environment knob, no build-time
+		* flavors. No CSS modules — styles are inline host theme tokens (same
+		* discipline as ParamsSection).
 		*/
-		/** The pack market this tab presents. */
+		/** The published default (production market). */
 		const MARKET_URL = "https://dm.shrwk.com/";
 		const fontFamily = "var(--dsw-font-family, inherit)";
 		const secondary = "var(--dsw-alias-label-secondary, inherit)";
@@ -983,15 +988,27 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			borderRadius: "var(--dsw-radius-xl, 20px)",
 			background: "var(--dsw-alias-bg-layer-1, #fff)"
 		};
+		function normalizeMarketUrl(value) {
+			if (typeof value !== "string" || !/^https:\/\//.test(value)) return void 0;
+			return value.endsWith("/") ? value : `${value}/`;
+		}
 		function MarketTab(props) {
 			const t = translate(props.lang === "zh" ? zh : en);
+			const [url, setUrl] = (0, react.useState)(MARKET_URL);
+			(0, react.useEffect)(() => {
+				fetchParams().then((payload) => {
+					const configured = normalizeMarketUrl(payload.config.find((e) => e.key === "marketUrl")?.value);
+					if (configured !== void 0) setUrl(configured);
+				}).catch(() => {});
+			}, []);
 			return (0, react.createElement)("div", { style: rootStyle }, (0, react.createElement)("div", { style: barStyle }, (0, react.createElement)("span", { style: titleStyle }, t("marketTitle")), (0, react.createElement)("a", {
-				href: MARKET_URL,
+				href: url,
 				target: "_blank",
 				rel: "noreferrer",
 				style: linkStyle
 			}, t("openExternal"))), (0, react.createElement)("iframe", {
-				src: MARKET_URL,
+				key: url,
+				src: url,
 				title: t("marketTitle"),
 				style: frameStyle
 			}));
