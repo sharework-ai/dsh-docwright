@@ -542,7 +542,13 @@ async function fetchSuiteDetail(marketUrl: string, suite: string, fetchImpl: typ
   if (!response.ok) {
     throw new CodedError('marketUnreachable', `could not read suite "${suite}" from the pack market at ${marketUrl} (HTTP ${response.status}); nothing was written`, { params: { url: marketUrl }, detail: `HTTP ${response.status}` })
   }
-  return suiteRecordOf(body as MarketSuiteRecord)
+  // The market wraps the detail: { ok, suite: {name, version, ..., members},
+  // members: expanded cards }. The suite record carries the member NAME list.
+  const suiteBody = body !== null && typeof body === 'object' ? (body as { suite?: unknown }).suite : undefined
+  if (suiteBody === undefined || suiteBody === null || typeof suiteBody !== 'object') {
+    return null
+  }
+  return suiteRecordOf(suiteBody as MarketSuiteRecord)
 }
 
 /** Suite-absent error (old market or unknown suite): same family as a pack

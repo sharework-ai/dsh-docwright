@@ -277,7 +277,7 @@ describe('doc_market_install tool: suites', () => {
       ] }), { headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/api/suites/')) {
-      return new Response(JSON.stringify({ name: 'cosmic', version: '2', members: ['top', 'solo'] }), { headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify({ ok: true, suite: { name: 'cosmic', version: '2', members: ['top', 'solo'] }, members: [{ name: 'top', missing: false }, { name: 'solo', missing: false }] }), { headers: { 'content-type': 'application/json' } })
     }
     throw new Error(`unexpected fetch ${url}`)
   }
@@ -365,7 +365,7 @@ describe('doc_market_install tool: suite confirm (real install)', () => {
         ] }), { headers: { 'content-type': 'application/json' } })
       }
       if (url.includes('/api/suites/')) {
-        return new Response(JSON.stringify({ name: 'cosmic', version: '1', members: ['top'] }), { headers: { 'content-type': 'application/json' } })
+        return new Response(JSON.stringify({ ok: true, suite: { name: 'cosmic', version: '1', members: ['top'] }, members: [{ name: 'top', missing: false }] }), { headers: { 'content-type': 'application/json' } })
       }
       if (url.endsWith('/tarballs/base.tgz')) return new Response(baseTgz, { headers: { 'content-type': 'application/gzip' } })
       if (url.endsWith('/tarballs/top.tgz')) return new Response(topTgz, { headers: { 'content-type': 'application/gzip' } })

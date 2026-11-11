@@ -207,15 +207,22 @@ export async function fetchInstallPlan(marketUrl: string, requested: string): Pr
  * asked: the model relays that instead of guessing members.
  */
 export async function fetchSuiteInstallPlan(marketUrl: string, suite: string): Promise<{ suite: { name: string; version: string }; members: Array<{ name: string; version: string; description: string; requested: boolean }> }> {
-  let detail: MarketSuiteRow
+  let detail: unknown
   try {
     const response = await fetch(`${marketUrl}/api/suites/${encodeURIComponent(suite)}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    detail = await response.json() as MarketSuiteRow
+    detail = await response.json() as { suite?: unknown }
   } catch (error) {
     throw new Error(`suite "${suite}" is not offered by the pack market at ${marketUrl} (${(error as Error).message}); nothing to install — the market may not support suites, search packs with doc_market_search instead`)
   }
-  const memberNames = asStringArray(detail.members)
+  // The market wraps the detail: { ok, suite: {name, version, ..., members},
+  // members: expanded cards }. The suite record carries the member NAME list.
+  const suiteBody = (detail !== null && typeof detail === 'object' ? (detail as { suite?: unknown }).suite : undefined) ?? null
+  if (suiteBody === null || typeof suiteBody !== 'object') {
+    throw new Error(`suite "${suite}" is not offered by the pack market at ${marketUrl}; nothing to install — the market may not support suites, search packs with doc_market_search instead`)
+  }
+  const record = suiteBody as MarketSuiteRow
+  const memberNames = asStringArray(record.members)
   if (memberNames.length === 0) {
     throw new Error(`suite "${suite}" on the market at ${marketUrl} lists no member packs; nothing to install`)
   }
@@ -247,5 +254,5 @@ export async function fetchSuiteInstallPlan(marketUrl: string, suite: string): P
     })
   }
   for (const name of memberNames) visit(name)
-  return { suite: { name: asString(detail.name) || suite, version: asString(detail.version) }, members }
+  return { suite: { name: asString(record.name) || suite, version: asString(record.version) }, members }
 }

@@ -129,7 +129,7 @@ describe('fetchSuiteInstallPlan', () => {
   const market = (suites: unknown, packs: unknown) => async (input: unknown) => {
     const url = String(input)
     if (url.endsWith('/api/index')) return new Response(JSON.stringify({ packs }), { headers: { 'content-type': 'application/json' } })
-    if (url.endsWith(`/api/suites/${encodeURIComponent('cosmic')}`)) return new Response(JSON.stringify(suites), { headers: { 'content-type': 'application/json' } })
+    if (url.endsWith(`/api/suites/${encodeURIComponent('cosmic')}`)) return new Response(JSON.stringify({ ok: true, suite: suites, members: suites.members.map((m: string) => ({ name: m, missing: false })) }), { headers: { 'content-type': 'application/json' } })
     throw new Error(`unexpected fetch ${url}`)
   }
 
@@ -170,7 +170,7 @@ describe('fetchSuiteInstallPlan', () => {
   it('fails loud when the suite lists no members', async () => {
     const realFetch = globalThis.fetch
     globalThis.fetch = async (input: unknown) => {
-      if (String(input).includes('/api/suites/')) return new Response(JSON.stringify({ name: 'cosmic', version: '1', members: [] }), { headers: { 'content-type': 'application/json' } })
+      if (String(input).includes('/api/suites/')) return new Response(JSON.stringify({ ok: true, suite: { name: 'cosmic', version: '1', members: [] }, members: [] }), { headers: { 'content-type': 'application/json' } })
       throw new Error('unexpected')
     }
     try {
@@ -202,7 +202,7 @@ describe('searchMarket: suite lane failure degradation', () => {
     // fetchSuiteInstallPlan: suite detail ok but /api/index failing → loud, retry guidance.
     const planImpl = async (input: unknown): Promise<Response> => {
       const url = String(input)
-      if (url.includes('/api/suites/')) return new Response(JSON.stringify({ name: 'cosmic', version: '1', members: ['solo'] }), { headers: { 'content-type': 'application/json' } })
+      if (url.includes('/api/suites/')) return new Response(JSON.stringify({ ok: true, suite: { name: 'cosmic', version: '1', members: ['solo'] }, members: [{ name: 'solo', missing: false }] }), { headers: { 'content-type': 'application/json' } })
       throw new Error('ECONNRESET')
     }
     const realFetch = globalThis.fetch

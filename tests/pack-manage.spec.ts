@@ -612,7 +612,7 @@ async function suiteMarketServer(
         response.end('no such suite')
         return
       }
-      return json(response, suite)
+      return json(response, { ok: true, suite, members: suite.members.map(m => ({ name: m, missing: false })) })
     }
     const bytes = tarballs.get(url)
     if (bytes === undefined) {
@@ -842,7 +842,7 @@ describe('suite lane failure branches', () => {
     const detailOnly = createServer((request, response) => {
       if ((request.url ?? '').includes('/api/suites/cosmic')) {
         response.writeHead(200, { 'content-type': 'application/json' })
-        response.end(JSON.stringify({ name: 'cosmic', version: '1', members: ['ext'] }))
+        response.end(JSON.stringify({ ok: true, suite: { name: 'cosmic', version: '1', members: ['ext'] }, members: [{ name: 'ext', missing: false }] }))
         return
       }
       response.writeHead(500)
