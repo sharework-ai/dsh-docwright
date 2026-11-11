@@ -66,6 +66,7 @@ const valueStyle: CSSProperties = {
 const muted: CSSProperties = {
   color: secondary,
 }
+const smallMuted: CSSProperties = { ...muted, fontSize: '0.82rem' }
 const group: CSSProperties = {
   border: '0.5px solid var(--dsw-alias-border-l4, transparent)',
   borderRadius: 'var(--dsw-radius-xl, 20px)',
@@ -466,7 +467,7 @@ function PackLaneActions(props: {
     : t('checkForUpdates')
   const rendered = rendered_error(error, props.lang)
   return h('span', { style: { display: 'inline-flex', gap: '8px', alignItems: 'center' } satisfies CSSProperties },
-    standing !== null ? h('span', { style: muted }, standing) : null,
+    standing !== null ? h('span', { style: { ...muted, fontSize: '0.82rem' } satisfies CSSProperties }, standing) : null,
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy || (props.checked && props.laneState === 'checking'),
       onClick: () => (updateAvailable ? (armed === 'update' ? run('update') : setArmed('update')) : props.check(props.pack.name)) },
       checkLabel),
@@ -558,8 +559,8 @@ function SuiteRows(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
         armedDelete ? t('cancel') : t('deleteBtn')),
-      busy ? h('span', { style: muted }, t('saving')) : null,
-      done !== undefined && !busy ? h('span', { style: muted }, done) : null))
+      busy ? h('span', { style: smallMuted }, t('saving')) : null,
+      done !== undefined && !busy ? h('span', { style: smallMuted }, done) : null))
   const confirmRow = !armedDelete ? null : h('tr', null,
     h('td', { colSpan: 4, style: { ...tdStyle, background: 'var(--dsw-alias-bg-subtle, rgba(127,127,127,0.06))' } },
       h('div', null, fill(t('suiteDeleteSummary'), { packs: installed.map(m => m.name).join('、') || '—' })),

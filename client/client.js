@@ -436,6 +436,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		};
 		const valueStyle = { fontFamily: codeFont };
 		const muted = { color: secondary$1 };
+		const smallMuted = {
+			...muted,
+			fontSize: "0.82rem"
+		};
 		const group = {
 			border: "0.5px solid var(--dsw-alias-border-l4, transparent)",
 			borderRadius: "var(--dsw-radius-xl, 20px)",
@@ -903,7 +907,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				display: "inline-flex",
 				gap: "8px",
 				alignItems: "center"
-			} }, standing !== null ? (0, react.createElement)("span", { style: muted }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			} }, standing !== null ? (0, react.createElement)("span", { style: {
+				...muted,
+				fontSize: "0.82rem"
+			} }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy || props.checked && props.laneState === "checking",
@@ -1023,7 +1030,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => setArmedDelete((v) => !v)
-			}, armedDelete ? t("cancel") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: muted }, done) : null));
+			}, armedDelete ? t("cancel") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: smallMuted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: smallMuted }, done) : null));
 			const confirmRow = !armedDelete ? null : (0, react.createElement)("tr", null, (0, react.createElement)("td", {
 				colSpan: 4,
 				style: {
