@@ -138,13 +138,16 @@ async function suiteRowsOf(marketUrl: string, fetchImpl: typeof fetch): Promise<
 }
 
 /** Free-text matching over a suite card: every whitespace-separated term must
- * appear in the name, the category, or either description language. */
+ * appear in the name, the category, either description language, or a MEMBER
+ * pack name — suite members are hidden from the market's pack listing, so a
+ * member-name query must still land on its suite. */
 function suiteMatches(row: MarketSuiteRow, terms: readonly string[]): boolean {
   const haystack = [asString(row.name), asString(row.category),
     typeof row.description === 'string' ? row.description
       : typeof row.description === 'object' && row.description !== null
         ? `${(row.description as Record<string, unknown>).en ?? ''} ${(row.description as Record<string, unknown>).zh ?? ''}`
-        : ''].join(' ').toLowerCase()
+        : '',
+    asStringArray(row.members).join(' ')].join(' ').toLowerCase()
   return terms.every(term => haystack.includes(term.toLowerCase()))
 }
 

@@ -113,6 +113,15 @@ describe('searchMarket: suites', () => {
     expect(result.packs.find(p => p.name === 'solo')?.suites).toEqual([])
   })
 
+  it('matches a MEMBER-name query against its suite card (members are hidden from the listing)', async () => {
+    // The market hides suite members from /api/packs, so only `solo` comes
+    // back as a pack hit — but the member-name term must land on its suite.
+    const listing = { ...catalogWithSuites, packs: [catalogWithSuites.packs[1]] }
+    const result = await searchMarket({ marketUrl: 'https://market.test', fetchImpl: okFetch(listing) }, 'cosmic-plan')
+    expect(result.packs.map(p => p.name)).toEqual(['solo'])
+    expect(result.suites.map(s => s.name)).toEqual(['cosmic'])
+  })
+
   it('degrades to empty suite results on an old market (404) without failing the search', async () => {
     const result = await searchMarket({ marketUrl: 'https://market.test', fetchImpl: okFetch({ packs: [{ name: 'solo', version: '1', description: { en: 'solo' } }] }) }, 'solo')
     expect(result.suites).toEqual([])
