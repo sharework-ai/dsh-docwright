@@ -2,6 +2,6 @@
   "meta": {
     "detail": "guides/plugin-page.en.md",
     "title": "Docwright document generation",
-    "description": "Document generation for deepseek-harness: quality packs (JSON schema + rules), a validation repair loop, chained scenarios, params with a confirmation gate, replayable receipts, and a pack authoring skill."
+    "description": "Generates documents that carry structured information — use this skill when the document content requires strict validation. The plugin takes the Harness philosophy as its foundation and JSON as its core, forming a generate, validate and repair closed loop; it supports param configuration and hot reload, and staged generation during processing. The document-generation methods and resources for a specific scenario are called a scenario pack (pack); the skill also provides ways to find and author packs."
   }
 }
