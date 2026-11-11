@@ -2,6 +2,6 @@
   "meta": {
     "detail": "guides/plugin-page.zh.md",
     "title": "Docwright 文档生成",
-    "description": "为 deepseek-harness 生成文档：高质量 pack（JSON Schema + 校验规则）、验证修复闭环、链式场景、参数确认门、可复验回执，以及 pack 编写技能。"
+    "description": "生成具有一定结构化信息的文档，当需要对文档内容进行严格校验时使用本技能。本插件以Harness为核心思想，以JSON为核心内容，构建生成、验证和修复闭环，在处理过程中支持参数配置和重载、分阶段生成。用于特定场景的文档生成方法和资源被称为场景包（pack），本技能还提供了查找和编写pack的方法。"
   }
 }
