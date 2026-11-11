@@ -286,53 +286,84 @@ function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 
 
 /** Per-pack flat view (pack-author / troubleshooting perspective). Each card
  * opens with a full-width blue-wash header band — pack identity reads as a
- * section of its own, visually distinct from the param rows it contains. */
+ * section of its own. The card is the overview: identity, description, and
+ * actions; the pack's parameter declarations stay folded behind a toggle so
+ * the installed-pack list reads at a glance. Market standing is CHECK-ON-DEMAND
+ * (检查更新) — never fetched on view mount, and the button only turns into
+ * 更新 after a check reports a newer version. */
 function PacksView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { payload, t } = props
-  // Market standing of the managed packs: one server-side fetch per view
-  // mount; unreachable market degrades to local state (an inline note, not
-  // error UI — the params views stay fully usable offline).
-  const [lane, setLane] = useState<{ state: 'loading' | 'ready' | 'unreachable'; rows: readonly UiPackUpdate[] }>({ state: 'loading', rows: [] })
+  // Market standing of the managed packs, fetched ONLY when a check runs.
+  // Unreachable market degrades to an inline note, not error UI.
+  const [lane, setLane] = useState<{ state: 'idle' | 'checking' | 'ready' | 'unreachable'; rows: readonly UiPackUpdate[] }>({ state: 'idle', rows: [] })
   const [laneDone, setLaneDone] = useState<string | undefined>(undefined)
-  const refreshLane = useCallback(() => {
+  const checkLane = useCallback(() => {
+    setLane({ state: 'checking', rows: [] })
     fetchPackUpdates().then(rows => setLane({ state: 'ready', rows })).catch(() => setLane({ state: 'unreachable', rows: [] }))
   }, [])
-  useEffect(() => { refreshLane() }, [refreshLane])
   const byName = useMemo(() => new Map(lane.rows.map(u => [u.name, u])), [lane.rows])
   return h('div', null,
     lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
-    payload.packs.map((p: UiPackEntry) => h('div', { key: p.name, style: card },
-      h('div', { style: packHead },
-        h('span', { style: nameStyle }, p.name),
-        h(Pill, {}, `v${p.version}`),
-        h(Pill, {}, p.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
-        h(Pill, {}, p.origin.kind === 'builtin' ? t('originBuiltin') : fill(t('originPacksDir'), { root: p.origin.root })),
-        p.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${p.paramDriftPolicy}`) : null),
-      h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(p.description)),
-      p.consumes.length > 0 ? h('div', { style: muted }, `${t('consumed')}: ${p.consumes.join(', ')}`) : null,
-      p.origin.kind === 'packsDir'
-        ? h(PackLaneActions, { pack: p, status: byName.get(p.name), laneState: lane.state, t, lang: props.lang,
-          consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
-          onDone: text => { setLaneDone(text); props.onSaved(); refreshLane() } })
-        : null,
-      h('div', { style: { marginTop: '6px' } },
-        p.params.length === 0
-          ? h('p', { style: muted }, t('empty'))
-          : p.params.map(d => h(PackDeclRow, { key: d.name, d, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved }))))))
+    payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), laneState: lane.state, checkLane, t, lang: props.lang,
+      resolveText: props.resolveText, onSaved: props.onSaved,
+      consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
+      onDone: text => { setLaneDone(text); props.onSaved(); checkLane() } })))
 }
 
-/** One managed pack's lane actions: market standing plus two-step
- * update/delete. Both actions overwrite or remove a packsDir directory, so a
- * click is always the second one — arming resets on completion and on any
- * refresh; the update confirm names the overwrite explicitly. A server
- * failure renders through the locale catalog (what/why/what-to-do) under the
- * buttons; the mounted card itself never unmounts, so armed state cannot
- * fire on a stale card. */
+/** One pack card: identity + description + action row on top; the parameter
+ * declarations fold behind the 参数 toggle. */
+function PackCard(props: {
+  pack: UiPackEntry
+  status: UiPackUpdate | undefined
+  laneState: 'idle' | 'checking' | 'ready' | 'unreachable'
+  checkLane: () => void
+  t: Translate
+  lang: 'zh' | 'en'
+  resolveText: (value: unknown) => string
+  onSaved: () => void
+  consumers: readonly string[]
+  onDone: (doneText: string) => void
+}) {
+  const { pack, t } = props
+  const [paramsOpen, setParamsOpen] = useState(false)
+  return h('div', { style: card },
+    h('div', { style: packHead },
+      h('span', { style: nameStyle }, pack.name),
+      h(Pill, {}, `v${pack.version}`),
+      h(Pill, {}, pack.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
+      h(Pill, {}, pack.origin.kind === 'builtin' ? t('originBuiltin') : fill(t('originPacksDir'), { root: pack.origin.root })),
+      pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null),
+    h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(pack.description)),
+    pack.consumes.length > 0 ? h('div', { style: muted }, `${t('consumed')}: ${pack.consumes.join(', ')}`) : null,
+    h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
+      h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
+        `${paramsOpen ? '▾' : '▸'} ${t('paramsToggle')}`),
+      pack.origin.kind === 'packsDir'
+        ? h(PackLaneActions, { pack, status: props.status, laneState: props.laneState, checkLane: props.checkLane, t, lang: props.lang,
+          consumers: props.consumers, onDone: props.onDone })
+        : null),
+    paramsOpen
+      ? h('div', { style: { marginTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l4, transparent)', paddingTop: '6px' } satisfies CSSProperties },
+        pack.params.length === 0
+          ? h('p', { style: muted }, t('empty'))
+          : pack.params.map(d => h(PackDeclRow, { key: d.name, d, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
+      : null)
+}
+
+/** One managed pack's lane actions: check-on-demand market standing plus
+ * two-step update/delete. 检查更新 is always visible and re-checkable; only a
+ * check that reports a newer version turns it into the two-step 更新. Both
+ * actions overwrite or remove a packsDir directory, so a click is always the
+ * second one — arming resets on completion and on any refresh; the update
+ * confirm names the overwrite explicitly, the delete confirm names installed
+ * consumers. A server failure renders through the locale catalog
+ * (what/why/what-to-do) under the buttons. */
 function PackLaneActions(props: {
   pack: UiPackEntry
   status: UiPackUpdate | undefined
-  laneState: 'loading' | 'ready' | 'unreachable'
+  laneState: 'idle' | 'checking' | 'ready' | 'unreachable'
+  checkLane: () => void
   t: Translate
   lang: 'zh' | 'en'
   /** Installed packs consuming this one — deleting it breaks their chains. */
@@ -360,18 +391,21 @@ function PackLaneActions(props: {
       ? t('notOnMarket')
       : props.status.updateAvailable ? fill(t('updateTo'), { version: props.status.marketVersion ?? '' }) : t('upToDate'))
     : null
-  // A pack the market does not list has nothing to update from — the button
-  // states it, not the server round trip.
-  const updateImpossible = props.status !== undefined && !props.status.onMarket
+  // The check button's three faces: idle/checking before a check runs, 检查更新
+  // after a check that found nothing newer, 更新 once a newer version is known.
+  const updateAvailable = props.laneState === 'ready' && props.status !== undefined && props.status.onMarket && props.status.updateAvailable
+  const checkLabel = props.laneState === 'checking' ? t('checking')
+    : updateAvailable ? (armed === 'update' ? t('confirmUpdate') : t('updateBtn'))
+    : t('checkForUpdates')
   const rendered = rendered_error(error, props.lang)
-  return h('div', { style: { marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '4px' } satisfies CSSProperties },
-    standing !== null ? h('div', { style: muted }, standing) : null,
-    h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } satisfies CSSProperties },
-      h(Button, { size: 'sm', variant: 'ghost', disabled: busy || updateImpossible, onClick: () => (armed === 'update' ? run('update') : setArmed('update')) },
-        armed === 'update' ? t('confirmUpdate') : t('updateBtn')),
-      h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
-        armed === 'delete' ? (props.consumers.length > 0 ? fill(t('confirmDeleteBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDelete')) : t('deleteBtn')),
-      busy ? h('span', { style: muted }, t('saving')) : null),
+  return h('span', { style: { display: 'inline-flex', gap: '8px', alignItems: 'center' } satisfies CSSProperties },
+    props.laneState === 'ready' && standing !== null ? h('span', { style: muted }, standing) : null,
+    h(Button, { size: 'sm', variant: 'ghost', disabled: busy || props.laneState === 'checking',
+      onClick: () => (updateAvailable ? (armed === 'update' ? run('update') : setArmed('update')) : props.checkLane()) },
+      checkLabel),
+    h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
+      armed === 'delete' ? (props.consumers.length > 0 ? fill(t('confirmDeleteBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDelete')) : t('deleteBtn')),
+    busy ? h('span', { style: muted }, t('saving')) : null,
     rendered !== undefined ? h('span', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties },
       rendered.text,
       rendered.detail !== undefined ? h('span', { style: { ...muted, whiteSpace: 'pre-wrap' } }, `\n${rendered.detail}`) : null) : null)
@@ -487,7 +521,7 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
   const t = useMemo<Translate>(() => translate(lang === 'zh' ? zh : en), [lang])
   const [payload, setPayload] = useState<ParamsPayload | undefined>(undefined)
   const [error, setError] = useState<Error | undefined>(undefined)
-  const [view, setView] = useState<'groups' | 'packs' | 'config'>('groups')
+  const [view, setView] = useState<'packs' | 'groups' | 'config'>('packs')
   const refresh = useCallback(() => {
     fetchParams().then(p => {
       setPayload(p)
@@ -503,9 +537,11 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
       h(Button, { size: 'sm', onClick: refresh }, t('retry')))
   }
   if (payload === undefined) return h('p', { style: { ...baseText, ...muted } }, t('loading'))
+  // Packs first: the installed-pack overview is the landing view; params
+  // groups and the plugin form follow.
   const tabs = [
-    { value: 'groups', label: t('viewGroups'), id: `${NS}-groups`, panelId: `${NS}-groups-panel` },
     { value: 'packs', label: t('viewPacks'), id: `${NS}-packs`, panelId: `${NS}-packs-panel` },
+    { value: 'groups', label: t('viewGroups'), id: `${NS}-groups`, panelId: `${NS}-groups-panel` },
     { value: 'config', label: t('viewConfig'), id: `${NS}-config`, panelId: `${NS}-config-panel` },
   ] as const
   return h('div', { className: `${NS}-section`, style: baseText },

@@ -162,6 +162,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			updateTo: "update to v{version}",
 			notOnMarket: "not on the market",
 			updateBtn: "Update",
+			checkForUpdates: "Check updates",
+			checking: "Checking…",
+			paramsToggle: "Params",
 			confirmUpdate: "Confirm update (overwrites local changes)",
 			deleteBtn: "Delete",
 			confirmDelete: "Confirm delete",
@@ -237,6 +240,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			updateTo: "可更新到 v{version}",
 			notOnMarket: "市场未收录",
 			updateBtn: "更新",
+			checkForUpdates: "检查更新",
+			checking: "检查中…",
+			paramsToggle: "参数",
 			confirmUpdate: "确认更新（将覆盖本地改动）",
 			deleteBtn: "删除",
 			confirmDelete: "确认删除",
@@ -640,15 +646,23 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		}
 		/** Per-pack flat view (pack-author / troubleshooting perspective). Each card
 		* opens with a full-width blue-wash header band — pack identity reads as a
-		* section of its own, visually distinct from the param rows it contains. */
+		* section of its own. The card is the overview: identity, description, and
+		* actions; the pack's parameter declarations stay folded behind a toggle so
+		* the installed-pack list reads at a glance. Market standing is CHECK-ON-DEMAND
+		* (检查更新) — never fetched on view mount, and the button only turns into
+		* 更新 after a check reports a newer version. */
 		function PacksView(props) {
 			const { payload, t } = props;
 			const [lane, setLane] = (0, react.useState)({
-				state: "loading",
+				state: "idle",
 				rows: []
 			});
 			const [laneDone, setLaneDone] = (0, react.useState)(void 0);
-			const refreshLane = (0, react.useCallback)(() => {
+			const checkLane = (0, react.useCallback)(() => {
+				setLane({
+					state: "checking",
+					rows: []
+				});
 				fetchPackUpdates().then((rows) => setLane({
 					state: "ready",
 					rows
@@ -657,44 +671,73 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					rows: []
 				}));
 			}, []);
-			(0, react.useEffect)(() => {
-				refreshLane();
-			}, [refreshLane]);
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
-			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)("div", {
+			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
 				key: p.name,
-				style: card
-			}, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, p.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${p.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, p.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, p.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: p.origin.root })), p.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${p.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
-				...desc,
-				marginBottom: "4px"
-			} }, props.resolveText(p.description)), p.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, `${t("consumed")}: ${p.consumes.join(", ")}`) : null, p.origin.kind === "packsDir" ? (0, react.createElement)(PackLaneActions, {
 				pack: p,
 				status: byName.get(p.name),
 				laneState: lane.state,
+				checkLane,
 				t,
 				lang: props.lang,
+				resolveText: props.resolveText,
+				onSaved: props.onSaved,
 				consumers: payload.packs.filter((other) => other.name !== p.name && other.consumes.includes(p.name)).map((other) => other.name),
 				onDone: (text) => {
 					setLaneDone(text);
 					props.onSaved();
-					refreshLane();
+					checkLane();
 				}
-			}) : null, (0, react.createElement)("div", { style: { marginTop: "6px" } }, p.params.length === 0 ? (0, react.createElement)("p", { style: muted }, t("empty")) : p.params.map((d) => (0, react.createElement)(PackDeclRow, {
+			})));
+		}
+		/** One pack card: identity + description + action row on top; the parameter
+		* declarations fold behind the 参数 toggle. */
+		function PackCard(props) {
+			const { pack, t } = props;
+			const [paramsOpen, setParamsOpen] = (0, react.useState)(false);
+			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: pack.origin.root })), pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
+				...desc,
+				marginBottom: "4px"
+			} }, props.resolveText(pack.description)), pack.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, `${t("consumed")}: ${pack.consumes.join(", ")}`) : null, (0, react.createElement)("div", { style: {
+				marginTop: "4px",
+				display: "flex",
+				gap: "8px",
+				alignItems: "center",
+				flexWrap: "wrap"
+			} }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				onClick: () => setParamsOpen((v) => !v)
+			}, `${paramsOpen ? "▾" : "▸"} ${t("paramsToggle")}`), pack.origin.kind === "packsDir" ? (0, react.createElement)(PackLaneActions, {
+				pack,
+				status: props.status,
+				laneState: props.laneState,
+				checkLane: props.checkLane,
+				t,
+				lang: props.lang,
+				consumers: props.consumers,
+				onDone: props.onDone
+			}) : null), paramsOpen ? (0, react.createElement)("div", { style: {
+				marginTop: "6px",
+				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
+				paddingTop: "6px"
+			} }, pack.params.length === 0 ? (0, react.createElement)("p", { style: muted }, t("empty")) : pack.params.map((d) => (0, react.createElement)(PackDeclRow, {
 				key: d.name,
 				d,
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
 				onSaved: props.onSaved
-			}))))));
+			}))) : null);
 		}
-		/** One managed pack's lane actions: market standing plus two-step
-		* update/delete. Both actions overwrite or remove a packsDir directory, so a
-		* click is always the second one — arming resets on completion and on any
-		* refresh; the update confirm names the overwrite explicitly. A server
-		* failure renders through the locale catalog (what/why/what-to-do) under the
-		* buttons; the mounted card itself never unmounts, so armed state cannot
-		* fire on a stale card. */
+		/** One managed pack's lane actions: check-on-demand market standing plus
+		* two-step update/delete. 检查更新 is always visible and re-checkable; only a
+		* check that reports a newer version turns it into the two-step 更新. Both
+		* actions overwrite or remove a packsDir directory, so a click is always the
+		* second one — arming resets on completion and on any refresh; the update
+		* confirm names the overwrite explicitly, the delete confirm names installed
+		* consumers. A server failure renders through the locale catalog
+		* (what/why/what-to-do) under the buttons. */
 		function PackLaneActions(props) {
 			const { t } = props;
 			const [armed, setArmed] = (0, react.useState)(void 0);
@@ -709,28 +752,24 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				});
 			};
 			const standing = props.laneState === "ready" ? props.status === void 0 || !props.status.onMarket ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
-			const updateImpossible = props.status !== void 0 && !props.status.onMarket;
+			const updateAvailable = props.laneState === "ready" && props.status !== void 0 && props.status.onMarket && props.status.updateAvailable;
+			const checkLabel = props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
 			const rendered = rendered_error(error, props.lang);
-			return (0, react.createElement)("div", { style: {
-				marginTop: "4px",
-				display: "flex",
-				flexDirection: "column",
-				gap: "4px"
-			} }, standing !== null ? (0, react.createElement)("div", { style: muted }, standing) : null, (0, react.createElement)("div", { style: {
-				display: "flex",
+			return (0, react.createElement)("span", { style: {
+				display: "inline-flex",
 				gap: "8px",
 				alignItems: "center"
-			} }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			} }, props.laneState === "ready" && standing !== null ? (0, react.createElement)("span", { style: muted }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
-				disabled: busy || updateImpossible,
-				onClick: () => armed === "update" ? run("update") : setArmed("update")
-			}, armed === "update" ? t("confirmUpdate") : t("updateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				disabled: busy || props.laneState === "checking",
+				onClick: () => updateAvailable ? armed === "update" ? run("update") : setArmed("update") : props.checkLane()
+			}, checkLabel), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => armed === "delete" ? run("delete") : setArmed("delete")
-			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null), rendered !== void 0 ? (0, react.createElement)("span", { style: {
+			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, rendered !== void 0 ? (0, react.createElement)("span", { style: {
 				color: "var(--dsw-alias-state-error-primary, crimson)",
 				whiteSpace: "pre-wrap"
 			} }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { style: {
@@ -865,7 +904,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const t = (0, react.useMemo)(() => translate(lang === "zh" ? zh : en), [lang]);
 			const [payload, setPayload] = (0, react.useState)(void 0);
 			const [error, setError] = (0, react.useState)(void 0);
-			const [view, setView] = (0, react.useState)("groups");
+			const [view, setView] = (0, react.useState)("packs");
 			const refresh = (0, react.useCallback)(() => {
 				fetchParams().then((p) => {
 					setPayload(p);
@@ -888,16 +927,16 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			} }, t("loading"));
 			const tabs = [
 				{
-					value: "groups",
-					label: t("viewGroups"),
-					id: `${NS$1}-groups`,
-					panelId: `${NS$1}-groups-panel`
-				},
-				{
 					value: "packs",
 					label: t("viewPacks"),
 					id: `${NS$1}-packs`,
 					panelId: `${NS$1}-packs-panel`
+				},
+				{
+					value: "groups",
+					label: t("viewGroups"),
+					id: `${NS$1}-groups`,
+					panelId: `${NS$1}-groups-panel`
 				},
 				{
 					value: "config",
