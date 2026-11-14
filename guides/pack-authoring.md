@@ -49,10 +49,16 @@ Two lanes; pick explicitly before writing files:
   `<workspace>/.docwright/packs/` (absolute path in cordis.yml). A same-name
   pack there overrides the built-in one. If the directory is inside the
   session workspace you can write it with normal file tools; if outside, ask
-  the user to place files or approve the write.
+  the user to place files or approve the write. RECOMMENDED authoring spot:
+  the workspace `.docwright/packs/` tier is a fixed load tier loaded
+  dynamically per call — edit a pack file and the next generation call uses
+  it, no plugin reload needed. Keep the long-term source of truth in an
+  authoring repository (or the repo lane's `packs/`) and symlink it into the
+  workspace directory for debugging; publish via the market.
 
 **Loading happens at plugin apply time**: after writing or changing pack
-files, the plugin must re-apply before `doc_generate` sees them. Verify first
+files OUTSIDE the workspace tier, the plugin must re-apply before
+`doc_generate` sees them. Verify first
 with `pack:check`, then make the plugin re-apply in ONE of three ways:
 (a) session-scoped toggle — disable then enable the `include:docwright`
 plugin entry via the plugin manager (live profile applies immediately; the
@@ -267,21 +273,29 @@ closes its own loop (generate → validate → repair).
   org-specific tuning of an existing type = same-name packsDir override, not
   a fork. Chain-level shared params (numbering conventions, tree depth) are
   declared once at the chain head and inherited via receipts.
-- **Suite question**: when the decomposition produced several interrelated
-  packs, answer whether a SUITE should be defined alongside them (a suite is
-  a market-side named set — one install lands every member). Judge by three
-  questions: do the packs serve ONE complete scenario? Will the user most
-  likely want all of them installed at once? Does installing only one or two
-  of them still make sense on its own? All three leaning yes → recommend
-  defining a suite with these packs as members; a consumes chain by itself is
-  NOT a suite justification (dependencies install along anyway). Present the
-  conclusion to the user explicitly in this stage's output — recommended or
-  not, with a one-sentence reason — and only put it on the publish checklist
-  after the user agrees. Warn the user about the lifecycle cost before they
-  agree: suite MEMBERS are suite-managed on every deployment — once the suite
-  is live they can no longer be installed, updated, or deleted one by one,
-  only through the suite. Pack the suite around packs users will always want
-  together; leave genuinely optional or standalone variants out of it.
+
+#### Suites — design them as part of the decomposition, not as an afterthought
+
+Authoring several interrelated packs very likely means the task includes a
+SUITE (a market-side named set: one install lands every member, and members
+become suite-managed on every deployment). Treat the suite decision as a
+first-class output of Stage 5, next to the chain sketch — the COSMIC
+five-pack scenario was planned as a suite from the start, not retrofitted.
+
+Judge by three questions: do the packs serve ONE complete scenario? Will
+the user most likely want all of them installed at once? Does installing
+only one or two of them still make sense on its own? All three leaning yes
+→ recommend defining a suite with these packs as members; a consumes chain
+by itself is NOT a suite justification (dependencies install along anyway).
+
+Present the conclusion to the user explicitly in this stage's output —
+recommended or not, with a one-sentence reason — and only put it on the
+publish checklist after the user agrees. Warn the user about the lifecycle
+cost before they agree: once the suite is live, members can no longer be
+installed, updated, or deleted one by one anywhere — fixes ship by
+publishing the pack AND bumping the suite through review. Pack the suite
+around packs users will always want together; leave genuinely optional or
+standalone variants out of it.
 
 ### Stage 6 — Design the params
 
