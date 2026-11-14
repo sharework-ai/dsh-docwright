@@ -72,6 +72,8 @@ export interface ParamsPayload {
   packs: readonly UiPackEntry[]
   groups: readonly UiParamGroup[]
   config: readonly UiConfigEntry[]
+  /** Config's disabledPacks array — the enable/disable toggles read it. */
+  disabledPacks?: readonly string[]
 }
 
 async function parse<T>(response: Response): Promise<T> {
@@ -151,6 +153,16 @@ export async function deleteManagedPack(pack: string, force = false): Promise<vo
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ pack, force }),
   }))
+}
+
+/** Toggle one pack's enabled state (docs/designs/pack-load-dirs.md). The server guards suite members (disable the suite instead) and in-use packs (force names the consumers). Returns the persisted array. */
+export async function setPackDisabled(pack: string, disabled: boolean, force = false): Promise<readonly string[]> {
+  const body = await parse<{ disabled: readonly string[] }>(await fetch('/api/docwright/pack-disabled', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pack, disabled, force }),
+  }))
+  return body.disabled
 }
 
 /** One suite member's local-vs-market standing. */

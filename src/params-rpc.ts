@@ -220,8 +220,9 @@ export function buildParamsPayload(packs: ReadonlyMap<string, Pack>, configSchem
   packs: readonly UiPackEntry[]
   groups: readonly UiParamGroup[]
   config: readonly UiConfigEntry[]
+  disabledPacks: readonly string[]
 } {
-  return { ...buildParamsCatalog(packs), config: buildConfigCatalog(configSchema as SchemaNode, resolved) }
+  return { ...buildParamsCatalog(packs), config: buildConfigCatalog(configSchema as SchemaNode, resolved), disabledPacks: resolved.disabledPacks ?? [] }
 }
 
 function sameJson(a: unknown, b: unknown): boolean {

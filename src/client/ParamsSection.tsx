@@ -23,7 +23,7 @@
  */
 import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
-import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSuiteStatus, saveConfigPatch, savePackParam, updateManagedPack, updateSuite } from './api.ts'
+import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSuiteStatus, saveConfigPatch, savePackParam, setPackDisabled, updateManagedPack, updateSuite } from './api.ts'
 import { DEPENDS_ICON_PATH, icon, SUITE_ICON_PATH } from './icons.ts'
 import type { ApiError } from './api.ts'
 import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration, UiSuiteStatus } from './api.ts'
@@ -343,12 +343,14 @@ function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, 
   }, [])
   const byName = useMemo(() => new Map(lane.rows.map(u => [u.name, u])), [lane.rows])
   const installedNames = useMemo(() => new Set(payload.packs.map(p => p.name)), [payload.packs])
+  const disabledNames = useMemo(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks])
   return h('div', null,
     lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
     payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
       resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(p.name) ?? [],
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
+      disabled: disabledNames.has(p.name),
       onDone: text => { setLaneDone(text); props.onSaved(); checkOne(p.name) } })))
 }
 
@@ -372,6 +374,8 @@ function PackCard(props: {
   /** Switch tabs and scroll to a card anchor (suite/dependency chips). */
   onJump: (view: 'packs' | 'suites', anchor: string) => void
   consumers: readonly string[]
+  /** True when the config's disabledPacks array lists this pack (docs/designs/pack-load-dirs.md). */
+  disabled: boolean
   onDone: (doneText: string) => void
 }) {
   const { pack, t } = props
@@ -382,7 +386,8 @@ function PackCard(props: {
       h(Pill, {}, `v${pack.version}`),
       h(Pill, {}, pack.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
       pack.origin.kind === 'builtin' ? h(Pill, {}, t('originBuiltin')) : null,
-      pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null),
+      pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null,
+      props.disabled ? h(Pill, {}, t('disabledPill')) : null),
     h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(pack.description)),
     pack.consumes.length > 0 || props.suites.length > 0
       ? h('div', { style: { ...muted, marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } satisfies CSSProperties },
@@ -436,7 +441,7 @@ function PackCard(props: {
       // install/update/delete): no per-pack lane buttons for them.
       pack.origin.kind === 'packsDir' && props.suites.length === 0
         ? h(PackLaneActions, { pack, status: props.status, checked: props.checked, laneState: props.laneState, check: props.checkOne, t, lang: props.lang,
-          consumers: props.consumers, onDone: props.onDone })
+          consumers: props.consumers, disabled: props.disabled, onDone: props.onDone })
         : null),
     paramsOpen
       ? h('div', { style: { marginTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l4, transparent)', paddingTop: '6px' } satisfies CSSProperties },
@@ -465,18 +470,23 @@ function PackLaneActions(props: {
   lang: 'zh' | 'en'
   /** Installed packs consuming this one — deleting it breaks their chains. */
   consumers: readonly string[]
+  /** True when the config's disabledPacks array lists this pack (docs/designs/pack-load-dirs.md). */
+  disabled: boolean
   onDone: (doneText: string) => void
 }) {
   const { t } = props
-  const [armed, setArmed] = useState<'update' | 'delete' | undefined>(undefined)
+  const [armed, setArmed] = useState<'update' | 'delete' | 'disable' | 'enable' | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | undefined>(undefined)
-  const run = (kind: 'update' | 'delete') => {
+  const run = (kind: 'update' | 'delete' | 'disable' | 'enable') => {
     setBusy(true)
     setError(undefined)
-    const call = kind === 'update' ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name, props.consumers.length > 0)
+    const call = kind === 'update' ? updateManagedPack(props.pack.name)
+      : kind === 'delete' ? deleteManagedPack(props.pack.name, props.consumers.length > 0)
+      : setPackDisabled(props.pack.name, kind === 'disable', props.consumers.length > 0 && kind === 'disable')
+    const doneText = kind === 'update' ? undefined : kind === 'disable' ? t('disableDone') : kind === 'enable' ? t('enableDone') : t('deletedDone')
     void call.then(
-      version => props.onDone(kind === 'update' ? fill(t('updatedDone'), { version: typeof version === 'string' ? version : '' }) : t('deletedDone')),
+      result => props.onDone(kind === 'update' ? fill(t('updatedDone'), { version: typeof result === 'string' ? result : '' }) : doneText ?? ''),
       cause => setError(cause instanceof Error ? cause : new Error(String(cause))),
     ).finally(() => {
       setBusy(false)
@@ -503,6 +513,14 @@ function PackLaneActions(props: {
       checkLabel),
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
       armed === 'delete' ? (props.consumers.length > 0 ? fill(t('confirmDeleteBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDelete')) : t('deleteBtn')),
+    h(Button, { size: 'sm', variant: 'ghost', disabled: busy,
+      onClick: () => {
+        const kind = props.disabled ? 'enable' : 'disable'
+        armed === kind ? run(kind) : setArmed(kind)
+      } },
+      props.disabled
+        ? (armed === 'enable' ? t('confirmEnable') : t('enableBtn'))
+        : (armed === 'disable' ? (props.consumers.length > 0 ? fill(t('confirmDisableBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDisable')) : t('disableBtn'))),
     busy ? h('span', { style: muted }, t('saving')) : null,
     rendered !== undefined ? h('span', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties },
       rendered.text,

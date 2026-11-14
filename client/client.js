@@ -117,6 +117,18 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				})
 			}));
 		}
+		/** Toggle one pack's enabled state (docs/designs/pack-load-dirs.md). The server guards suite members (disable the suite instead) and in-use packs (force names the consumers). Returns the persisted array. */
+		async function setPackDisabled(pack, disabled, force = false) {
+			return (await parse(await fetch("/api/docwright/pack-disabled", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					pack,
+					disabled,
+					force
+				})
+			}))).disabled;
+		}
 		/** Suite standing for the Suites tab: the market's suite list with each
 		* member's local placement. An empty array means the market has no suites
 		* (or does not support them) — a one-line note, never an error. */
@@ -215,6 +227,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			checking: "Checking…",
 			paramsToggle: "Params",
 			confirmUpdate: "Confirm update (overwrites local changes)",
+			disableBtn: "Disable",
+			enableBtn: "Enable",
+			confirmDisable: "Confirm disable",
+			confirmEnable: "Confirm enable",
+			confirmDisableBreaks: "Disabling breaks the chains of: {packs}. Confirm to disable anyway",
+			disabledPill: "disabled",
+			disableDone: "Disabled.",
+			enableDone: "Enabled.",
 			deleteBtn: "Delete",
 			confirmDelete: "Confirm delete",
 			confirmDeleteBreaks: "Confirm delete ({packs} consume it — their chains break)",
@@ -312,6 +332,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			checking: "检查中…",
 			paramsToggle: "参数",
 			confirmUpdate: "确认更新（将覆盖本地改动）",
+			disableBtn: "禁用",
+			enableBtn: "启用",
+			confirmDisable: "确认禁用",
+			confirmEnable: "确认启用",
+			confirmDisableBreaks: "禁用会打断这些包的链路：{packs}。确认仍要禁用",
+			disabledPill: "已禁用",
+			disableDone: "已禁用。",
+			enableDone: "已启用。",
 			deleteBtn: "删除",
 			confirmDelete: "确认删除",
 			confirmDeleteBreaks: "确认删除（{packs} 消费它，删除将断链）",
@@ -794,6 +822,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}, []);
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
 			const installedNames = (0, react.useMemo)(() => new Set(payload.packs.map((p) => p.name)), [payload.packs]);
+			const disabledNames = (0, react.useMemo)(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks]);
 			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
 				key: p.name,
 				pack: p,
@@ -809,6 +838,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				installed: installedNames,
 				suites: props.suites.get(p.name) ?? [],
 				consumers: payload.packs.filter((other) => other.name !== p.name && other.consumes.includes(p.name)).map((other) => other.name),
+				disabled: disabledNames.has(p.name),
 				onDone: (text) => {
 					setLaneDone(text);
 					props.onSaved();
@@ -824,7 +854,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			return (0, react.createElement)("div", {
 				id: packAnchorId(pack.name),
 				style: card
-			}, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
+			}, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null, props.disabled ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("disabledPill")) : null), (0, react.createElement)("div", { style: {
 				...desc,
 				marginBottom: "4px"
 			} }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { style: {
@@ -894,6 +924,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				consumers: props.consumers,
+				disabled: props.disabled,
 				onDone: props.onDone
 			}) : null), paramsOpen ? (0, react.createElement)("div", { style: {
 				marginTop: "6px",
@@ -924,7 +955,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const run = (kind) => {
 				setBusy(true);
 				setError(void 0);
-				(kind === "update" ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name, props.consumers.length > 0)).then((version) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof version === "string" ? version : "" }) : t("deletedDone")), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
+				const call = kind === "update" ? updateManagedPack(props.pack.name) : kind === "delete" ? deleteManagedPack(props.pack.name, props.consumers.length > 0) : setPackDisabled(props.pack.name, kind === "disable", props.consumers.length > 0 && kind === "disable");
+				const doneText = kind === "update" ? void 0 : kind === "disable" ? t("disableDone") : kind === "enable" ? t("enableDone") : t("deletedDone");
+				call.then((result) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof result === "string" ? result : "" }) : doneText ?? ""), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
 					setBusy(false);
 					setArmed(void 0);
 				});
@@ -950,7 +983,15 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => armed === "delete" ? run("delete") : setArmed("delete")
-			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, rendered !== void 0 ? (0, react.createElement)("span", { style: {
+			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: () => {
+					const kind = props.disabled ? "enable" : "disable";
+					armed === kind ? run(kind) : setArmed(kind);
+				}
+			}, props.disabled ? armed === "enable" ? t("confirmEnable") : t("enableBtn") : armed === "disable" ? props.consumers.length > 0 ? fill(t("confirmDisableBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDisable") : t("disableBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, rendered !== void 0 ? (0, react.createElement)("span", { style: {
 				color: "var(--dsw-alias-state-error-primary, crimson)",
 				whiteSpace: "pre-wrap"
 			} }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { style: {
