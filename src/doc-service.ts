@@ -93,12 +93,30 @@ export class DocService {
   }
 }
 
-/** Cache key `${pack}:${language}` → compiled DocService. */
+/**
+ * Cache key `${pack}:${language}` → compiled DocService. The key includes a
+ * fingerprint of everything the DocService compiles (manifest version, schema,
+ * ruleset, functions source, prompt, template), so editing a pack in place —
+ * the packsDir workspace tier is a live load tier — swaps the compiled
+ * instance on the next call instead of serving a stale one for the host
+ * lifetime. Hashing cost is per accessor call and negligible next to ajv
+ * compilation.
+ */
 const serviceCache = new Map<string, DocService>()
 
-/** Cached DocService accessor; compilation cost is paid once per (pack, language). */
+/** Cached DocService accessor; compilation cost is paid once per pack content fingerprint. */
 export function getDocService(pack: Pack, language: string): DocService {
-  const key = `${pack.manifest.name}:${language}`
+  const fingerprint = JSON.stringify([
+    pack.manifest.name,
+    language,
+    pack.manifest.version,
+    pack.schema,
+    pack.rules.get(language) ?? [],
+    pack.functionsSourceHash,
+    pack.prompts.get(language) ?? '',
+    pack.templates.get(language) ?? '',
+  ])
+  const key = `${pack.manifest.name}:${language}:${sha256(fingerprint)}`
   let service = serviceCache.get(key)
   if (service === undefined) {
     service = new DocService(pack, language)

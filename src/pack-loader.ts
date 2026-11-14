@@ -328,8 +328,12 @@ async function loadFunctionRules(dir: string): Promise<{ rules: readonly Functio
   try {
     // Dynamic import needs a URL, not a raw OS path: on Windows a bare `C:\...`
     // specifier is parsed as protocol `c:` (and `#` in a path would act as a
-    // URL fragment on every platform).
-    mod = await import(pathToFileURL(rulesPath).href)
+    // URL fragment on every platform). The source-hash query busts Node's ESM
+    // module cache when the file changes — the workspace packsDir tier is a
+    // live load tier, and a same-URL re-import would otherwise serve the
+    // previous rule set forever (while the freshly hashed source claims
+    // otherwise). Unchanged files keep their cache entry.
+    mod = await import(`${pathToFileURL(rulesPath).href}?fns=${sha256(source)}`)
   } catch (error) {
     // A present-but-broken functions.js must never silently disable rules.
     throw new Error(`pack ${dir}: rules/functions.js failed to import (${(error as Error).message}); fix the module or remove the file`)
