@@ -281,6 +281,13 @@ export function defineDocPacksTool(deps: ToolDeps) {
         description: resolveLocalized(p.manifest.description, 'en'),
         languages: [...p.manifest.languages],
         consumes: [...p.manifest.consumes],
+        // Which tier the pack came from (docs/designs/pack-load-dirs.md, P3):
+        // builtin / packsDir / extraPacksDir / workspace — answers "which
+        // copy is active" whenever several tiers carry the same name.
+        origin: p.origin.kind,
+        ...(p.origin.kind === 'workspace' && p.origin.depth !== undefined && p.origin.depth > 0
+          ? { workspaceDepth: p.origin.depth }
+          : {}),
         params: Object.entries(p.manifest.params ?? {}).map(([name, spec]) => ({
           name,
           type: spec.type,
@@ -292,6 +299,16 @@ export function defineDocPacksTool(deps: ToolDeps) {
           extractable: spec.extractable === true,
         })),
       })),
+      // Shadowed copies: same-name losers from earlier tiers, so a user can
+      // always tell which copy actually governs.
+      ...(shadowed.length > 0 ? { shadowed: shadowed.map(copy => ({
+        name: copy.name,
+        shadowedOrigin: copy.origin.kind,
+        shadowedVersion: copy.version,
+        shadowedDir: copy.dir,
+        activeOrigin: copy.activeOrigin.kind,
+        activeVersion: copy.activeVersion,
+      })) } : {}),
       }
     },
   })
