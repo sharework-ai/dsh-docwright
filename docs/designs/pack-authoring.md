@@ -26,9 +26,9 @@ Status: S1 IMPLEMENTED（2026-10-30：技能 docwright-pack-authoring + doc_pack
 pack 的写入位置与文档 workspace 是两个世界——authoring 必须显式选 lane，插件自身不架桥：
 
 - **仓库 lane（内置/场景 pack）**：authoring 在 docwright 仓库 checkout（git worktree 纪律）进行，由仓库内的开发会话执行——写 `packs/<name>/` 就是普通仓库写入，无越权问题。六层验证梯子只有这条 lane 能全跑（变异测试、确定性闭环、host-smoke 都长在仓库测试套件里）；cosmic 六 pack 即此形态，合入走 `feat/<slug>` + `--no-ff`。
-- **packsDir lane（用户定制 pack）**：`config.packsDir` 是唯一无需动仓库的安装点（DX-H3 同名覆盖语义）。**约定目录名 `<workspace>/.docwright/packs/`**（点前缀目录不入素材扫描与常规文档视图，`.docwright` 命名空间与插件对齐）——cordis.yml 的 packsDir 用绝对路径指向它。放在 dsh 会话工作区内：会话 agent 的常规文件工具可直接写，零提权；放在工作区外——写入需经宿主文件工具的越权审批（宿主能力，形态以宿主为准），或不经 agent 由用户手工放置。packsDir 进工作区属**用户显式选择的信任放宽**（模型可写面覆盖 pack 源）：配置是用户写的，装载仍在 apply 期、重载后生效，插件未因此新增任何写通道。验证下限用 `pack:check`（任意目录可跑）+ 装载期校验，变异测试与闭环测试在该 lane 为约定契约。
-- **插件不建提权写通道（否决原则）**：pack 安装是配置变更，不是文档产物——packsDir 属 cordis.yml 部署配置（信任域 A），doc_generate 的 workspace 路径包含是另一个信任域 B（mvp §3.8）；authoring 不得在 A/B 之间架桥，否则"素材不能静默改配置"的防线被模型可写面绕开。未来若要"会话内一键安装"，只能是宿主权限系统下的显式用户操作 + 装载期校验全量校验。
-- **生效在 apply 期**：pack 装载是 apply-time（decision #9）——写入完成后需插件重载（宿主重启/重载）才可见。这天然隔离"造"与"用"：authoring 会话产出的 pack 不会在本会话内立即被 doc_generate 使用。
+- **packsDir lane（用户定制 pack）**：`config.packsDir` 是唯一无需动仓库的安装点（DX-H3 同名覆盖语义），约定目录名 `<workspace>/.docwright/packs/`。放在工作区内是用户显式选择的信任放宽：配置是用户写的，装载仍在 apply 期，插件未因此新增任何写通道。
+
+目录职责划分、信任域约束（安装是配置变更不是文档产物，不在信任域 A/B 之间架桥）、apply 期生效与会话内重载通道、以及加载器改进提案（软链跟随、多 packsDir），统一见 **pack-load-dirs.md**——本节只留 lane 选择的行为差异，目录与装载的事实源在那边。
 
 技能 playbook 在阶段 9（入册）按 lane 分叉指引：仓库 lane 给 git worktree + 测试套件路径；packsDir lane 先问 packsDir 位置——不在工作区内则请用户放置文件或显式批准越权写入。
 
