@@ -52,9 +52,15 @@ Two lanes; pick explicitly before writing files:
   the user to place files or approve the write.
 
 **Loading happens at plugin apply time**: after writing or changing pack
-files, the plugin must reload (host restart/reload) before `doc_generate` sees
-them. A pack you just authored is never usable in the same session that wrote
-it — verify with `pack:check` instead.
+files, the plugin must re-apply before `doc_generate` sees them. Verify first
+with `pack:check`, then make the plugin re-apply in ONE of three ways:
+(a) session-scoped toggle — disable then enable the `include:docwright`
+plugin entry via the plugin manager (live profile applies immediately; the
+`doc_*` tools blink off during the toggle, and in-flight generations in other
+sessions of the same profile are interrupted); (b) the market lane — publish
+and install, which hot-reloads the pack map by design; (c) host restart as
+the fallback. A pack whose files fail the load-time gate can take the plugin
+down on re-apply — never skip the `pack:check` step before reloading.
 
 ## Verify as you go
 
