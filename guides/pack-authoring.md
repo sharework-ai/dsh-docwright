@@ -259,15 +259,15 @@ closes its own loop (generate → validate → repair).
     `<PREFIX>-<topicNo>-<NN>` engine naming, and a `doc_chain_status`
     coverage matrix. Right when your domain vocabulary matches (or tolerates)
     the `functions`/`funcId` shape.
-  - **Param addressing (mode B)**: the planning array uses your domain
-    vocabulary (e.g. `epics[]` + `code`). The downstream pack declares a
-    required-no-default addressing param (e.g. `epicCode`) and the caller
-    addresses each item with a deterministic `artifactName`
-    (`<pack>-<code>`); reuse stays idempotent via the explicit-name
-    comparison. Note: `doc_chain_status` reports `declares no functions[]`
-    for mode-B chains — coverage accounting then lives in your
-    cross-artifact rules (reconcile every upstream entry in the downstream
-    artifact), not in the chain tool.
+  - **Declared fan-out (mode B, IMPLEMENTED 2026-11-14)**: the planning
+    array uses your domain vocabulary (e.g. `epics[]` + `code`). The
+    downstream pack declares it in the manifest — `fanout: { array: "epics",
+    idField: "code", titleField?: "..." }` — and the engine generalizes:
+    targetIndex candidates list your entries, per-function artifacts are
+    engine-named `<pack>-<code>`, and doc_chain_status coverage runs over
+    your array. Reference implementation: examples/packsdir/idea-board +
+    idea-note (tests/pack-fanout-general.spec.ts). Without a declaration the
+    COSMIC shape functions[]/funcId applies.
   Whichever mode: anchor by index or identity, never by prose similarity.
 - Check what exists first: `doc_packs` may already cover the document type;
   org-specific tuning of an existing type = same-name packsDir override, not

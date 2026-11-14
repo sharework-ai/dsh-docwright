@@ -11,7 +11,7 @@
 - **阶段 2 规格设计**：为每个产物写 schema.json，定义字段、enum、required 与嵌套结构，并预留包间引用键（如 funcId）。
 - **阶段 3 规则开发**：schema 能表达的不做规则，单字段简单族用声明式规则，跨字段、跨产物、嵌套作用域用函数规则。error 留给必须阻断的问题（结构破坏、锚点断裂、预算越界、唯一性冲突），warning 管质量瑕疵，info 管风格建议。每条规则都要写得可变异。
 - **阶段 4 输入输出分类**：区分素材（materials，进 `{{materials}}`）、上游（upstream，经 consumes 或随行注入）、产物（落哪个作用域）、可复用性（reuse 取值）。
-- **阶段 5 包分解与套件设计**：决定做几个包、consumes 怎么连，以及是否把相关包定义为一个 suite。包边界跟随产物边界；链的扇出按上游数组条目对应；回流合并类动作用独立包。suite 的判定问题与生命周期代价见下文"套件（suite）设计"一节。
+- **阶段 5 包分解与套件设计**：决定做几个包、consumes 怎么连，以及是否把相关包定义为一个 suite。包边界跟随产物边界；链的扇出寻址：非 COSMIC 词汇的包在 manifest 声明 fanout: { array, idField, titleField? }（消费的上游数组与身份字段），引擎的 targetIndex 候选、<pack>-<id> 命名与 doc_chain_status 覆盖即按声明工作（未声明走 COSMIC 的 functions[]/funcId 原形，参考 examples/packsdir/idea-board+idea-note）；回流合并类动作用独立包。suite 的判定问题与生命周期代价见下文"套件（suite）设计"一节。
 - **阶段 6 参数设计**：逐参数判定类型、required、confirm、overridable、extractable。只有参数的 value 进生成上下文，min/max 是校验容差；数值边界与正则源参数禁 overridable；沿链继承的参数不填 default。
 - **阶段 7 生成与表达**：写 prompts 和 templates。提示词的硬性约束与规则集一一对应。
 - **阶段 8 验证梯子**：从装载期校验、golden 全绿，逐层上到变异测试、确定性闭环测试、宿主冒烟、真实模型 e2e。日常开发以 `pack:check` 一条命令覆盖前两层。
