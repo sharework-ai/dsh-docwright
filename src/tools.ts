@@ -12,6 +12,9 @@ import { fetchInstallPlan, fetchSuiteInstallPlan, searchMarket } from './market-
 import { previewParams, resolveEffectiveParams, type ExtractionView, type ParamDrift, type ParamRow } from './params.ts'
 import type { Pack } from './pack.ts'
 import { effectiveWorkspaceRoot, normalizeWindowsPath, resolveRootWithin, type SessionWorkspaceCarrier } from './paths.ts'
+import { overlayWorkspaceTier, applyDisabled, resolvePacksDir } from './pack-sources.ts'
+import { readSuiteRecord } from './pack-manage.ts'
+import type { ShadowedCopy } from './pack-loader.ts'
 import { artifactHashOf, type MaterialAnchor, type Receipt, type UpstreamAnchor } from './receipt.ts'
 import { severityCounts } from './issue.ts'
 
@@ -33,6 +36,35 @@ export interface ToolDeps {
   /** The builtin packs root + loader, for the install lane's in-place reload (registerTools owns the values). */
   readonly builtinRoot?: string
   readonly loadPacks?: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+}
+
+/** Suite-name expansion source: the local suites.json record at the install dir (design doc 启用与禁用). */
+async function disabledMembersResolver(config: Config): Promise<(name: string) => readonly string[] | undefined> {
+  const suites = await readSuiteRecord(resolvePacksDir(config.packsDir))
+  return name => suites.find(s => s.name === name)?.members.map(m => m.name)
+}
+
+/**
+ * Per-call pack view (docs/designs/pack-load-dirs.md): the apply-time tiers
+ * (builtin/install/extra) overlaid with the workspace tier — loaded
+ * dynamically per call, workspace packs shadow same-name copies — then the
+ * disabled-name filter. Every tool that reads the pack map goes through this,
+ * so workspace packs and disabled packs behave identically across
+ * doc_packs/generate/validate/chain-status.
+ */
+async function packsForSession(
+  deps: ToolDeps,
+  exec: SessionWorkspaceCarrier | undefined,
+): Promise<{ packs: ReadonlyMap<string, Pack>; shadowed: readonly ShadowedCopy[] }> {
+  const workspaceRoot = effectiveWorkspaceRoot(exec, deps.config.workspaceRoot)
+  const overlay = await overlayWorkspaceTier(
+    deps.packs,
+    workspaceRoot,
+    deps.config.searchWorkspacePacksUpward === true,
+    deps.config.packShadowPolicy ?? 'allow',
+  )
+  const packs = applyDisabled(overlay.packs, deps.config.disabledPacks, await disabledMembersResolver(deps.config))
+  return { packs, shadowed: overlay.shadowed }
 }
 
 /**
@@ -119,13 +151,13 @@ function resolveScopedRoots(
   }
 }
 
-function resolvePack(deps: ToolDeps, name: string): Pack {
-  const pack = deps.packs.get(name)
+function resolvePack(deps: ToolDeps, name: string, packs: ReadonlyMap<string, Pack> = deps.packs): Pack {
+  const pack = packs.get(name)
   if (pack === undefined) {
     const marketHint = deps.config.marketSearch !== false
       ? '; if none of them fits, search the pack market with doc_market_search before authoring a new pack'
       : ''
-    throw new Error(`unknown pack "${name}"; discover installed packs via doc_packs (available: ${[...deps.packs.keys()].sort().join(', ') || 'none installed'})${marketHint}`)
+    throw new Error(`unknown pack "${name}"; discover installed packs via doc_packs (available: ${[...packs.keys()].sort().join(', ') || 'none installed'})${marketHint}`)
   }
   return pack
 }
@@ -236,11 +268,12 @@ export function defineDocPacksTool(deps: ToolDeps) {
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute() {
+    async execute(_args: Record<string, never>, exec?: SessionWorkspaceCarrier) {
+      const { packs, shadowed } = await packsForSession(deps, exec)
       return {
         confirmPolicy: deps.config.confirmPolicy ?? DEFAULT_CONFIRM_POLICY,
         marketSearch: deps.config.marketSearch !== false,
-        packs: [...deps.packs.values()].map(p => ({
+        packs: [...packs.values()].map(p => ({
         name: p.manifest.name,
         version: p.manifest.version,
         // Model face projects `en` regardless of UI locale: prompt material
@@ -613,7 +646,8 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args: { pack: string; materials?: unknown[]; language?: string; upstream?: unknown[]; artifactName?: string; topic?: string; maxRounds?: number; force?: boolean; params?: unknown; confirm?: boolean; confirmPolicy?: unknown }, exec) {
-      const pack = resolvePack(deps, args.pack)
+      const sessionPacks = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
+      const pack = resolvePack(deps, args.pack, sessionPacks.packs)
       const language = resolveLanguage(deps, pack, args.language)
       const materials = (args.materials as string[] | undefined) ?? []
       const upstream = args.upstream as string[] | undefined
@@ -634,7 +668,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           throw new Error(`pack "${pack.manifest.name}" consumes upstream artifacts [${pack.manifest.consumes.join(', ')}]; pass their workspace paths via the upstream parameter`)
         }
         const policy = deps.config.upstreamVersionPolicy ?? DEFAULT_UPSTREAM_VERSION_POLICY
-        const verified = await verifyUpstreamReceipts(workspaceRoot, upstream, pack, deps.packs, policy)
+        const verified = await verifyUpstreamReceipts(workspaceRoot, upstream, pack, sessionPacks.packs, policy)
         upstreamTexts = verified.texts
         upstreamAnchors = verified.anchors
         upstreamWarnings = verified.warnings.length > 0 ? verified.warnings : undefined
@@ -775,7 +809,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           if (policy === 'regenerate') {
             driftImpact = `paramDriftPolicy is "regenerate": confirming these params requires regenerating the upstream artifacts first; the call will be refused until then.`
           } else {
-            const failures = revalidateUpstreamUnderParams(upstreamRecords, deps.packs, overrides ?? {})
+            const failures = revalidateUpstreamUnderParams(upstreamRecords, sessionPacks.packs, overrides ?? {})
             driftImpact = failures.length === 0
               ? 'paramDriftPolicy is "revalidate": upstream artifacts revalidated green under the new params; safe to continue.'
               : `paramDriftPolicy is "revalidate": upstream artifacts fail under the new params (${failures.join('; ')}); the call will be refused.`
@@ -819,7 +853,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           const detail = preview.drift.map(d => `${d.name}: ${shortValue(d.from)} → ${shortValue(d.to)}`).join('; ')
           throw new Error(`params drift from the upstream receipts (${detail}); pack "${pack.manifest.name}" paramDriftPolicy is "regenerate" — regenerate the upstream artifacts under the new params first, then re-run this call`)
         }
-        const failures = revalidateUpstreamUnderParams(upstreamRecords, deps.packs, overrides ?? {})
+        const failures = revalidateUpstreamUnderParams(upstreamRecords, sessionPacks.packs, overrides ?? {})
         if (failures.length > 0) {
           throw new Error(`upstream artifacts fail validation under the new params (${failures.join('; ')}); pack "${pack.manifest.name}" paramDriftPolicy is "revalidate" — regenerate the upstream under the new params or revert the param change`)
         }
@@ -929,12 +963,13 @@ export function defineDocValidateTool(deps: ToolDeps) {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args: { artifactPath: string; pack: string; language?: string; params?: unknown; upstream?: unknown[] }, exec) {
-      const pack = resolvePack(deps, args.pack)
+      const sessionPacks = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
+      const pack = resolvePack(deps, args.pack, sessionPacks.packs)
       const workspaceRoot = effectiveWorkspaceRoot(exec as SessionWorkspaceCarrier | undefined, deps.config.workspaceRoot)
       const artifactPath = confinePath(workspaceRoot, args.artifactPath, 'artifactPath')
       const upstreamRefs = args.upstream as string[] | undefined
       const verifiedUpstream = upstreamRefs !== undefined && upstreamRefs.length > 0 && pack.manifest.consumes.length > 0
-        ? await verifyUpstreamReceipts(workspaceRoot, upstreamRefs, pack, deps.packs, deps.config.upstreamVersionPolicy ?? DEFAULT_UPSTREAM_VERSION_POLICY)
+        ? await verifyUpstreamReceipts(workspaceRoot, upstreamRefs, pack, sessionPacks.packs, deps.config.upstreamVersionPolicy ?? DEFAULT_UPSTREAM_VERSION_POLICY)
         : undefined
       const raw = await readFile(artifactPath, 'utf8')
       let artifact: unknown
@@ -1065,7 +1100,8 @@ export function defineDocChainStatusTool(deps: ToolDeps) {
       const stages: string[] = [planPackName]
       let frontier = [planPackName]
       while (frontier.length > 0) {
-        const next = [...deps.packs.values()]
+        const { packs: chainPacks } = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
+        const next = [...chainPacks.values()]
           .filter(p => p.manifest.scope !== 'workspace' && p.manifest.consumes.some(c => frontier.includes(c)) && !stages.includes(p.manifest.name))
           .map(p => p.manifest.name)
         stages.push(...next)

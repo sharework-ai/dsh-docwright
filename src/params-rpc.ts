@@ -102,7 +102,7 @@ export interface UiPackEntry {
   readonly consumes: readonly string[]
   readonly paramDriftPolicy?: string
   /** Where the pack was loaded from — the UI shows it so an edit's destination is never a surprise (write lands in the same root's manifest.json). */
-  readonly origin: { readonly kind: 'builtin' | 'packsDir'; readonly root: string }
+  readonly origin: { readonly kind: 'builtin' | 'packsDir' | 'extraPacksDir' | 'workspace'; readonly root: string; readonly depth?: number }
   readonly params: readonly UiParamDeclaration[]
 }
 

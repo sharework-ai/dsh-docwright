@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="520" viewBox="0 0 880 520">
+  <style>
+    text { font-family: sans-serif; fill: #1f2933; }
+    .title { font-size: 16px; font-weight: bold; }
+    .label { font-size: 13px; font-weight: bold; }
+    .small { font-size: 11px; fill: #52606d; }
+    .box  { fill: #f5f7fa; stroke: #52606d; stroke-width: 1.2; rx: 8; }
+    .doc  { fill: #eef4fb; stroke: #2f6db3; stroke-width: 1.2; }
+    .host { fill: #eef7ee; stroke: #3d8b4f; stroke-width: 1.5; }
+    .line { stroke: #7b8794; stroke-width: 1.2; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7b8794"/>
+    </marker>
+  </defs>
+
+  <text x="440" y="28" text-anchor="middle" class="title">docwright 插件组成与外部关系</text>
+
+  <!-- dsh host -->
+  <rect x="150" y="50" width="580" height="300" class="host" rx="12"/>
+  <text x="440" y="74" text-anchor="middle" class="label">dsh 宿主</text>
+  <text x="440" y="92" text-anchor="middle" class="small">会话与工具调用协议、LLM 编排（provider 路由）</text>
+
+  <!-- docwright plugin box -->
+  <rect x="185" y="108" width="510" height="180" class="doc" rx="8"/>
+  <text x="440" y="130" text-anchor="middle" class="label">docwright 插件</text>
+
+  <!-- tools -->
+  <rect x="205" y="145" width="225" height="120" class="box" rx="6"/>
+  <text x="317" y="165" text-anchor="middle" class="small">文档工具（模型可调用）</text>
+  <text x="317" y="185" text-anchor="middle" class="small">doc_packs / doc_generate</text>
+  <text x="317" y="203" text-anchor="middle" class="small">doc_extract_params / doc_validate</text>
+  <text x="317" y="221" text-anchor="middle" class="small">doc_chain_status</text>
+  <text x="317" y="245" text-anchor="middle" class="small">doc_market_search / doc_market_install</text>
+
+  <!-- confirmation gate -->
+  <rect x="455" y="145" width="220" height="120" class="box" rx="6"/>
+  <text x="565" y="165" text-anchor="middle" class="small">参数确认门</text>
+  <text x="565" y="186" text-anchor="middle" class="small">生效参数表 pendingConfirmation</text>
+  <text x="565" y="206" text-anchor="middle" class="small">confirmPolicy 档位</text>
+  <text x="565" y="245" text-anchor="middle" class="small">docwright-pack-authoring 技能</text>
+
+  <!-- user -->
+  <rect x="20" y="200" width="90" height="70" class="box" rx="6"/>
+  <text x="65" y="230" text-anchor="middle" class="small">用户</text>
+  <text x="65" y="248" text-anchor="middle" class="small">确认参数</text>
+  <line x1="110" y1="235" x2="183" y2="235" class="line"/>
+
+  <!-- workspace -->
+  <rect x="150" y="385" width="580" height="115" class="doc" rx="8"/>
+  <text x="175" y="410" class="label">工作区（路径全部限制在工作区根内）</text>
+  <rect x="175" y="425" width="160" height="60" class="box" rx="6"/>
+  <text x="255" y="450" text-anchor="middle" class="small">references/</text>
+  <text x="255" y="468" text-anchor="middle" class="small">素材根</text>
+  <rect x="360" y="425" width="160" height="60" class="box" rx="6"/>
+  <text x="440" y="446" text-anchor="middle" class="small">&lt;topic&gt;/output/</text>
+  <text x="440" y="464" text-anchor="middle" class="small">产物 + 回执 + Markdown</text>
+  <rect x="545" y="425" width="160" height="60" class="box" rx="6"/>
+  <text x="625" y="450" text-anchor="middle" class="small">.docwright/packs/</text>
+  <text x="625" y="468" text-anchor="middle" class="small">packsDir</text>
+
+  <!-- LLM provider -->
+  <rect x="20" y="60" width="90" height="70" class="box" rx="6"/>
+  <text x="65" y="90" text-anchor="middle" class="small">LLM 提供方</text>
+  <text x="65" y="108" text-anchor="middle" class="small">生成与修复</text>
+  <line x1="110" y1="95" x2="148" y2="95" class="line"/>
+
+  <!-- pack market -->
+  <rect x="770" y="60" width="90" height="70" class="box" rx="6"/>
+  <text x="815" y="86" text-anchor="middle" class="small">pack 市场</text>
+  <text x="815" y="104" text-anchor="middle" class="small">dm.shrwk.com</text>
+  <text x="815" y="120" text-anchor="middle" class="small">pack / suite</text>
+  <line x1="770" y1="95" x2="697" y2="95" class="line"/>
+
+  <!-- plugin -> workspace -->
+  <line x1="317" y1="290" x2="317" y2="383" class="line"/>
+  <line x1="440" y1="290" x2="440" y2="383" class="line"/>
+  <line x1="625" y1="290" x2="625" y2="383" class="line"/>
+</svg>

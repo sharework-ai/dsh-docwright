@@ -271,8 +271,10 @@ describe('registerTools wiring', () => {
     expect(registered).toHaveLength(7)
     expect(registered).toContain('doc_market_search')
     expect(registered).toContain('doc_market_install')
-    // Three routes since S3: the read catalog plus the two write channels (×2 mounts now).
-    expect(handlers.length - first).toBe(3)
+    // The read catalog plus the two write channels, then the pack lane
+    // (always mounted since packsDir has a $DSH_HOME default — six lane
+    // routes plus the disable toggle; docs/designs/pack-load-dirs.md).
+    expect(handlers.length - first).toBe(10)
     const [read, configRoute, paramRoute] = handlers.slice(first)
     const res = fakeResMaker()
     await read!({}, res)
@@ -523,8 +525,8 @@ describe('registerTools wiring: the pack lane', () => {
     }
     const laneConfig: Record<string, unknown> = { workspaceRoot: '/w', packsDir: dir, marketUrl: 'http://127.0.0.1:1' }
     await registerTools(ctx as never, laneConfig as never, packsRoot)
-    const paths = ['pack-updates', 'pack-update', 'pack-delete', 'suites', 'suite-update', 'suite-delete']
-    const byPath = (suffix: string) => handlers[handlers.length - 6 + paths.findIndex(p => suffix.endsWith(p))]!
+    const paths = ['pack-updates', 'pack-update', 'pack-delete', 'pack-disabled', 'suites', 'suite-update', 'suite-delete']
+    const byPath = (suffix: string) => handlers[handlers.length - 7 + paths.findIndex(p => suffix.endsWith(p))]!
     const fakeRes = () => { const res = { statusCode: 0, body: '', writeHead(s: number) { res.statusCode = s }, end(b: string) { res.body = b } }; return res }
     const req = (method: string, body?: unknown) => ({ method, headers: { origin: 'https://h', host: 'h' }, async *[Symbol.asyncIterator]() { if (body !== undefined) yield Buffer.from(JSON.stringify(body)) } })
 

@@ -114,7 +114,7 @@ export interface LocalSuiteEntry {
 }
 const SUITE_RECORD_FILE = 'suites.json'
 
-async function readSuiteRecord(packsDir: string | undefined): Promise<LocalSuiteEntry[]> {
+export async function readSuiteRecord(packsDir: string | undefined): Promise<LocalSuiteEntry[]> {
   if (packsDir === undefined || packsDir.length === 0) return []
   try {
     const body = JSON.parse(await readFile(join(packsDir, SUITE_RECORD_FILE), 'utf8')) as { suites?: unknown }
@@ -595,6 +595,8 @@ export async function deletePack(deps: {
   readonly marketUrl?: string | undefined
   readonly fetchImpl?: typeof fetch
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+  /** Best-effort cleanup: the deleted name leaves the disabled list (docs/designs/pack-load-dirs.md 启用与禁用). */
+  readonly cleanupDisabled?: (names: readonly string[]) => Promise<void>
 }, name: string, opts: { force?: boolean; bypassSuiteGuard?: boolean } = {}): Promise<void> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) {
     throw new CodedError('packNotManaged', `pack "${name}" is not managed here: no packsDir is configured, and builtin packs ship with the plugin package; nothing was written`, { params: { pack: name } })
@@ -617,6 +619,7 @@ export async function deletePack(deps: {
   const dir = await resolveManagedPackDir(deps.packsDir, name)
   await rm(dir, { recursive: true, force: true })
   await reloadPacksInPlace(deps)
+  if (deps.cleanupDisabled !== undefined) await deps.cleanupDisabled([name]).catch(() => {})
 }
 
 /** One market suite record (GET /api/suites rows and /api/suites/{name}). */
@@ -827,6 +830,7 @@ export async function deleteSuite(deps: {
   readonly marketUrl: string
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
   readonly fetchImpl?: typeof fetch
+  readonly cleanupDisabled?: (names: readonly string[]) => Promise<void>
 }, suite: string): Promise<{ deleted: readonly string[] }> {
   const detail = await fetchSuiteDetail(deps.marketUrl, suite, deps.fetchImpl ?? fetch)
   if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
@@ -842,6 +846,7 @@ export async function deleteSuite(deps: {
     deleted.push(member)
   }
   await recordSuiteRemoved(deps.packsDir, detail.name)
+  if (deps.cleanupDisabled !== undefined) await deps.cleanupDisabled([detail.name]).catch(() => {})
   return { deleted }
 }
 
@@ -995,4 +1000,55 @@ function statusesFromRecord(record: readonly LocalSuiteEntry[], marketVersions: 
       updateAvailable: false,
     }
   })
+}
+
+/**
+ * Toggle one pack's enabled state (docs/designs/pack-load-dirs.md 启用与禁用):
+ * the settings-page switch writes the docwright config's disabledPacks array.
+ * Guards reuse the single-pack delete lanes' semantics: a suite member routes
+ * to the suite (disable the suite name — it covers every member; enabling a
+ * member lifts any disabled suite name that contains it), and a pack
+ * consumed by enabled packs needs force. Unlike delete, nothing is removed
+ * from disk: re-enabling is instant and lossless.
+ */
+export async function setPackDisabled(deps: {
+  readonly packs: Map<string, Pack>
+  readonly packsDir?: string | undefined
+  readonly marketUrl?: string | undefined
+  readonly fetchImpl?: typeof fetch
+  /** The config's current disabledPacks array (caller reads it from its own config source). */
+  readonly currentDisabled?: readonly string[] | undefined
+  /** Persists the new array through the host config editor (profile patch). */
+  readonly editConfig: (disabled: readonly string[]) => Promise<void>
+}, name: string, disabled: boolean, opts: { force?: boolean } = {}): Promise<{ disabled: readonly string[] }> {
+  const current = [...deps.currentDisabled ?? []]
+  const suitesOf = async (): Promise<readonly string[]> => {
+    if (deps.marketUrl === undefined) return []
+    const membership = await suiteMembershipMap(deps.marketUrl, deps.fetchImpl ?? fetch)
+    return membership.get(name) ?? []
+  }
+  if (disabled) {
+    const suites = await suitesOf()
+    if (suites.length > 0 && !opts.force) {
+      throw new CodedError('suiteManaged', `pack "${name}" is a member of suite${suites.length > 1 ? 's' : ''} ${suites.map(s => `"${s}"`).join(', ')}: disable the SUITE instead — its toggle covers every member; nothing was written`, { params: { pack: name, suites: suites.join(', ') } })
+    }
+    const consumers = [...deps.packs.values()]
+      .filter(p => p.manifest.name !== name && !current.includes(p.manifest.name) && p.manifest.consumes.includes(name))
+      .map(p => p.manifest.name)
+      .sort()
+    if (consumers.length > 0 && opts.force !== true) {
+      throw new CodedError('packInUse', `pack "${name}" is consumed by enabled packs (${consumers.join(', ')}); disabling it breaks their chains. Re-call with force: true to disable anyway, or keep it enabled`, { params: { pack: name, consumers: consumers.join(', ') } })
+    }
+    if (!current.includes(name)) current.push(name)
+  } else {
+    // Enabling a member lifts any disabled suite name that contains it: a
+    // suite entry keeps every member disabled, so the member's own toggle can
+    // only take effect through the suite.
+    const toRemove = new Set<string>([name, ...await suitesOf()])
+    const next = current.filter(entry => !toRemove.has(entry))
+    await deps.editConfig(next)
+    return { disabled: next }
+  }
+  await deps.editConfig(current)
+  return { disabled: current }
 }

@@ -90,6 +90,8 @@ export interface WriteChannels {
     readonly checkUpdates: (pack?: string | undefined) => Promise<unknown>
     readonly updatePack: (pack: string) => Promise<{ version: string }>
     readonly deletePack: (pack: string, opts?: { force?: boolean }) => Promise<void>
+    /** Enable/disable toggle (docs/designs/pack-load-dirs.md 启用与禁用): writes the docwright config's disabledPacks array; suite members route to the suite name. */
+    readonly setPackDisabled?: (pack: string, disabled: boolean, opts?: { force?: boolean }) => Promise<{ disabled: readonly string[] }>
     /** Suite lane (docs/designs/pack-suites.md): market suite list projected onto the local packsDir. */
     readonly suiteStatus?: () => Promise<unknown>
     readonly updateSuite?: (suite: string) => Promise<unknown>
@@ -105,6 +107,7 @@ export interface WriteChannels {
  * - `GET  /api/docwright/pack-updates` — per packsDir pack standing vs the market (read; mounted with the pack lane).
  * - `POST /api/docwright/pack-update` — `{ pack }` updates one packsDir pack from the market (verified, atomic).
  * - `POST /api/docwright/pack-delete` — `{ pack }` deletes one packsDir pack directory.
+ * - `POST /api/docwright/pack-disabled` — `{ pack, disabled, force? }` toggles the pack's enabled state via the disabledPacks config array.
  * - `GET  /api/docwright/suites` — market suites projected onto the local packsDir (read; mounted with the pack lane).
  * - `POST /api/docwright/suite-update` — `{ suite }` updates the suite's outdated members from the market.
  * - `POST /api/docwright/suite-delete` — `{ suite }` deletes the suite's installed members (all of them).
@@ -192,6 +195,7 @@ export function mountParamsRoutes(
   let disposeUpdates: (() => void) | undefined
   let disposePackUpdate: (() => void) | undefined
   let disposePackDelete: (() => void) | undefined
+  let disposePackDisabled: (() => void) | undefined
   let disposeSuiteStatus: (() => void) | undefined
   let disposeSuiteUpdate: (() => void) | undefined
   let disposeSuiteDelete: (() => void) | undefined
@@ -243,6 +247,18 @@ export function mountParamsRoutes(
       await lane.deletePack(pack, { force: force === true })
       return { status: 200, payload: { ok: true } }
     })
+    disposePackDisabled = post('/api/docwright/pack-disabled', async body => {
+      const pack = packName(body)
+      const { disabled, force } = body as { disabled?: unknown; force?: unknown }
+      if (typeof disabled !== 'boolean') {
+        throw new CodedError('invalidParamBody', 'body must include {"disabled": true|false}; nothing was written')
+      }
+      if (lane.setPackDisabled === undefined) {
+        throw new CodedError('editorUnavailable', 'this host does not wire the disable toggle (no config editor / pack lane); nothing was written')
+      }
+      const result = await lane.setPackDisabled(pack, disabled, { force: force === true })
+      return { status: 200, payload: { ok: true, disabled: result.disabled } }
+    })
     // The suite lane (docs/designs/pack-suites.md): a status read for the
     // Suites settings tab plus per-suite update/delete. suiteStatus answers
     // like pack-updates — a market that is DOWN is a coded 200 envelope, not
@@ -285,6 +301,7 @@ export function mountParamsRoutes(
     disposeSuiteUpdate?.()
     disposeSuiteStatus?.()
     disposePackDelete?.()
+    disposePackDisabled?.()
     disposePackUpdate?.()
     disposeUpdates?.()
     disposeParam()
