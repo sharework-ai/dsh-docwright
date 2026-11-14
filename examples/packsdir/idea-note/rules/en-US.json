@@ -1,0 +1,11 @@
+[
+  {
+    "id": "note/note-min-length",
+    "severity": "error",
+    "given": "$",
+    "field": "note",
+    "kind": "minLength",
+    "min": 20,
+    "suggestion": "Write a development note of at least 20 characters: what to build and the first step."
+  }
+]

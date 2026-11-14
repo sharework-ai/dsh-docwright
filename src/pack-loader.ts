@@ -147,6 +147,14 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
   if (!Array.isArray(m.languages) || m.languages.length === 0) throw new Error(`pack ${dir}: manifest.languages must be a non-empty array`)
   if (m.languages.some(l => typeof l !== 'string' || l.length === 0)) throw new Error(`pack ${dir}: manifest.languages entries must be non-empty strings`)
   if (m.consumes !== undefined && !Array.isArray(m.consumes)) throw new Error(`pack ${dir}: manifest.consumes must be an array when present`)
+  if (m.fanout !== undefined) {
+    const f = m.fanout as Partial<NonNullable<PackManifest['fanout']>> | null
+    if (typeof f !== 'object' || f === null) throw new Error(`pack ${dir}: manifest.fanout must be an object { array, idField, titleField? }`)
+    for (const k of ['array', 'idField'] as const) {
+      if (typeof f[k] !== 'string' || (f[k] as string).length === 0) throw new Error(`pack ${dir}: manifest.fanout.${k} must be a non-empty string (the upstream array and its identity field the engine addresses by)`)
+    }
+    if (f.titleField !== undefined && (typeof f.titleField !== 'string' || f.titleField.length === 0)) throw new Error(`pack ${dir}: manifest.fanout.titleField must be a non-empty string when present`)
+  }
   if (m.scope !== undefined && m.scope !== 'workspace' && m.scope !== 'topic') {
     throw new Error(`pack ${dir}: manifest.scope must be "workspace" or "topic" (got ${JSON.stringify(m.scope)})`)
   }
@@ -198,6 +206,7 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
     version: m.version,
     description,
     consumes: m.consumes ?? [],
+    ...(m.fanout === undefined ? {} : { fanout: m.fanout }),
     scope,
     reuse: m.reuse ?? scope === 'workspace',
     languages: m.languages,

@@ -102,6 +102,17 @@ export interface PackManifest {
   /** Artifact type names this pack consumes (chained generation); root packs use []. */
   readonly consumes: readonly string[]
   /**
+   * Fan-out addressing declaration (docs/designs/pack-load-dirs.md's
+   * generalization; docs/designs/scenario-chains.md trigger): when THIS pack
+   * consumes an upstream whose artifact carries `array` as an array, the
+   * engine derives its fan-out candidates from that array using `idField` as
+   * the identity (each entry → `<idField>: string`, `titleField` optional
+   * display name) — instead of the default COSMIC shape `functions[]` +
+   * `funcId`. Drives the targetIndex candidate list, engine naming
+   * `<pack>-<id>` and doc_chain_status coverage for non-COSMIC vocabularies.
+   */
+  readonly fanout?: { readonly array: string; readonly idField: string; readonly titleField?: string }
+  /**
    * Artifact home scope (docs/designs/cosmic-context.md): "workspace" packs
    * share project-level directories (materials `references/`, artifacts
    * `context/`) and ignore the call's topic; "topic" packs (the default)

@@ -1,0 +1,29 @@
+{
+  "name": "idea-note",
+  "version": "0.1.0",
+  "description": {
+    "en": "One development note per idea: consumes the idea-board artifact and declares fanout {array: ideas, idField: ideaId} — addressing, naming and coverage work over a non-COSMIC vocabulary.",
+    "zh": "每个点子一份开发笔记：消费 idea-board 产物并声明 fanout {array: ideas, idField: ideaId}——寻址、命名与覆盖对账都工作在非 COSMIC 词汇上。"
+  },
+  "consumes": [
+    "idea-board"
+  ],
+  "languages": [
+    "en-US"
+  ],
+  "fanout": {
+    "array": "ideas",
+    "idField": "ideaId",
+    "titleField": "title"
+  },
+  "params": {
+    "targetIndex": {
+      "type": "number",
+      "required": true,
+      "description": {
+        "en": "1-based position in the board's ideas[]; candidates are listed when missing",
+        "zh": "看板 ideas[] 的 1 起始序号；缺失时引擎列出候选"
+      }
+    }
+  }
+}

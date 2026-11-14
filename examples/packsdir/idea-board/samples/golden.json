@@ -1,0 +1,12 @@
+{
+  "ideas": [
+    {
+      "ideaId": "dark-mode",
+      "title": "Dark mode"
+    },
+    {
+      "ideaId": "export-pdf",
+      "title": "Export to PDF"
+    }
+  ]
+}

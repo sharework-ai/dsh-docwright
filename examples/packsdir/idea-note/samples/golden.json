@@ -1,0 +1,5 @@
+{
+  "ideaId": "dark-mode",
+  "title": "Dark mode",
+  "note": "Add a theme toggle persisting the choice, then derive dark tokens from the existing palette."
+}

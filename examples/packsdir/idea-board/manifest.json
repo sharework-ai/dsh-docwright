@@ -1,0 +1,14 @@
+{
+  "name": "idea-board",
+  "version": "0.1.0",
+  "description": {
+    "en": "Idea board: one workspace-scope artifact listing ideas[] (ideaId, title) — the fan-out source for idea-note.",
+    "zh": "点子看板：一个工作区级产物，列出 ideas[]（ideaId、title），作为 idea-note 的扇出源。"
+  },
+  "consumes": [],
+  "languages": [
+    "en-US"
+  ],
+  "params": {},
+  "requiresTopic": true
+}

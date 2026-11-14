@@ -470,7 +470,26 @@ const CONFIRM_HINT = 'Present the paramTable to the user (values, sources, missi
  * Drives the targetIndex candidate list and the per-function artifact naming
  * (docs/designs/params-and-chain-contract.md, fan-out contract).
  */
-function planCandidates(records: readonly { artifact: unknown }[]): FunctionCandidate[] {
+function planCandidates(records: readonly { artifact: unknown }[], fanout?: { array: string; idField: string; titleField?: string }): FunctionCandidate[] {
+  // Declared fan-out (docs/designs/pack-load-dirs.md generalization): the
+  // consuming pack declares the upstream array and its identity field, so
+  // any domain vocabulary drives the addressing — not just functions[].
+  if (fanout !== undefined) {
+    for (const record of records) {
+      const artifact = record.artifact as Record<string, unknown> | null
+      const entries = artifact !== null && Array.isArray(artifact[fanout.array]) ? artifact[fanout.array] as unknown[] : undefined
+      if (entries === undefined) continue
+      const out: FunctionCandidate[] = []
+      for (const [i, entry] of entries.entries()) {
+        const id = (entry as Record<string, unknown> | null)?.[fanout.idField]
+        if (typeof id !== 'string') continue
+        const title = fanout.titleField !== undefined ? (entry as Record<string, unknown> | null)?.[fanout.titleField] : undefined
+        out.push({ index: i + 1, funcId: id, ...(typeof title === 'string' && title !== '' ? { l2Name: title } : {}) })
+      }
+      return out
+    }
+    return []
+  }
   for (const record of records) {
     const artifact = record.artifact as { functions?: unknown } | null
     if (artifact !== null && typeof artifact === 'object' && Array.isArray(artifact.functions)) {
@@ -489,6 +508,15 @@ function planCandidates(records: readonly { artifact: unknown }[]): FunctionCand
     return [{ index: first.index, funcId: first.funcId }]
   }
   return []
+}
+
+/** The consuming pack's declared fan-out shape, if any. */
+function fanoutOf(pack: Pack): { array: string; idField: string; titleField?: string } | undefined {
+  const f = pack.manifest.fanout
+  if (f === undefined) return undefined
+  return f.titleField !== undefined
+    ? { array: f.array, idField: f.idField, titleField: f.titleField }
+    : { array: f.array, idField: f.idField }
 }
 
 /** Order-insensitive multiset equality of two upstream anchor lists. */
@@ -566,8 +594,8 @@ async function findReusableArtifact(
   return undefined
 }
 
-/** Green sidecar-receipted artifacts of one pack in the output root: funcId → artifact basename. */
-async function scanStageArtifacts(outputRoot: string, packName: string): Promise<Map<string, string>> {
+/** Green sidecar-receipted artifacts of one pack in the output root: identity → artifact basename. The identity is the pack's declared fan-out id field (manifest.fanout.idField), defaulting to the COSMIC funcId. */
+async function scanStageArtifacts(outputRoot: string, packName: string, idField: string, packs: ReadonlyMap<string, Pack> | undefined): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   // The output root always exists here (it holds the plan or was just written
   // by doc_generate); a vanished directory is a real anomaly and fails loud.
@@ -578,8 +606,10 @@ async function scanStageArtifacts(outputRoot: string, packName: string): Promise
     try {
       const receipt = JSON.parse(await readFile(join(outputRoot, `${base}.receipt.json`), 'utf8')) as { pack?: unknown; isValid?: unknown }
       if (receipt.pack !== packName || receipt.isValid !== true) continue
-      const artifact = JSON.parse(await readFile(join(outputRoot, entry.name), 'utf8')) as { funcId?: unknown }
-      if (typeof artifact.funcId === 'string') out.set(artifact.funcId, base)
+      const artifact = JSON.parse(await readFile(join(outputRoot, entry.name), 'utf8')) as Record<string, unknown>
+      const declared = packs?.get(packName)?.manifest.fanout?.idField
+      const id = typeof artifact[declared ?? idField] === 'string' ? artifact[declared ?? idField] : artifact['funcId']
+      if (typeof id === 'string') out.set(id, base)
     } catch {
       continue
     }
@@ -594,18 +624,24 @@ async function coverageProgress(
   outputRoot: string,
 ): Promise<CoverageProgress | undefined> {
   if (pack.manifest.params?.targetIndex === undefined || records.length === 0) return undefined
-  const covered = await scanStageArtifacts(outputRoot, pack.manifest.name)
+  const covered = await scanStageArtifacts(outputRoot, pack.manifest.name, 'funcId', undefined)
+  const spec = fanoutOf(pack)
   const planLike = records.find(r => {
-    const artifact = r.artifact as { functions?: unknown } | null
-    return artifact !== null && typeof artifact === 'object' && Array.isArray(artifact.functions)
+    const artifact = r.artifact as Record<string, unknown> | null
+    const arr = spec !== undefined
+      ? (artifact !== null && Array.isArray(artifact[spec.array]) ? artifact[spec.array] as unknown[] : undefined)
+      : (artifact !== null && Array.isArray(artifact['functions']) ? artifact['functions'] as unknown[] : undefined)
+    return arr !== undefined
   })
   let total: string[]
   if (planLike !== undefined) {
-    total = ((planLike.artifact as { functions: unknown }).functions as unknown[])
-      .map(fn => (fn as { funcId?: unknown } | null)?.funcId)
+    const artifact = planLike.artifact as Record<string, unknown>
+    const arr = (spec !== undefined ? artifact[spec.array] : artifact['functions']) as unknown[]
+    const idField = spec !== undefined ? spec.idField : 'funcId'
+    total = arr.map(fn => (fn as Record<string, unknown> | null)?.[idField])
       .filter((id): id is string => typeof id === 'string')
   } else {
-    total = [...(await scanStageArtifacts(outputRoot, records[0]!.pack)).keys()]
+    total = [...(await scanStageArtifacts(outputRoot, records[0]!.pack, 'funcId', undefined)).keys()]
   }
   const missing = total.filter(id => !covered.has(id))
   return { covered: total.length - missing.length, total: total.length, missing }
@@ -733,7 +769,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       // was silently overwritten). Non-per-function defaults keep the
       // timestamp form — the reuse scan stays name-agnostic there.
       const targetIndex = (overrides?.targetIndex ?? paramsBase?.targetIndex)
-      const target = typeof targetIndex === 'number' ? planCandidates(upstreamRecords).find(c => c.index === targetIndex) : undefined
+      const target = typeof targetIndex === 'number' ? planCandidates(upstreamRecords, fanoutOf(pack)).find(c => c.index === targetIndex) : undefined
       const topicNo = overrides?.topicNo ?? paramsBase?.topicNo
       if (pack.manifest.artifactPrefix !== undefined && args.artifactName !== undefined && (target !== undefined || typeof topicNo === 'string')) {
         throw new Error(`pack "${pack.manifest.name}" is engine-named (artifactPrefix "${pack.manifest.artifactPrefix}"): omit artifactName${target !== undefined ? ` — this artifact is ${pack.manifest.artifactPrefix}-${topicNo ?? '<topicNo>'}-${String(targetIndex).padStart(2, '0')}` : ` — this artifact is ${pack.manifest.artifactPrefix}-${topicNo ?? '<topicNo>'}`}`)
@@ -836,7 +872,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           ? { paramDrift: [...preview.drift], ...(driftImpact === undefined ? {} : { driftImpact }) }
           : {}
         const candidateFields = preview.missingRequired.includes('targetIndex')
-          ? { candidates: planCandidates(upstreamRecords) }
+          ? { candidates: planCandidates(upstreamRecords, fanoutOf(pack)) }
           : {}
         return {
           pendingConfirmation: true,
@@ -850,7 +886,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
         } satisfies PendingConfirmationResult as unknown as DocGenerateResult
       }
       if (preview.missingRequired.length > 0) {
-        const candidates = preview.missingRequired.includes('targetIndex') ? planCandidates(upstreamRecords) : []
+        const candidates = preview.missingRequired.includes('targetIndex') ? planCandidates(upstreamRecords, fanoutOf(pack)) : []
         const listed = candidates.length > 0
           ? ` Candidates from the upstream plan: ${candidates.map(c => `${c.index}. ${c.funcId}${c.l2Name === undefined ? '' : ` (${c.l2Name})`}`).join('; ')}.`
           : ''
@@ -1076,7 +1112,7 @@ export function defineDocValidateTool(deps: ToolDeps) {
 export function defineDocChainStatusTool(deps: ToolDeps) {
   return defineTool({
     name: 'doc_chain_status',
-    description: 'Report per-function chain coverage for a fan-out chain: which functions of a plan artifact have green artifacts at each downstream stage (e.g. cosmic-req/cosmic-func/cosmic-tech), plus counts and any artifacts whose funcId matches no plan function. Deterministic, no LLM. Run this before presenting a per-function chain as complete.',
+    description: 'Report per-function chain coverage for a fan-out chain: which entries of the plan pack\'s declared fan-out array (default functions[]; a pack declares its own array/id field via manifest.fanout) have green artifacts at each downstream stage, plus counts and any artifacts whose identity matches no plan entry. Deterministic, no LLM. Run this before presenting a per-function chain as complete.',
     parameters: {
       plan: { type: 'string', required: true, description: 'Workspace-relative path to the plan artifact JSON (must carry a green sidecar receipt); the directory holding it is the output root, so plan paths inside a topic directory scope the coverage scan to that topic' },
     },
@@ -1091,10 +1127,10 @@ export function defineDocChainStatusTool(deps: ToolDeps) {
       // a plan generated under <topic>/output/ scopes the coverage scan to
       // that topic without an extra parameter.
       const outputRoot = dirname(planPath)
-      let planArtifact: { functions?: unknown }
+      let planArtifact: Record<string, unknown>
       let planPackName: string
       try {
-        planArtifact = JSON.parse(await readFile(planPath, 'utf8')) as { functions?: unknown }
+        planArtifact = JSON.parse(await readFile(planPath, 'utf8')) as Record<string, unknown>
       } catch (error) {
         throw new Error(`plan artifact ${args.plan} is not readable JSON: ${(error as Error).message}`)
       }
@@ -1106,32 +1142,42 @@ export function defineDocChainStatusTool(deps: ToolDeps) {
       } catch (error) {
         throw new Error(`plan artifact ${args.plan} has no usable sidecar receipt (${(error as Error).message}); generate it with doc_generate first`)
       }
-      if (!Array.isArray(planArtifact.functions) || planArtifact.functions.length === 0) {
-        throw new Error(`plan artifact ${args.plan} declares no functions[]; coverage is defined over plan functions`)
-      }
-      const planFuncIds = new Set(planArtifact.functions.map(fn => (fn as { funcId?: unknown } | null)?.funcId).filter((id): id is string => typeof id === 'string'))
-      // Stage order: the plan pack, then every topic-scope pack consuming the
-      // frontier. Workspace-scope packs (project-level artifacts like context
-      // or its sync) never enter the fan-out: coverage is defined over plan
-      // functions, not project-level single artifacts.
+      // Stage order first: the plan pack, then every topic-scope pack
+      // consuming the frontier. Workspace-scope packs (project-level
+      // artifacts like context or its sync) never enter the fan-out.
+      const { packs: sessionView } = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
       const stages: string[] = [planPackName]
       let frontier = [planPackName]
       while (frontier.length > 0) {
-        const { packs: chainPacks } = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
-        const next = [...chainPacks.values()]
+        const next = [...sessionView.values()]
           .filter(p => p.manifest.scope !== 'workspace' && p.manifest.consumes.some(c => frontier.includes(c)) && !stages.includes(p.manifest.name))
           .map(p => p.manifest.name)
         stages.push(...next)
         frontier = next
       }
+      // The fan-out shape: declared by the first downstream stage that
+      // declares one (docs/designs/pack-load-dirs.md generalization — the
+      // CONSUMING pack declares the upstream array and identity field it
+      // addresses); without any declaration the COSMIC shape
+      // functions[]/funcId applies.
+      const declared = stages.slice(1).map(s => fanoutOf(sessionView.get(s) ?? ({} as Pack))).find(f => f !== undefined)
+      const planArrayField = declared !== undefined ? declared.array : 'functions'
+      const planIdField = declared !== undefined ? declared.idField : 'funcId'
+      const planEntries = Array.isArray(planArtifact[planArrayField]) ? planArtifact[planArrayField] as unknown[] : []
+      if (planEntries.length === 0) {
+        throw new Error(`plan artifact ${args.plan} declares no ${planArrayField}[]; coverage is defined over the fan-out array (a downstream stage declares its shape via manifest.fanout for non-COSMIC vocabularies)`)
+      }
+      const planFuncIds = new Set(planEntries.map(fn => (fn as Record<string, unknown> | null)?.[planIdField]).filter((id): id is string => typeof id === 'string'))
       const rows: Array<{ index: number; funcId: string; l2Name?: string; coverage: Record<string, string | null> }> = []
       const stageMaps = new Map<string, Map<string, string>>()
       for (const stage of stages.slice(1)) {
-        stageMaps.set(stage, await scanStageArtifacts(outputRoot, stage))
+        // Each stage's own declared fan-out id field wins; undeclared stages
+        // fall back to the plan's identity field (funcId for COSMIC chains).
+        stageMaps.set(stage, await scanStageArtifacts(outputRoot, stage, planIdField, sessionView))
       }
       const orphaned: Array<{ stage: string; file: string }> = []
-      for (const [i, fn] of (planArtifact.functions as unknown[]).entries()) {
-        const funcId = (fn as { funcId?: unknown } | null)?.funcId
+      for (const [i, fn] of planEntries.entries()) {
+        const funcId = (fn as Record<string, unknown> | null)?.[planIdField]
         if (typeof funcId !== 'string') continue
         const l2Name = (fn as { l2Name?: unknown } | null)?.l2Name
         const coverage: Record<string, string | null> = {}

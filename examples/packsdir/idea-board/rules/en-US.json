@@ -1,0 +1,11 @@
+[
+  {
+    "id": "board/ideas-count",
+    "severity": "error",
+    "given": "$.ideas[*]",
+    "field": "ideaId",
+    "kind": "minLength",
+    "min": 1,
+    "suggestion": "Every idea needs an ideaId (kebab-case, unique)."
+  }
+]
