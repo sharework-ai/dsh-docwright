@@ -117,6 +117,61 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				})
 			}));
 		}
+		/** Toggle one pack's enabled state (docs/designs/pack-load-dirs.md). The server guards suite members (disable the suite instead) and in-use packs (force names the consumers). Returns the persisted array. */
+		async function setPackDisabled(pack, disabled, force = false) {
+			return (await parse(await fetch("/api/docwright/pack-disabled", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					pack,
+					disabled,
+					force
+				})
+			}))).disabled;
+		}
+		/** Suite standing for the Suites tab: the market's suite list with each
+		* member's local placement. An empty array means the market has no suites
+		* (or does not support them) — a one-line note, never an error. */
+		async function fetchSuiteStatus() {
+			return (await parse(await fetch("/api/docwright/suites", { headers: { accept: "application/json" } }))).suites;
+		}
+		/** Update a suite: refresh each outdated member to its market version. */
+		async function updateSuite(suite) {
+			return parse(await fetch("/api/docwright/suite-update", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ suite })
+			}));
+		}
+		/** Delete a suite's installed members — all of them; suite members are
+		* consumed inside their suite by design, so there is no keep/force split. */
+		async function deleteSuite(suite) {
+			return parse(await fetch("/api/docwright/suite-delete", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ suite })
+			}));
+		}
+		//#endregion
+		//#region src/client/icons.ts
+		const DEPENDS_ICON_PATH = "M914.285 292.572h-73.142c-21.943 0-36.571 14.628-36.571 36.571 0 21.942 14.628 36.572 36.571 36.572h73.142c21.943 0 36.572 14.628 36.572 36.57v512c0 21.943-14.629 36.572-36.572 36.572h-512c-21.942 0-36.57-14.629-36.57-36.572V621.716c0-21.943-14.63-36.572-36.572-36.572-21.943 0-36.571 14.629-36.571 36.572v292.568c0 58.515 51.2 109.715 109.713 109.715h512C972.8 1024 1024 972.8 1024 914.285v-512c0-58.513-51.2-109.713-109.715-109.713M694.857 694.857c14.628-14.629 14.628-36.572 0-51.2L380.343 329.143c-14.628-14.628-36.571-14.628-51.2 0-14.628 14.629-14.628 36.572 0 51.2l321.829 321.829c7.313 7.313 29.256 7.313 43.885-7.315m-512-36.572h-73.141c-21.943 0-36.572-14.628-36.572-36.57v-512c0-21.943 14.629-36.572 36.572-36.572h512c21.942 0 36.57 14.629 36.57 36.572v292.569c0 21.943 14.63 36.572 36.572 36.572 21.943 0 36.572-14.629 36.572-36.572V109.716C731.428 51.2 680.228 0 621.716 0h-512C51.2 0 0 51.2 0 109.715v512c0 58.513 51.2 109.713 109.715 109.713h73.142c21.943 0 36.571-14.628 36.571-36.571 0-21.942-14.628-36.572-36.571-36.572";
+		const SUITE_ICON_PATH = "M312.79104 494.81728l-132.11648-79.17568a22.15936 22.15936 0 0 0-30.6176 7.5776 22.46656 22.46656 0 0 0 7.5776 30.86336l132.13696 79.17568a22.03648 22.03648 0 0 0 30.6176-7.82336 22.13888 22.13888 0 0 0-7.59808-30.6176zm140.86144 465.98144c5.30432 3.11296 11.264 2.23232 16.7936-4.01408-5.05856 5.34528-11.03872 7.12704-16.7936 4.01408zM312.79104 494.7968l-132.11648-79.17568a22.15936 22.15936 0 0 0-30.6176 7.5776 22.46656 22.46656 0 0 0 7.5776 30.86336l132.13696 79.17568a22.03648 22.03648 0 0 0 30.6176-7.82336 22.13888 22.13888 0 0 0-7.59808-30.6176zm0 0l-132.11648-79.17568a22.15936 22.15936 0 0 0-30.6176 7.5776 22.46656 22.46656 0 0 0 7.5776 30.86336l132.13696 79.17568a22.03648 22.03648 0 0 0 30.6176-7.82336 22.13888 22.13888 0 0 0-7.59808-30.6176zm157.67552 461.94688c-5.5296 6.22592-11.50976 7.12704-16.7936 4.01408 5.7344 3.15392 11.71456 1.37216 16.7936-4.01408zm11.63264-57.9584v-397.7216l350.33088-198.8608 35.86048-21.74976c7.168-4.66944 8.54016-10.60864 9.48224-14.86848a22.528 22.528 0 0 0-12.1856-22.54848L469.66784 45.09696a22.4256 22.4256 0 0 0-20.25472 0l-395.8784 197.95968c-14.7456 9.66656-12.45184 31.06816-12.45184 33.3824V698.7776c0 7.82336 4.15744 15.19616 10.83392 19.33312 0 0 387.3792 234.0864 394.0352 237.07648 13.59872 6.67648 22.1184 4.83328 28.54912 1.6384l128.90112-74.58816c11.0592-6.4512 14.7456-20.48 8.2944-31.5392-6.22592-11.0592-20.48-14.7456-31.31392-8.51968l-89.088 51.79392v-0.22528l-9.19552 5.05856zm-45.11744-397.7216v396.5952L85.97504 686.14144v-384.4096l351.0272 199.35232zm22.56896-39.1168L111.28832 264.43776 459.5712 90.43968l348.2624 174.01856-348.2624 197.48864zM771.8912 865.77152l181.61664-109.09696a17.69472 17.69472 0 0 0 8.27392-14.9504V541.696c0-7.02464-5.28384-11.96032-11.03872-14.72512l-4.608-2.29376c-0.45056-0.22528-1.14688-0.22528-1.59744-0.22528h1.37216l-176.5376-88.1664a18.08384 18.08384 0 0 0-15.42144 0l-176.3328 88.1664a23.9616 23.9616 0 0 0-16.09728 22.20032v195.072c0 6.22592 3.21536 11.73504 8.51968 14.9504 0 0 179.95776 107.99104 180.87936 108.21632 0 0.02048 10.73152 7.9872 20.97152 0.90112zm-27.38176-44.19584l-148.48-89.53856V571.1872l148.48 84.00896v166.42048zm17.26464-196.096l-144.7936-82.18624L761.77408 471.04l144.54784 72.2944-144.54784 82.16576zm165.4784 106.55744l-148.21376 89.2928v-166.17472l148.23424-84.00896v160.89088z";
+		/** One theme-adaptive inline icon: currentColor fill, sized to the line so it
+		* never expands the row height, vertically centered. */
+		function icon(pathData, size = 14) {
+			return (0, react.createElement)("svg", {
+				viewBox: "0 0 1024 1024",
+				width: size,
+				height: size,
+				fill: "currentColor",
+				style: {
+					display: "inline-block",
+					verticalAlign: "middle",
+					flex: "none"
+				},
+				dangerouslySetInnerHTML: { __html: `<path d="${pathData}"/>` }
+			});
+		}
 		//#endregion
 		//#region src/client/locales.ts
 		const en = {
@@ -172,11 +227,35 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			checking: "Checking…",
 			paramsToggle: "Params",
 			confirmUpdate: "Confirm update (overwrites local changes)",
+			disableBtn: "Disable",
+			enableBtn: "Enable",
+			confirmDisable: "Confirm disable",
+			confirmEnable: "Confirm enable",
+			confirmDisableBreaks: "Disabling breaks the chains of: {packs}. Confirm to disable anyway",
+			disabledPill: "disabled",
+			disableDone: "Disabled.",
+			enableDone: "Enabled.",
 			deleteBtn: "Delete",
 			confirmDelete: "Confirm delete",
 			confirmDeleteBreaks: "Confirm delete ({packs} consume it — their chains break)",
 			updatedDone: "Updated to v{version}.",
 			deletedDone: "Deleted.",
+			viewSuites: "Suites",
+			suitesEmpty: "The market lists no suites (or this market does not support suites). Single-pack installs are unaffected.",
+			suitesUnreachable: "Could not reach the pack market; suite status is unavailable.",
+			suiteManagedTip: "Suite-managed — install, update, and delete go through the suite",
+			suiteIncomplete: "incomplete",
+			suiteMemberMissing: "missing",
+			suiteUpdateBtn: "Update suite",
+			suiteUpdateDone: "Updated: {packs}.",
+			colMembers: "Members",
+			suiteDeleteSummary: "Delete members: {packs}",
+			suiteDeleteConfirm: "Confirm delete suite",
+			suiteKeepColumn: "Will keep",
+			suiteKeptBy: "consumed by {packs}",
+			suiteForce: "Also delete members consumed outside the suite (force)",
+			suiteDeletedDone: "Deleted: {packs}.",
+			suiteFillHint: "Members are missing. Ask the session: doc_market_install { \"suite\": \"<name>\" } installs the rest.",
 			"err.gateRejected": "The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.",
 			"err.crossSiteWrite": "Write refused: the request origin does not match the deployment host (cross-site request). Operate from the dsh web UI.",
 			"err.bodyTooLarge": "The request body exceeds the {max}-byte limit; nothing was written. Reduce the request size.",
@@ -197,7 +276,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.integrityFailed": "Integrity check failed for \"{pack}\" ({why}); nothing was written. Never force-install when the market index and the download disagree.",
 			"err.updateFailed": "Pack \"{pack}\" update failed; the installed version is unchanged.",
 			"err.absentFromMarket": "Pack \"{pack}\" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.",
-			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it."
+			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it.",
+			"err.suiteLaneMissing": "The suite lane is not wired on this deployment; nothing was written."
 		};
 		const zh = {
 			nav: "Docwright 参数",
@@ -252,11 +332,35 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			checking: "检查中…",
 			paramsToggle: "参数",
 			confirmUpdate: "确认更新（将覆盖本地改动）",
+			disableBtn: "禁用",
+			enableBtn: "启用",
+			confirmDisable: "确认禁用",
+			confirmEnable: "确认启用",
+			confirmDisableBreaks: "禁用会打断这些包的链路：{packs}。确认仍要禁用",
+			disabledPill: "已禁用",
+			disableDone: "已禁用。",
+			enableDone: "已启用。",
 			deleteBtn: "删除",
 			confirmDelete: "确认删除",
 			confirmDeleteBreaks: "确认删除（{packs} 消费它，删除将断链）",
 			updatedDone: "已更新到 v{version}。",
 			deletedDone: "已删除。",
+			viewSuites: "套件",
+			suitesEmpty: "市场没有套件（或该市场不支持套件）。单个 pack 的安装不受影响。",
+			suitesUnreachable: "无法连接 pack 市场，套件状态不可用。",
+			suiteManagedTip: "由套件管理：安装、更新、删除都走套件",
+			suiteIncomplete: "不完整",
+			suiteMemberMissing: "缺失",
+			suiteUpdateBtn: "更新套件",
+			suiteUpdateDone: "已更新：{packs}。",
+			colMembers: "成员",
+			suiteDeleteSummary: "删除成员：{packs}",
+			suiteDeleteConfirm: "确认删除套件",
+			suiteKeepColumn: "将保留",
+			suiteKeptBy: "被 {packs} 消费",
+			suiteForce: "同时删除被套件外 pack 消费的成员（强制）",
+			suiteDeletedDone: "已删除：{packs}。",
+			suiteFillHint: "成员未装齐。请在会话中执行 doc_market_install { \"suite\": \"<名称>\" } 补齐。",
 			"err.gateRejected": "请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。",
 			"err.crossSiteWrite": "写入被拒绝：请求来源与部署主机不一致（跨站请求）。请从 dsh web 界面发起操作。",
 			"err.bodyTooLarge": "请求体超过 {max} 字节上限，未写入任何内容。请缩小请求内容。",
@@ -277,7 +381,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.integrityFailed": "「{pack}」完整性校验失败（{why}），未写入任何内容。市场索引与下载内容不一致时请勿强行安装。",
 			"err.updateFailed": "pack「{pack}」更新失败，已装版本未变。",
 			"err.absentFromMarket": "pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。",
-			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。"
+			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。",
+			"err.suiteLaneMissing": "该部署未接入套件通道，未做任何改动。"
 		};
 		function translate(dict) {
 			return (key) => {
@@ -302,16 +407,19 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		//#endregion
 		//#region src/client/ParamsSection.tsx
 		/**
-		* The Docwright params section: three views over one catalog fetch —
-		* shared-param groups (the aggregation with effective-source resolution),
-		* per-pack flat view, and the plugin Config form. Controls map from the
+		* The Docwright params section: four views over one catalog fetch — per-pack
+		* flat view, the suite overview (docs/designs/pack-suites.md), shared-param
+		* groups (the aggregation with effective-source resolution), and the plugin
+		* Config form. Controls map from the
 		* ParamSpec type (number → numeric input, enum → select, boolean → switch,
 		* object → JSON-per-value with endpoints read-only); every parameter shows
 		* its author's description inline beneath the name, resolved to the active
 		* locale by the host's `locale.resolveText` (LocalizedText from the RPC,
 		* en-fallback semantics of src/description.ts). Writes go through the
 		* plugin's own routes (src/http.ts), never the conversation; their error
-		* envelopes render through the locale catalog (locales.ts renderError).
+		* envelopes render through the locale catalog (locales.ts renderError). Any
+		* change in ANY view re-fetches the whole block, so the Packs and Suites
+		* tabs can never disagree.
 		*
 		* Typography follows the host conversation body, not ad-hoc sizes: one
 		* family and size for all running text (`--dsw-font-family` +
@@ -358,6 +466,27 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		};
 		const valueStyle = { fontFamily: codeFont };
 		const muted = { color: secondary$1 };
+		const smallMuted = {
+			...muted,
+			fontSize: "0.82rem"
+		};
+		/** Gray rounded chip: the shared container for a dependency or a member
+		* pack. Translucent gray reads on both themes and, being a plain background,
+		* never intercepts clicks. `missing` renders the red variant. */
+		function chipStyle(missing = false) {
+			return {
+				background: missing ? "rgba(197, 48, 48, 0.10)" : "rgba(127, 127, 127, 0.12)",
+				border: `1px solid ${missing ? "rgba(197, 48, 48, 0.38)" : "rgba(127, 127, 127, 0.30)"}`,
+				color: missing ? "var(--dsw-alias-state-error-primary, crimson)" : void 0,
+				borderRadius: "999px",
+				padding: "1px 8px",
+				fontSize: "0.82rem",
+				whiteSpace: "nowrap"
+			};
+		}
+		/** Anchor ids of the pack and suite cards (jump targets for the chips). */
+		const packAnchorId = (name) => `docwright-pack-${name}`;
+		const suiteAnchorId = (name) => `docwright-suite-${name}`;
 		const group = {
 			border: "0.5px solid var(--dsw-alias-border-l4, transparent)",
 			borderRadius: "var(--dsw-radius-xl, 20px)",
@@ -653,6 +782,17 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t
 			}))));
 		}
+		/** Which installed suites a pack belongs to, keyed by pack name (derived
+		* once per suites fetch; a pure display marker on the pack card). */
+		function suitesByPack(rows) {
+			const map = /* @__PURE__ */ new Map();
+			for (const suite of rows) for (const member of suite.members) {
+				const list = map.get(member.name);
+				if (list === void 0) map.set(member.name, [suite.name]);
+				else if (!list.includes(suite.name)) list.push(suite.name);
+			}
+			return map;
+		}
 		/** Per-pack flat view (pack-author / troubleshooting perspective). Each card
 		* opens with a full-width blue-wash header band — pack identity reads as a
 		* section of its own. The card is the overview: identity, description, and
@@ -682,6 +822,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}, []);
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
 			const installedNames = (0, react.useMemo)(() => new Set(payload.packs.map((p) => p.name)), [payload.packs]);
+			const disabledNames = (0, react.useMemo)(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks]);
 			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
 				key: p.name,
 				pack: p,
@@ -692,9 +833,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
+				onJump: props.onJump,
 				onSaved: props.onSaved,
 				installed: installedNames,
+				suites: props.suites.get(p.name) ?? [],
 				consumers: payload.packs.filter((other) => other.name !== p.name && other.consumes.includes(p.name)).map((other) => other.name),
+				disabled: disabledNames.has(p.name),
 				onDone: (text) => {
 					setLaneDone(text);
 					props.onSaved();
@@ -707,16 +851,61 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		function PackCard(props) {
 			const { pack, t } = props;
 			const [paramsOpen, setParamsOpen] = (0, react.useState)(false);
-			return (0, react.createElement)("div", { style: card }, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.origin.kind === "builtin" ? t("originBuiltin") : fill(t("originPacksDir"), { root: pack.origin.root })), pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null), (0, react.createElement)("div", { style: {
+			return (0, react.createElement)("div", {
+				id: packAnchorId(pack.name),
+				style: card
+			}, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null, props.disabled ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("disabledPill")) : null), (0, react.createElement)("div", { style: {
 				...desc,
 				marginBottom: "4px"
-			} }, props.resolveText(pack.description)), pack.consumes.length > 0 ? (0, react.createElement)("div", { style: muted }, t("consumed"), pack.consumes.map((dep, index) => (0, react.createElement)("span", {
-				key: dep,
-				style: props.installed.has(dep) ? void 0 : {
-					color: "var(--dsw-alias-state-error-primary, crimson)",
-					whiteSpace: "pre-wrap"
+			} }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { style: {
+				...muted,
+				marginTop: "4px",
+				display: "flex",
+				gap: "6px",
+				flexWrap: "wrap",
+				alignItems: "center"
+			} }, pack.consumes.length > 0 ? (0, react.createElement)("span", { style: {
+				display: "inline-flex",
+				gap: "6px",
+				alignItems: "center",
+				flexWrap: "wrap"
+			} }, (0, react.createElement)("span", {
+				title: t("consumed"),
+				style: {
+					display: "inline-flex",
+					alignItems: "center"
 				}
-			}, `${index > 0 ? ", " : ""}${dep}${props.installed.has(dep) ? "" : t("missingDep")}`))) : null, (0, react.createElement)("div", { style: {
+			}, icon(DEPENDS_ICON_PATH)), pack.consumes.map((dep) => {
+				const installed = props.installed.has(dep);
+				return (0, react.createElement)("span", {
+					key: dep,
+					title: installed ? dep : `${dep}${t("missingDep")}`,
+					onClick: installed ? () => props.onJump("packs", packAnchorId(dep)) : void 0,
+					style: {
+						...chipStyle(!installed),
+						...installed ? { cursor: "pointer" } : {}
+					}
+				}, dep);
+			})) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { style: { opacity: .6 } }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
+				key: suite,
+				title: t("suiteManagedTip"),
+				onClick: () => props.onJump("suites", suiteAnchorId(suite)),
+				style: {
+					display: "inline-flex",
+					gap: "4px",
+					alignItems: "center",
+					cursor: "pointer",
+					background: "rgba(147, 51, 234, 0.12)",
+					border: "1px solid rgba(147, 51, 234, 0.38)",
+					borderRadius: "999px",
+					padding: "1px 8px",
+					fontSize: "0.82rem",
+					whiteSpace: "nowrap"
+				}
+			}, (0, react.createElement)("span", { style: {
+				display: "inline-flex",
+				alignItems: "center"
+			} }, icon(SUITE_ICON_PATH, 12)), suite))) : null, (0, react.createElement)("div", { style: {
 				marginTop: "4px",
 				display: "flex",
 				gap: "8px",
@@ -726,7 +915,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				size: "sm",
 				variant: "ghost",
 				onClick: () => setParamsOpen((v) => !v)
-			}, `${paramsOpen ? "▾" : "▸"} ${t("paramsToggle")}`), pack.origin.kind === "packsDir" ? (0, react.createElement)(PackLaneActions, {
+			}, `${paramsOpen ? "▾" : "▸"} ${t("paramsToggle")}`), pack.origin.kind === "packsDir" && props.suites.length === 0 ? (0, react.createElement)(PackLaneActions, {
 				pack,
 				status: props.status,
 				checked: props.checked,
@@ -735,6 +924,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				consumers: props.consumers,
+				disabled: props.disabled,
 				onDone: props.onDone
 			}) : null), paramsOpen ? (0, react.createElement)("div", { style: {
 				marginTop: "6px",
@@ -765,7 +955,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const run = (kind) => {
 				setBusy(true);
 				setError(void 0);
-				(kind === "update" ? updateManagedPack(props.pack.name) : deleteManagedPack(props.pack.name, props.consumers.length > 0)).then((version) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof version === "string" ? version : "" }) : t("deletedDone")), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
+				const call = kind === "update" ? updateManagedPack(props.pack.name) : kind === "delete" ? deleteManagedPack(props.pack.name, props.consumers.length > 0) : setPackDisabled(props.pack.name, kind === "disable", props.consumers.length > 0 && kind === "disable");
+				const doneText = kind === "update" ? void 0 : kind === "disable" ? t("disableDone") : kind === "enable" ? t("enableDone") : t("deletedDone");
+				call.then((result) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof result === "string" ? result : "" }) : doneText ?? ""), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
 					setBusy(false);
 					setArmed(void 0);
 				});
@@ -778,7 +970,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				display: "inline-flex",
 				gap: "8px",
 				alignItems: "center"
-			} }, standing !== null ? (0, react.createElement)("span", { style: muted }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			} }, standing !== null ? (0, react.createElement)("span", { style: {
+				...muted,
+				fontSize: "0.82rem"
+			} }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy || props.checked && props.laneState === "checking",
@@ -788,7 +983,15 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => armed === "delete" ? run("delete") : setArmed("delete")
-			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, rendered !== void 0 ? (0, react.createElement)("span", { style: {
+			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: () => {
+					const kind = props.disabled ? "enable" : "disable";
+					armed === kind ? run(kind) : setArmed(kind);
+				}
+			}, props.disabled ? armed === "enable" ? t("confirmEnable") : t("enableBtn") : armed === "disable" ? props.consumers.length > 0 ? fill(t("confirmDisableBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDisable") : t("disableBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, rendered !== void 0 ? (0, react.createElement)("span", { style: {
 				color: "var(--dsw-alias-state-error-primary, crimson)",
 				whiteSpace: "pre-wrap"
 			} }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { style: {
@@ -807,7 +1010,125 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				...coded.detail !== void 0 ? { detail: coded.detail } : {}
 			}, lang);
 		}
-		/** Config form: top-level keys as rows, oscillation.* folded under Advanced. */
+		/** Suites view (docs/designs/pack-suites.md): one card per market suite,
+		* each member row showing local vs market version. An empty list (the market
+		* has no suites or does not support them) and an unreachable market each
+		* render one explanatory line — never an error wall. Every action goes
+		* through the section-level refresh, so the Packs tab re-renders in sync. */
+		/** Suites tab: ONE table (same font as the rest of the page — no monospace
+		* member rows). Columns: suite, members (local → market), status, actions.
+		* The delete confirm is a single expanded line per suite: what goes, what
+		* stays (only when something is kept, with the force switch next to it). */
+		/** Suites tab: one card per suite, same two-column shape as the pack cards —
+		* suite identity on the left, info (description, member packs, actions) on
+		* the right. No table, no header row; the page font throughout. */
+		function SuitesView(props) {
+			const { lane, t } = props;
+			if (lane === void 0) return null;
+			if (lane.state === "unreachable") return (0, react.createElement)("p", { style: muted }, t("suitesUnreachable"));
+			if (lane.rows.length === 0) return (0, react.createElement)("p", { style: muted }, t("suitesEmpty"));
+			return (0, react.createElement)("div", null, lane.rows.map((s) => (0, react.createElement)(SuiteCard, {
+				key: s.name,
+				suite: s,
+				packs: props.payload.packs,
+				t,
+				lang: props.lang,
+				resolveText: props.resolveText,
+				onJump: props.onJump,
+				onSaved: props.onSaved
+			})));
+		}
+		function SuiteCard(props) {
+			const { suite, t, resolveText } = props;
+			const [armedDelete, setArmedDelete] = (0, react.useState)(false);
+			const [busy, setBusy] = (0, react.useState)(false);
+			const [error, setError] = (0, react.useState)(void 0);
+			const [done, setDone] = (0, react.useState)(void 0);
+			const installed = suite.members.filter((m) => m.localVersion !== void 0);
+			const runUpdate = () => {
+				setBusy(true);
+				setError(void 0);
+				updateSuite(suite.name).then((result) => {
+					setDone(fill(t("suiteUpdateDone"), { packs: result.updated.map((u) => `${u.name}@${u.version}`).join(", ") || t("upToDate") }));
+					props.onSaved();
+				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
+			};
+			const runDelete = () => {
+				setBusy(true);
+				setError(void 0);
+				deleteSuite(suite.name).then((result) => {
+					setDone(fill(t("suiteDeletedDone"), { packs: result.deleted.join(", ") }));
+					setArmedDelete(false);
+					props.onSaved();
+				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
+			};
+			const rendered = rendered_error(error, props.lang);
+			const nameCol = {
+				width: "170px",
+				flex: "none",
+				fontWeight: 600
+			};
+			return (0, react.createElement)("div", {
+				id: suiteAnchorId(suite.name),
+				style: {
+					...card,
+					display: "flex",
+					gap: "14px"
+				}
+			}, (0, react.createElement)("div", { style: nameCol }, (0, react.createElement)("div", null, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("div", { style: {
+				flex: "1 1 auto",
+				minWidth: 0
+			} }, (0, react.createElement)("div", { style: {
+				...desc,
+				marginBottom: "4px"
+			} }, resolveText(suite.description)), (0, react.createElement)("div", { style: {
+				...muted,
+				marginTop: "4px",
+				display: "flex",
+				gap: "6px",
+				flexWrap: "wrap",
+				alignItems: "center"
+			} }, (0, react.createElement)("span", {
+				title: t("colMembers"),
+				style: {
+					display: "inline-flex",
+					alignItems: "center"
+				}
+			}, icon(SUITE_ICON_PATH)), suite.members.map((m) => {
+				const installed = m.localVersion !== void 0;
+				return (0, react.createElement)("span", {
+					key: m.name,
+					title: m.name,
+					onClick: installed ? () => props.onJump("packs", packAnchorId(m.name)) : void 0,
+					style: {
+						...chipStyle(m.localVersion === void 0),
+						...installed ? { cursor: "pointer" } : {}
+					}
+				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}`);
+			})), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: runUpdate
+			}, t("suiteUpdateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				disabled: busy,
+				onClick: () => setArmedDelete((v) => !v)
+			}, armedDelete ? t("cancel") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: smallMuted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: smallMuted }, done) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
+				error,
+				lang: props.lang
+			}) : null), armedDelete ? (0, react.createElement)("div", { style: {
+				...smallMuted,
+				marginTop: "6px",
+				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
+				paddingTop: "6px"
+			} }, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" }), " ", (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				disabled: busy || installed.length === 0,
+				onClick: runDelete
+			}, t("suiteDeleteConfirm"))) : null));
+		}
 		function ConfigView(props) {
 			const { payload, t } = props;
 			const entries = payload.config;
@@ -917,22 +1238,42 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				lang: props.lang
 			}) : null));
 		}
-		/** The section: one fetch, three views. */
+		/** The section: one fetch cycle, four views (docs/designs/pack-suites.md). */
 		function ParamsSection(props) {
 			const lang = props.lang === "zh" ? "zh" : "en";
 			const t = (0, react.useMemo)(() => translate(lang === "zh" ? zh : en), [lang]);
 			const [payload, setPayload] = (0, react.useState)(void 0);
+			const [suites, setSuites] = (0, react.useState)(void 0);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [view, setView] = (0, react.useState)("packs");
+			/** Chip jumps: switch to the target tab, then scroll the anchored card
+			* into view once it has rendered (one frame is enough for React). */
+			const jumpTo = (0, react.useCallback)((target, anchor) => {
+				setView(target);
+				window.setTimeout(() => {
+					document.getElementById(anchor)?.scrollIntoView({
+						behavior: "smooth",
+						block: "center"
+					});
+				}, 60);
+			}, []);
 			const refresh = (0, react.useCallback)(() => {
 				fetchParams().then((p) => {
 					setPayload(p);
 					setError(void 0);
 				}).catch((e) => setError(e));
+				fetchSuiteStatus().then((rows) => setSuites({
+					state: "ok",
+					rows
+				})).catch(() => setSuites((prev) => ({
+					state: "unreachable",
+					rows: prev?.rows ?? []
+				})));
 			}, []);
 			(0, react.useEffect)(() => {
 				refresh();
 			}, [refresh]);
+			const suiteMarkers = (0, react.useMemo)(() => suitesByPack(suites?.rows ?? []), [suites]);
 			if (error !== void 0) return (0, react.createElement)("div", { style: baseText }, (0, react.createElement)("p", { style: {
 				color: "var(--dsw-alias-state-error-primary, crimson)",
 				whiteSpace: "pre-wrap"
@@ -950,6 +1291,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					label: t("viewPacks"),
 					id: `${NS$1}-packs`,
 					panelId: `${NS$1}-packs-panel`
+				},
+				{
+					value: "suites",
+					label: t("viewSuites"),
+					id: `${NS$1}-suites`,
+					panelId: `${NS$1}-suites-panel`
 				},
 				{
 					value: "groups",
@@ -987,9 +1334,19 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				onSaved: refresh
 			}) : null, view === "packs" ? (0, react.createElement)(PacksView, {
 				payload,
+				suites: suiteMarkers,
 				t,
 				lang,
 				resolveText: props.resolveText,
+				onJump: jumpTo,
+				onSaved: refresh
+			}) : null, view === "suites" ? (0, react.createElement)(SuitesView, {
+				lane: suites,
+				payload,
+				t,
+				lang,
+				resolveText: props.resolveText,
+				onJump: jumpTo,
 				onSaved: refresh
 			}) : null, view === "config" ? (0, react.createElement)(ConfigView, {
 				payload,

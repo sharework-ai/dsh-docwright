@@ -279,6 +279,34 @@ try {
   if (status2.coverage['task-card']?.covered !== 1) fail(`task-card missing from chain accounting: ${JSON.stringify(status2.coverage)}`)
   console.log(`e2e-real-llm: 8. chain status incl. packsDir stage OK (stages ${status2.stages.join(' → ')})`)
 
+  // 9. The workspace tier is DYNAMIC (docs/designs/pack-load-dirs.md): a
+  // tool set built from the BUILTIN root only still sees task-card when the
+  // call's session workspace carries .docwright/packs/task-card — origin
+  // 'workspace', no plugin reload involved.
+  const { defineDocPacksTool } = await import(pathToFileURL(join(repoRoot, 'src/tools.ts')).href)
+  const builtinOnly = await loadPacks(join(repoRoot, 'packs'), { includeBuiltin: true })
+  const sessionExec = { signal: exec.signal, agent: { session: { cwd: workspace } } }
+  const packsTool = defineDocPacksTool({ packs: builtinOnly, config: { ...config, workspaceRoot: workspace }, ctx: hostCtx } as never)
+  const listed = await packsTool.execute({} as never, sessionExec as never) as { packs: Array<{ name: string; origin: string; workspaceDepth?: number }> }
+  const cardEntry = listed.packs.find(p => p.name === 'task-card')
+  if (cardEntry === undefined || cardEntry.origin !== 'workspace') fail(`workspace tier not visible via doc_packs: ${JSON.stringify(cardEntry)}`)
+  console.log('e2e-real-llm: 9. workspace tier dynamic OK (task-card origin=workspace via a builtin-only pack map)')
+
+  // 10. disabledPacks: a disabled pack drops out of doc_packs; an enabled
+  // pack consuming a disabled one fails loud (the chain-protection rule).
+  const disabledTool = defineDocPacksTool({ packs: builtinOnly, config: { ...config, workspaceRoot: workspace, disabledPacks: ['task-card'] }, ctx: hostCtx } as never)
+  const filtered = await disabledTool.execute({} as never, sessionExec as never) as { packs: Array<{ name: string }> }
+  if (filtered.packs.some(p => p.name === 'task-card')) fail('a disabled pack still lists in doc_packs')
+  const loudTool = defineDocPacksTool({ packs: builtinOnly, config: { ...config, workspaceRoot: workspace, disabledPacks: ['cosmic-func'] }, ctx: hostCtx } as never)
+  let loud = 'no error'
+  try {
+    await loudTool.execute({} as never, sessionExec as never)
+  } catch (error) {
+    loud = (error as Error).message
+  }
+  if (!loud.includes('consumes "cosmic-func", which is disabled')) fail(`disabled-upstream check did not fire: ${loud}`)
+  console.log('e2e-real-llm: 10. disabledPacks OK (filtered out; enabled consumer fails loud)')
+
   console.log('e2e-real-llm: PASS')
 } finally {
   await (booted.shutdown as { shutdown(code: number): Promise<void> }).shutdown(0).catch(() => {})

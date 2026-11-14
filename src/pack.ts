@@ -173,10 +173,14 @@ export interface Pack {
   /**
    * Which root the pack was loaded from (params-UI provenance + write-path
    * routing): 'builtin' packages ship inside the plugin, 'packsDir' packs
-   * come from the config's extra root (a same-name override or a custom
-   * pack). A pack-param default edit must persist to `dir` — which IS the
-   * origin's pack directory — so provenance is display-only for correctness
-   * and load-bearing for user trust ("where will my edit land?").
+   * come from the config's install root (a same-name override or a custom
+   * pack), 'extraPacksDir' from the profile's additional root, 'workspace'
+   * from the session workspace's .docwright/packs tier (loaded dynamically
+   * per call; depth counts how many levels above the workspace the tier sits,
+   * 0 = the workspace itself — docs/designs/pack-load-dirs.md). A pack-param
+   * default edit must persist to `dir` — which IS the origin's pack
+   * directory — so provenance is display-only for correctness and
+   * load-bearing for user trust ("where will my edit land?").
    */
-  readonly origin: { readonly kind: 'builtin' | 'packsDir'; readonly root: string }
+  readonly origin: { readonly kind: 'builtin' | 'packsDir' | 'extraPacksDir' | 'workspace'; readonly root: string; readonly depth?: number }
 }

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="300" viewBox="0 0 880 300" font-family="sans-serif">
+  <rect x="0" y="0" width="880" height="300" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="34" font-size="20" font-weight="bold" fill="#222">包的生命周期</text>
+  <text x="20" y="58" font-size="13" fill="#666">从创作到市场分发，再到会话内生成闭环</text>
+
+  <!-- anatomy -->
+  <rect x="30" y="90" width="190" height="120" rx="8" fill="#f4f7fb" stroke="#b8c4d4"/>
+  <text x="45" y="112" font-size="14" font-weight="bold" fill="#345">包目录（packs/&lt;name&gt;/）</text>
+  <text x="45" y="136" font-size="12" fill="#445">manifest.json</text>
+  <text x="45" y="156" font-size="12" fill="#445">schema.json</text>
+  <text x="45" y="176" font-size="12" fill="#445">rules/ · prompts/</text>
+  <text x="45" y="196" font-size="12" fill="#445">templates/ · samples/</text>
+
+  <!-- check -->
+  <rect x="260" y="90" width="180" height="120" rx="8" fill="#fbf7f2" stroke="#d8c8ae"/>
+  <text x="275" y="112" font-size="14" font-weight="bold" fill="#6b5230">pack:check</text>
+  <text x="275" y="136" font-size="12" fill="#7a6030">装载期校验</text>
+  <text x="275" y="156" font-size="12" fill="#7a6030">golden 样本全绿</text>
+  <text x="275" y="176" font-size="12" fill="#7a6030">变异测试证明护栏</text>
+  <text x="275" y="196" font-size="12" fill="#7a6030">真实模型 e2e</text>
+
+  <!-- distribute -->
+  <rect x="480" y="90" width="180" height="120" rx="8" fill="#eef3ee" stroke="#9ab89a"/>
+  <text x="495" y="112" font-size="14" font-weight="bold" fill="#3a5a3a">分发</text>
+  <text x="495" y="136" font-size="12" fill="#4c6a4c">市场：发布后按需安装</text>
+  <text x="495" y="156" font-size="12" fill="#4c6a4c">套件：整组一次装齐</text>
+  <text x="495" y="176" font-size="12" fill="#4c6a4c">本地：packsDir 直接放置</text>
+  <text x="495" y="196" font-size="12" fill="#4c6a4c">同名覆盖内置包</text>
+
+  <!-- loop -->
+  <rect x="700" y="90" width="150" height="120" rx="8" fill="#f7eef3" stroke="#b88aa8"/>
+  <text x="715" y="112" font-size="14" font-weight="bold" fill="#5a2a44">生成闭环</text>
+  <text x="715" y="136" font-size="12" fill="#6d3d58">doc_generate</text>
+  <text x="715" y="156" font-size="12" fill="#6d3d58">校验 → 修复循环</text>
+  <text x="715" y="176" font-size="12" fill="#6d3d58">回执 + Markdown</text>
+  <text x="715" y="196" font-size="12" fill="#6d3d58">doc_validate 复验</text>
+
+  <line x1="222" y1="150" x2="258" y2="150" stroke="#555" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <line x1="442" y1="150" x2="478" y2="150" stroke="#555" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <line x1="662" y1="150" x2="698" y2="150" stroke="#555" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+  <text x="240" y="245" font-size="13" fill="#555">引擎与领域无关：包声明文档结构、合格标准与生成方法，引擎执行闭环。</text>
+</svg>

@@ -7,11 +7,14 @@ import { generateDocument, getDocService, parseUpstreamArtifacts, summarizeArtif
 import { buildExtractionFile, extractionFilePath, extractableParams, processProposals, readExtractionFile, verifyExtraction, writeExtractionFile } from './extract.ts'
 import { materialAnchors, readMaterialEntries } from './materials.ts'
 import { createLlmPort } from './llm-port.ts'
-import { installPack, marketUrlOf } from './pack-manage.ts'
-import { fetchInstallPlan, searchMarket } from './market-search.ts'
+import { installPack, installSuite, marketUrlOf } from './pack-manage.ts'
+import { fetchInstallPlan, fetchSuiteInstallPlan, searchMarket } from './market-search.ts'
 import { previewParams, resolveEffectiveParams, type ExtractionView, type ParamDrift, type ParamRow } from './params.ts'
 import type { Pack } from './pack.ts'
 import { effectiveWorkspaceRoot, normalizeWindowsPath, resolveRootWithin, type SessionWorkspaceCarrier } from './paths.ts'
+import { overlayWorkspaceTier, applyDisabled, resolvePacksDir } from './pack-sources.ts'
+import { readSuiteRecord } from './pack-manage.ts'
+import type { ShadowedCopy } from './pack-loader.ts'
 import { artifactHashOf, type MaterialAnchor, type Receipt, type UpstreamAnchor } from './receipt.ts'
 import { severityCounts } from './issue.ts'
 
@@ -33,6 +36,35 @@ export interface ToolDeps {
   /** The builtin packs root + loader, for the install lane's in-place reload (registerTools owns the values). */
   readonly builtinRoot?: string
   readonly loadPacks?: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
+}
+
+/** Suite-name expansion source: the local suites.json record at the install dir (design doc 启用与禁用). */
+async function disabledMembersResolver(config: Config): Promise<(name: string) => readonly string[] | undefined> {
+  const suites = await readSuiteRecord(resolvePacksDir(config.packsDir))
+  return name => suites.find(s => s.name === name)?.members.map(m => m.name)
+}
+
+/**
+ * Per-call pack view (docs/designs/pack-load-dirs.md): the apply-time tiers
+ * (builtin/install/extra) overlaid with the workspace tier — loaded
+ * dynamically per call, workspace packs shadow same-name copies — then the
+ * disabled-name filter. Every tool that reads the pack map goes through this,
+ * so workspace packs and disabled packs behave identically across
+ * doc_packs/generate/validate/chain-status.
+ */
+async function packsForSession(
+  deps: ToolDeps,
+  exec: SessionWorkspaceCarrier | undefined,
+): Promise<{ packs: ReadonlyMap<string, Pack>; shadowed: readonly ShadowedCopy[] }> {
+  const workspaceRoot = effectiveWorkspaceRoot(exec, deps.config.workspaceRoot)
+  const overlay = await overlayWorkspaceTier(
+    deps.packs,
+    workspaceRoot,
+    deps.config.searchWorkspacePacksUpward === true,
+    deps.config.packShadowPolicy ?? 'allow',
+  )
+  const packs = applyDisabled(overlay.packs, deps.config.disabledPacks, await disabledMembersResolver(deps.config))
+  return { packs, shadowed: overlay.shadowed }
 }
 
 /**
@@ -119,13 +151,13 @@ function resolveScopedRoots(
   }
 }
 
-function resolvePack(deps: ToolDeps, name: string): Pack {
-  const pack = deps.packs.get(name)
+function resolvePack(deps: ToolDeps, name: string, packs: ReadonlyMap<string, Pack> = deps.packs): Pack {
+  const pack = packs.get(name)
   if (pack === undefined) {
     const marketHint = deps.config.marketSearch !== false
       ? '; if none of them fits, search the pack market with doc_market_search before authoring a new pack'
       : ''
-    throw new Error(`unknown pack "${name}"; discover installed packs via doc_packs (available: ${[...deps.packs.keys()].sort().join(', ') || 'none installed'})${marketHint}`)
+    throw new Error(`unknown pack "${name}"; discover installed packs via doc_packs (available: ${[...packs.keys()].sort().join(', ') || 'none installed'})${marketHint}`)
   }
   return pack
 }
@@ -236,11 +268,12 @@ export function defineDocPacksTool(deps: ToolDeps) {
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute() {
+    async execute(_args: Record<string, never>, exec?: SessionWorkspaceCarrier) {
+      const { packs, shadowed } = await packsForSession(deps, exec)
       return {
         confirmPolicy: deps.config.confirmPolicy ?? DEFAULT_CONFIRM_POLICY,
         marketSearch: deps.config.marketSearch !== false,
-        packs: [...deps.packs.values()].map(p => ({
+        packs: [...packs.values()].map(p => ({
         name: p.manifest.name,
         version: p.manifest.version,
         // Model face projects `en` regardless of UI locale: prompt material
@@ -248,6 +281,13 @@ export function defineDocPacksTool(deps: ToolDeps) {
         description: resolveLocalized(p.manifest.description, 'en'),
         languages: [...p.manifest.languages],
         consumes: [...p.manifest.consumes],
+        // Which tier the pack came from (docs/designs/pack-load-dirs.md, P3):
+        // builtin / packsDir / extraPacksDir / workspace — answers "which
+        // copy is active" whenever several tiers carry the same name.
+        origin: p.origin.kind,
+        ...(p.origin.kind === 'workspace' && p.origin.depth !== undefined && p.origin.depth > 0
+          ? { workspaceDepth: p.origin.depth }
+          : {}),
         params: Object.entries(p.manifest.params ?? {}).map(([name, spec]) => ({
           name,
           type: spec.type,
@@ -259,6 +299,16 @@ export function defineDocPacksTool(deps: ToolDeps) {
           extractable: spec.extractable === true,
         })),
       })),
+      // Shadowed copies: same-name losers from earlier tiers, so a user can
+      // always tell which copy actually governs.
+      ...(shadowed.length > 0 ? { shadowed: shadowed.map(copy => ({
+        name: copy.name,
+        shadowedOrigin: copy.origin.kind,
+        shadowedVersion: copy.version,
+        shadowedDir: copy.dir,
+        activeOrigin: copy.activeOrigin.kind,
+        activeVersion: copy.activeVersion,
+      })) } : {}),
       }
     },
   })
@@ -274,7 +324,7 @@ export function defineDocPacksTool(deps: ToolDeps) {
 export function defineMarketSearchTool(deps: ToolDeps) {
   return defineTool({
     name: 'doc_market_search',
-    description: 'Search the docwright pack market for document packs by keyword. Use it when the user asks for a document type the installed packs cannot serve (doc_packs found no fit): compose the terms from the user\'s intent — domain words and document genre ("COSMIC function point estimation", "meeting minutes", "resume") — never guessed pack names. Returns per hit: name, one-line description, version, languages, consumed upstream types. To act on a hit, install it with doc_market_install (the user confirms first; the pack is usable in this session right after) — never fabricate a local pack from a search hit.',
+    description: 'Search the docwright pack market for document packs by keyword. Use it when the user asks for a document type the installed packs cannot serve (doc_packs found no fit): compose the terms from the user\'s intent — domain words and document genre ("COSMIC function point estimation", "meeting minutes", "resume") — never guessed pack names. Returns per hit: name, one-line description, version, languages, consumed upstream types, and the suites the pack belongs to. Packs that BELONG to a suite are NOT listed on the market — the SUITE card represents them (members list included; a member-name query lands on its suite card): when the user wants the whole set, install it with doc_market_install { "suite": "<name>" }. To act on a hit, install it with doc_market_install (the user confirms first; the pack is usable in this session right after) — never fabricate a local pack from a search hit.',
     parameters: {
       query: { type: 'string', required: true, description: 'Free-text keywords, whitespace-separated; ALL terms must match. Compose from document genre and domain words; English matches best (descriptions are matched in en and zh)' },
       limit: { type: 'number', description: 'Max hits to return (default 20, cap 50)' },
@@ -289,27 +339,32 @@ export function defineMarketSearchTool(deps: ToolDeps) {
   })
 }
 
-/** The install half of market discovery: lands a market pack into the
- * packsDir behind the SAME confirmation grammar as doc_generate — the first
- * call (no confirm) returns a pendingConfirmation table the model presents;
- * the user's approval is the second call with confirm: true. The install
- * hot-reloads the pack map in place, so the pack is usable in THIS session
- * immediately — no restart, no new session. */
+/** The install half of market discovery: lands a market pack — or a whole
+ * market SUITE (docs/designs/pack-suites.md) — into the packsDir behind the
+ * SAME confirmation grammar as doc_generate — the first call (no confirm)
+ * returns a pendingConfirmation table the model presents; the user's approval
+ * is the second call with confirm: true. The install hot-reloads the pack map
+ * in place, so the packs are usable in THIS session immediately — no restart,
+ * no new session. */
 export function defineMarketInstallTool(deps: ToolDeps) {
   return defineTool({
     name: 'doc_market_install',
-    description: 'Install a pack from the docwright pack market into the deployment\'s packsDir. Use it when the user asks to install/add/fetch a pack by name or need ("帮我安装 cosmic-context", "install the resume pack"), and for doc_market_search hits. CONFIRMATION GATE: call without confirm first — the result is a pendingConfirmation table (pack, version, source market, target packsDir); present it to the user and only re-call with confirm: true after they approve (never self-confirm). The install verifies the tarball against the market index (sha256 + manifest name + content hash), lands atomically, and hot-reloads the pack map — doc_packs lists the pack in THIS session right after, no restart needed. Installing an already-installed pack name updates it in place.',
+    description: 'Install a pack from the docwright pack market into the deployment\'s packsDir. Use it when the user asks to install/add/fetch a pack by name or need ("帮我安装 cosmic-context", "install the resume pack"), and for doc_market_search hits. A whole SUITE installs with { "suite": "<name>" } (mutually exclusive with pack): every member pack plus their consumed upstreams lands in one confirmed call. Packs that BELONG to a suite cannot be installed, updated, or deleted on their own — install the suite instead (search cards show the suites field). CONFIRMATION GATE: call without confirm first — the result is a pendingConfirmation table (pack/suite, versions, source market, target packsDir); present it to the user and only re-call with confirm: true after they approve (never self-confirm). The install verifies the tarball against the market index (sha256 + manifest name + content hash), lands atomically, and hot-reloads the pack map — doc_packs lists the packs in THIS session right after, no restart needed. Installing an already-installed pack name updates it in place; members already current are skipped.',
     parameters: {
-      pack: { type: 'string', required: true, description: 'Pack name exactly as doc_market_search reported it' },
+      pack: { type: 'string', description: 'Pack name exactly as doc_market_search reported it (mutually exclusive with suite)' },
+      suite: { type: 'string', description: 'Suite name exactly as doc_market_search reported it — installs EVERY member pack plus their consumed upstreams (mutually exclusive with pack)' },
       confirm: { type: 'boolean', description: 'Set true only after the user approved the pendingConfirmation table' },
     },
     output: {
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute(args: { pack: string; confirm?: boolean }) {
+    async execute(args: { pack?: string; suite?: string; confirm?: boolean }) {
       if (deps.builtinRoot === undefined || deps.loadPacks === undefined) {
         throw new Error('doc_market_install requires the plugin wiring (builtinRoot/loadPacks); nothing was written')
+      }
+      if ((args.pack === undefined) === (args.suite === undefined)) {
+        throw new Error('doc_market_install takes exactly one of pack or suite (pass "pack": "<name>" for one pack, or "suite": "<name>" for every member pack of a suite); nothing was written')
       }
       const laneDeps = {
         packs: deps.packs as Map<string, Pack>,
@@ -318,15 +373,20 @@ export function defineMarketInstallTool(deps: ToolDeps) {
         marketUrl: marketUrlOf(deps.config),
         loadPacks: deps.loadPacks,
       }
+      const suite = args.suite
       if (args.confirm !== true) {
-        // The pending table reads the market index so the user approves a
-        // CONCRETE plan — the consumes closure, each member at its market
-        // version. An unreachable market or an absent member surfaces here,
-        // before anything is asked or written.
-        const plan = await fetchInstallPlan(laneDeps.marketUrl, args.pack)
-        const rows: string[] = plan.members.map(m => `${m.name}@${m.version}${m.requested ? ' (requested)' : ' (consumed upstream)'}`)
+        // The pending table reads the market index (and the suite detail) so
+        // the user approves a CONCRETE plan: for a pack, its consumes closure;
+        // for a suite, every member plus the upstreams members pull in —
+        // suite MEMBERS and consumed upstreams are labeled differently. An
+        // unreachable market or an absent member surfaces here, before
+        // anything is asked or written.
+        const plan = suite !== undefined
+          ? await fetchSuiteInstallPlan(laneDeps.marketUrl, suite)
+          : await fetchInstallPlan(laneDeps.marketUrl, args.pack!)
+        const rows: string[] = plan.members.map(m => `${m.name}@${m.version}${m.requested ? (suite !== undefined ? ' (suite member)' : ' (requested)') : ' (consumed upstream)'}`)
         const table: Record<string, string | string[]> = {
-          requested: args.pack,
+          ...(suite !== undefined ? { requestedSuite: suite } : { requested: args.pack! }),
           sourceMarket: laneDeps.marketUrl,
           target: deps.config.packsDir !== undefined && deps.config.packsDir.length > 0 ? deps.config.packsDir : '(no packsDir configured — set config.packsDir first)',
           installs: rows,
@@ -337,11 +397,13 @@ export function defineMarketInstallTool(deps: ToolDeps) {
           note: 'Present this table to the user; re-call with confirm: true after they approve.',
         }
       }
-      const { installed } = await installPack(laneDeps, args.pack)
+      const { installed } = suite !== undefined
+        ? await installSuite(laneDeps, suite)
+        : await installPack(laneDeps, args.pack!)
       const unchanged = installed.filter(o => o.unchanged)
       return {
         status: 'installed',
-        pack: args.pack,
+        ...(suite !== undefined ? { suite } : { pack: args.pack! }),
         installed: installed.map(o => `${o.name}@${o.version}${o.unchanged ? ' (already current)' : o.existed ? ' (updated in place)' : ''}`),
         ...(unchanged.length === installed.length ? { note: 'everything already current; nothing was downloaded' } : {}),
         sessionNote: 'the packs are usable in this session immediately (doc_packs lists them now)',
@@ -601,7 +663,8 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args: { pack: string; materials?: unknown[]; language?: string; upstream?: unknown[]; artifactName?: string; topic?: string; maxRounds?: number; force?: boolean; params?: unknown; confirm?: boolean; confirmPolicy?: unknown }, exec) {
-      const pack = resolvePack(deps, args.pack)
+      const sessionPacks = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
+      const pack = resolvePack(deps, args.pack, sessionPacks.packs)
       const language = resolveLanguage(deps, pack, args.language)
       const materials = (args.materials as string[] | undefined) ?? []
       const upstream = args.upstream as string[] | undefined
@@ -622,7 +685,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           throw new Error(`pack "${pack.manifest.name}" consumes upstream artifacts [${pack.manifest.consumes.join(', ')}]; pass their workspace paths via the upstream parameter`)
         }
         const policy = deps.config.upstreamVersionPolicy ?? DEFAULT_UPSTREAM_VERSION_POLICY
-        const verified = await verifyUpstreamReceipts(workspaceRoot, upstream, pack, deps.packs, policy)
+        const verified = await verifyUpstreamReceipts(workspaceRoot, upstream, pack, sessionPacks.packs, policy)
         upstreamTexts = verified.texts
         upstreamAnchors = verified.anchors
         upstreamWarnings = verified.warnings.length > 0 ? verified.warnings : undefined
@@ -763,7 +826,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           if (policy === 'regenerate') {
             driftImpact = `paramDriftPolicy is "regenerate": confirming these params requires regenerating the upstream artifacts first; the call will be refused until then.`
           } else {
-            const failures = revalidateUpstreamUnderParams(upstreamRecords, deps.packs, overrides ?? {})
+            const failures = revalidateUpstreamUnderParams(upstreamRecords, sessionPacks.packs, overrides ?? {})
             driftImpact = failures.length === 0
               ? 'paramDriftPolicy is "revalidate": upstream artifacts revalidated green under the new params; safe to continue.'
               : `paramDriftPolicy is "revalidate": upstream artifacts fail under the new params (${failures.join('; ')}); the call will be refused.`
@@ -807,7 +870,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           const detail = preview.drift.map(d => `${d.name}: ${shortValue(d.from)} → ${shortValue(d.to)}`).join('; ')
           throw new Error(`params drift from the upstream receipts (${detail}); pack "${pack.manifest.name}" paramDriftPolicy is "regenerate" — regenerate the upstream artifacts under the new params first, then re-run this call`)
         }
-        const failures = revalidateUpstreamUnderParams(upstreamRecords, deps.packs, overrides ?? {})
+        const failures = revalidateUpstreamUnderParams(upstreamRecords, sessionPacks.packs, overrides ?? {})
         if (failures.length > 0) {
           throw new Error(`upstream artifacts fail validation under the new params (${failures.join('; ')}); pack "${pack.manifest.name}" paramDriftPolicy is "revalidate" — regenerate the upstream under the new params or revert the param change`)
         }
@@ -917,12 +980,13 @@ export function defineDocValidateTool(deps: ToolDeps) {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args: { artifactPath: string; pack: string; language?: string; params?: unknown; upstream?: unknown[] }, exec) {
-      const pack = resolvePack(deps, args.pack)
+      const sessionPacks = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
+      const pack = resolvePack(deps, args.pack, sessionPacks.packs)
       const workspaceRoot = effectiveWorkspaceRoot(exec as SessionWorkspaceCarrier | undefined, deps.config.workspaceRoot)
       const artifactPath = confinePath(workspaceRoot, args.artifactPath, 'artifactPath')
       const upstreamRefs = args.upstream as string[] | undefined
       const verifiedUpstream = upstreamRefs !== undefined && upstreamRefs.length > 0 && pack.manifest.consumes.length > 0
-        ? await verifyUpstreamReceipts(workspaceRoot, upstreamRefs, pack, deps.packs, deps.config.upstreamVersionPolicy ?? DEFAULT_UPSTREAM_VERSION_POLICY)
+        ? await verifyUpstreamReceipts(workspaceRoot, upstreamRefs, pack, sessionPacks.packs, deps.config.upstreamVersionPolicy ?? DEFAULT_UPSTREAM_VERSION_POLICY)
         : undefined
       const raw = await readFile(artifactPath, 'utf8')
       let artifact: unknown
@@ -1053,7 +1117,8 @@ export function defineDocChainStatusTool(deps: ToolDeps) {
       const stages: string[] = [planPackName]
       let frontier = [planPackName]
       while (frontier.length > 0) {
-        const next = [...deps.packs.values()]
+        const { packs: chainPacks } = await packsForSession(deps, exec as SessionWorkspaceCarrier | undefined)
+        const next = [...chainPacks.values()]
           .filter(p => p.manifest.scope !== 'workspace' && p.manifest.consumes.some(c => frontier.includes(c)) && !stages.includes(p.manifest.name))
           .map(p => p.manifest.name)
         stages.push(...next)

@@ -49,12 +49,24 @@ Two lanes; pick explicitly before writing files:
   `<workspace>/.docwright/packs/` (absolute path in cordis.yml). A same-name
   pack there overrides the built-in one. If the directory is inside the
   session workspace you can write it with normal file tools; if outside, ask
-  the user to place files or approve the write.
+  the user to place files or approve the write. RECOMMENDED authoring spot:
+  the workspace `.docwright/packs/` tier is a fixed load tier loaded
+  dynamically per call — edit a pack file and the next generation call uses
+  it, no plugin reload needed. Keep the long-term source of truth in an
+  authoring repository (or the repo lane's `packs/`) and symlink it into the
+  workspace directory for debugging; publish via the market.
 
 **Loading happens at plugin apply time**: after writing or changing pack
-files, the plugin must reload (host restart/reload) before `doc_generate` sees
-them. A pack you just authored is never usable in the same session that wrote
-it — verify with `pack:check` instead.
+files OUTSIDE the workspace tier, the plugin must re-apply before
+`doc_generate` sees them. Verify first
+with `pack:check`, then make the plugin re-apply in ONE of three ways:
+(a) session-scoped toggle — disable then enable the `include:docwright`
+plugin entry via the plugin manager (live profile applies immediately; the
+`doc_*` tools blink off during the toggle, and in-flight generations in other
+sessions of the same profile are interrupted); (b) the market lane — publish
+and install, which hot-reloads the pack map by design; (c) host restart as
+the fallback. A pack whose files fail the load-time gate can take the plugin
+down on re-apply — never skip the `pack:check` step before reloading.
 
 ## Verify as you go
 
@@ -262,6 +274,29 @@ closes its own loop (generate → validate → repair).
   a fork. Chain-level shared params (numbering conventions, tree depth) are
   declared once at the chain head and inherited via receipts.
 
+#### Suites — design them as part of the decomposition, not as an afterthought
+
+Authoring several interrelated packs very likely means the task includes a
+SUITE (a market-side named set: one install lands every member, and members
+become suite-managed on every deployment). Treat the suite decision as a
+first-class output of Stage 5, next to the chain sketch — the COSMIC
+five-pack scenario was planned as a suite from the start, not retrofitted.
+
+Judge by three questions: do the packs serve ONE complete scenario? Will
+the user most likely want all of them installed at once? Does installing
+only one or two of them still make sense on its own? All three leaning yes
+→ recommend defining a suite with these packs as members; a consumes chain
+by itself is NOT a suite justification (dependencies install along anyway).
+
+Present the conclusion to the user explicitly in this stage's output —
+recommended or not, with a one-sentence reason — and only put it on the
+publish checklist after the user agrees. Warn the user about the lifecycle
+cost before they agree: once the suite is live, members can no longer be
+installed, updated, or deleted one by one anywhere — fixes ship by
+publishing the pack AND bumping the suite through review. Pack the suite
+around packs users will always want together; leave genuinely optional or
+standalone variants out of it.
+
 ### Stage 6 — Design the params
 
 Walk each candidate param through: type (scalar / object budget shape) →
@@ -345,6 +380,16 @@ shape; no validation semantics.
   build), merge, README/manual section, changelog entry. packsDir lane: the
   health sheet from `pack:check` plus the real e2e observation log are the
   deliverable record.
+- Publishing: packs go to the market's review queue one by one, unchanged.
+  When Stage 5 concluded (and the user agreed) that the decomposition is a
+  suite, ALSO submit the suite form into the same review queue — name,
+  bilingual description, category, version, and the member list taken
+  directly from this decomposition's result (no tarball: the suite is a
+  form submission, not an archive). The suite goes live only after the
+  review passes. Remember what going live means: from then on every member
+  pack is suite-managed — single-pack install, update, and delete are refused
+  for members everywhere (session tools and settings page alike), so member
+  fixes ship by publishing the pack AND bumping the suite through review.
 
 ## Final gate (every box checked)
 

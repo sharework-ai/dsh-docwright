@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="560" viewBox="0 0 880 560" font-family="sans-serif">
+  <rect x="0" y="0" width="880" height="560" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="34" font-size="20" font-weight="bold" fill="#222">COSMIC 场景链</text>
+  <text x="20" y="58" font-size="13" fill="#666">上层为项目级产物（跨需求共用），下层为一个 topic 目录内的一次需求</text>
+
+  <!-- workspace level -->
+  <rect x="40" y="80" width="360" height="150" rx="8" fill="#f4f7fb" stroke="#b8c4d4"/>
+  <text x="56" y="104" font-size="14" font-weight="bold" fill="#345">工作区级（context/ 目录）</text>
+
+  <rect x="60" y="120" width="150" height="70" rx="6" fill="#dceaf7" stroke="#5b8db8"/>
+  <text x="135" y="150" font-size="14" text-anchor="middle" fill="#1d3a52">cosmic-context</text>
+  <text x="135" y="170" font-size="12" text-anchor="middle" fill="#4a6a86">项目上下文 · 一份</text>
+
+  <rect x="230" y="120" width="150" height="70" rx="6" fill="#dceaf7" stroke="#5b8db8"/>
+  <text x="305" y="150" font-size="14" text-anchor="middle" fill="#1d3a52">context-sync</text>
+  <text x="305" y="170" font-size="12" text-anchor="middle" fill="#4a6a86">规划合并回写 · 动作</text>
+
+  <line x1="210" y1="155" x2="228" y2="155" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- topic level -->
+  <rect x="40" y="260" width="800" height="270" rx="8" fill="#fbf7f2" stroke="#d8c8ae"/>
+  <text x="56" y="284" font-size="14" font-weight="bold" fill="#6b5230">topic 目录（一个需求一个，如 REQ-352-收藏夹/）</text>
+
+  <rect x="200" y="300" width="160" height="70" rx="6" fill="#f7e8d5" stroke="#b8863b"/>
+  <text x="280" y="330" font-size="14" text-anchor="middle" fill="#4d3a15">cosmic-plan</text>
+  <text x="280" y="350" font-size="12" text-anchor="middle" fill="#7a6030">功能规划 · PLAN-352</text>
+
+  <!-- fan out arrows -->
+  <line x1="280" y1="370" x2="140" y2="420" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="280" y1="370" x2="400" y2="420" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="280" y1="370" x2="660" y2="420" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="60" y="424" width="160" height="70" rx="6" fill="#e8f0e2" stroke="#6d9a55"/>
+  <text x="140" y="452" font-size="14" text-anchor="middle" fill="#2c4218">cosmic-req</text>
+  <text x="140" y="472" font-size="12" text-anchor="middle" fill="#55703c">每功能一份 · REQ-352-NN</text>
+
+  <rect x="320" y="424" width="160" height="70" rx="6" fill="#e8f0e2" stroke="#6d9a55"/>
+  <text x="400" y="452" font-size="14" text-anchor="middle" fill="#2c4218">cosmic-func</text>
+  <text x="400" y="472" font-size="12" text-anchor="middle" fill="#55703c">每功能一份 · FUNC-352-NN</text>
+
+  <rect x="580" y="424" width="160" height="70" rx="6" fill="#e8f0e2" stroke="#6d9a55"/>
+  <text x="660" y="452" font-size="14" text-anchor="middle" fill="#2c4218">cosmic-tech</text>
+  <text x="660" y="472" font-size="12" text-anchor="middle" fill="#55703c">每功能一份 · TECH-352-NN</text>
+
+  <!-- context into plan -->
+  <path d="M135,190 C135,250 220,270 240,298" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="70" y="222" font-size="12" fill="#555">上游产物</text>
+
+  <!-- chain arrows req->func->tech -->
+  <line x1="222" y1="459" x2="318" y2="459" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="482" y1="459" x2="578" y2="459" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- plan back to context-sync -->
+  <path d="M200,335 C160,300 320,180 288,192" fill="none" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <text x="40" y="252" font-size="12" fill="#8a6d3b">plan 通过后回流</text>
+
+  <!-- coverage note -->
+  <text x="430" y="330" font-size="13" fill="#555">按功能扇出：targetIndex 寻址</text>
+  <text x="430" y="350" font-size="13" fill="#555">doc_chain_status 对账覆盖</text>
+</svg>

@@ -40,8 +40,16 @@ export interface OscillationConfig {
 
 /** Plugin configuration, overridable from cordis.yml (no hardcoded tunables). */
 export interface Config {
-  /** Extra pack directories merged over the built-in packs/ (same-name wins). */
+  /** Install directory: market install/update/delete write here; loads over the builtin packs/ (same-name wins). Defaults to $DSH_HOME/docwright/packs when unset (docs/designs/pack-load-dirs.md). */
   packsDir?: string
+  /** One additional load root (profile-owned): authoring checkouts, scenario-specific dirs. Loads after packsDir, before the workspace tier (same-name wins). */
+  extraPacksDir?: string
+  /** Disabled pack names (a suite name expands to its members via the local suites.json record). Disabled packs do not load. */
+  disabledPacks?: string[]
+  /** Search parent directories of the workspace for .docwright/packs tiers (inner wins). Default false: it loads model-writable sources from above the opened workspace, an undeclared trust relaxation. */
+  searchWorkspacePacksUpward?: boolean
+  /** Cross-root same-name packs: 'allow' (default) shadows with records, 'error' fails loud at load. */
+  packShadowPolicy?: 'allow' | 'error'
   /** Pack market base URL the params UI checks pack updates against (default: https://dm.shrwk.com). */
   marketUrl?: string
   /** Register the doc_market_search tool and advertise it in the discovery prompts (default: true). False removes the market-search discovery channel entirely. */
@@ -81,7 +89,11 @@ export interface Config {
 const bi = (en: string, zh: string): { en: string; zh: string } => ({ en, zh })
 
 export const Config: z<Config> = z.object({
-  packsDir: z.string().extra('description', bi('Extra pack directories merged over the built-in packs/ (same-name wins)', '额外 pack 目录，合并覆盖内置 packs/（同名者胜）')),
+  packsDir: z.string().extra('description', bi('Install directory: market install/update/delete write here and it loads over the builtin packs/ (same-name wins). Defaults to $DSH_HOME/docwright/packs when unset', '安装目录：市场安装/更新/删除写在这里，装载时覆盖内置 packs/（同名者胜）。未设置时默认 $DSH_HOME/docwright/packs')),
+  extraPacksDir: z.string().extra('description', bi('One additional load root after the install dir (authoring checkouts, scenario dirs; same-name wins)', '安装目录之外的另一个装载根（创作库挂载、场景目录；同名者胜）')),
+  disabledPacks: z.array(z.string()).extra('description', bi('Disabled pack names (a suite name expands to its members); disabled packs do not load', '禁用的 pack 名单（suite 名会展开为成员）；禁用的 pack 不装载')),
+  searchWorkspacePacksUpward: z.boolean().extra('description', bi('Search parent directories of the workspace for .docwright/packs tiers, inner wins (default: off — parent dirs are an undeclared trust relaxation)', '向工作区的上级目录搜索 .docwright/packs 层，内层胜出（默认：关闭——上级目录属于未声明的信任放宽）')),
+  packShadowPolicy: z.union(['allow', 'error']).extra('description', bi('Cross-root same-name packs: allow shadows with records (default), error fails loud at load', '跨根同名 pack：allow 遮蔽并记录（默认），error 在装载期响亮报错')),
   marketUrl: z.string().extra('description', bi('Pack market base URL the params UI checks pack updates against (default: https://dm.shrwk.com)', '参数界面检查 pack 更新所用的市场地址（默认：https://dm.shrwk.com）')),
   marketSearch: z.boolean().default(true).extra('description', bi('Register the doc_market_search tool and advertise market lookup in the discovery prompts when no installed pack fits (default: true)', '注册 doc_market_search 工具，并在已装 pack 无一契合时提示去市场查找（默认：开启）')),
   loadBuiltinPacks: z.boolean().default(true).extra('description', bi('Load the plugin package\'s own packs/ directory (default: true). Set false for market-only deployments so a source checkout\'s packs/ does not shadow packsDir installs', '加载插件包自带的 packs/ 目录（默认：开启）。纯市场部署设为 false，避免源码 checkout 里的 packs/ 遮盖 packsDir 安装的副本')),

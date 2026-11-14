@@ -4,7 +4,7 @@ This guide is self-contained: everything below works in a dsh session with the d
 
 ## When this applies
 
-The user asks to install, add, fetch, or get a scenario pack — by name ("帮我安装 cosmic-context 技能", "install the resume pack") or by the document type they need ("装一个生成会议纪要的 pack"). The pack is installed from the deployment's pack market.
+The user asks to install, add, fetch, or get a scenario pack — by name ("帮我安装 cosmic-context 技能", "install the resume pack") or by the document type they need ("装一个生成会议纪要的 pack") — or a whole SUITE ("安装整套 cosmic", "安装 cosmic 套件", "install the cosmic suite"; a suite is a named set of packs the market curates). Both are installed from the deployment's pack market.
 
 ## Step 1 — check what is already installed (always first)
 
@@ -13,24 +13,27 @@ Call `doc_packs` before anything else. It lists every installed pack with its ve
 - **The pack is already installed at the market's current version**: tell the user it is already available and skip the install entirely — go straight to using it.
 - **The pack is already installed but older**: no separate update call is needed — `doc_market_install` updates an existing pack name in place (Step 3 handles both install and update), or the user can use the settings page's Packs tab (check for updates).
 - **The pack is not installed**: continue with Step 2. Some of its dependencies may already be installed; the install closure skips members already at the market version.
+- **A SUITE was asked for**: the same check applies to the suite as a whole. Every member already installed at the market version → tell the user the suite is complete and skip the install. Some members installed, some missing → it is a top-up install: continue with Step 2, and in the confirmation table point out which members are skipped as already current.
 
-Only when `doc_packs` shows the pack missing (or outdated and the user wants the new version) does installing make sense. Never install a pack the user already has without saying so.
+Only when something is actually missing (or outdated and the user wants the new version) does installing make sense. Never install a pack or suite the user already has without saying so.
 
 ## Step 2 — find the pack (skip when the name is explicit)
 
-Call `doc_market_search` with keywords you compose from the user's intent (document genre + domain words; English matches best). Each hit carries name, description, version, consumed pack types, and the install option. Present the plausible hit(s) and confirm the exact name with the user when more than one fits. If the user gave an exact pack name, skip this step.
+Call `doc_market_search` with keywords you compose from the user's intent (document genre + domain words; English matches best). Each hit carries name, description, version, consumed pack types, the suites it belongs to, and the install option; a query that matches a whole suite also returns a suite card (its members list). Present the plausible hit(s) and confirm the exact name with the user when more than one fits. If the user gave an exact pack or suite name, skip this step.
 
-The market URL is deployment state: the tools read `marketUrl` from the plugin config (default `https://dm.shrwk.com`). Never hardcode a market other than the one the deployment is configured with — the same tools serve test and production markets.
+**Suite branch**: packs that BELONG to a suite are hidden from the market's pack listing — a member-name query returns the SUITE card, not the pack (the card lists the members). So when the user names a member pack, or asks for the whole set ("整套"), install the suite with `doc_market_install { "suite": "<name>" }` (Step 3-4 are identical, with `suite` instead of `pack`), saying that the members install together. Only packs OUTSIDE every suite appear as single-pack hits and install one by one as before.
+
+The market URL is deployment state: the tools read `marketUrl` from the plugin config (default `https://dm.shrwk.com`). Never hardcode a market other than the one the deployment is configured with — the same tools serve test and production markets. A market that does not support suites returns no suite cards; single-pack installs work exactly as before.
 
 ## Step 3 — ask for confirmation (always)
 
-Call `doc_market_install` with `{ "pack": "<name>" }` and WITHOUT `confirm`. The result is a `pendingConfirmation` table listing the whole install closure: the requested pack plus every pack it consumes (transitively), each at its market version, the source market, and the target `packsDir`. Present this table to the user in plain language (for a chain pack, say that the dependencies install along with it). For a pack that is already installed and only being updated, say so explicitly.
+Call `doc_market_install` with `{ "pack": "<name>" }` or `{ "suite": "<name>" }` and WITHOUT `confirm`. The result is a `pendingConfirmation` table listing the whole install plan: for a pack, the requested pack plus every pack it consumes (transitively); for a suite, every member pack plus the upstreams members pull in — suite members and consumed upstreams are labeled differently in the table. Each row carries the market version, the source market, and the target `packsDir`. Present this table to the user in plain language (for a chain pack, say that the dependencies install along with it; for a suite, say which entries are the members and which came along as upstreams). For anything already installed and only being updated/topped-up, say so explicitly — already-current members are marked as skipped.
 
 Never self-confirm: do not call with `confirm: true` before the user has seen the table and approved it. If the user declines, stop — nothing has been written at this point.
 
 ## Step 4 — execute
 
-After approval, re-call `doc_market_install` with `{ "pack": "<name>", "confirm": true }`. The install verifies the download against the market index (sha256, manifest name, content hash), lands it atomically in the `packsDir`, and hot-reloads the pack map. Members already installed at the market version are skipped; an existing pack name is updated in place.
+After approval, re-call `doc_market_install` with `confirm: true` added. The install verifies each download against the market index (sha256, manifest name, content hash), lands them atomically in the `packsDir`, and hot-reloads the pack map once at the end. Members already installed at the market version are skipped; an existing pack name is updated in place; a mid-install failure keeps what already landed (retrying the same suite only installs the missing pieces).
 
 The result lists what landed (`installed: name@version` entries). The packs are usable in THIS session immediately — no restart and no new session.
 
@@ -42,6 +45,8 @@ Call `doc_packs` to confirm the pack (and its dependencies) now appear, then con
 
 - **Market unreachable**: the tool fails with a clear error naming the market URL. Relay it; do not fabricate packs or copy files by hand.
 - **Pack not on this market**: the error says the pack is not listed at the configured market. Offer `doc_market_search` for alternatives, or tell the user the pack must be published to this market first.
+- **Pack belongs to a suite (suiteManaged)**: the single-pack install/update/delete lane refuses suite members — they are managed through their suite. Relay the error's suite name(s) and offer the suite install; the consumed upstreams a suite pulls in stay ordinary packs and CAN still be managed on their own. A market without suites never refuses: single-pack installs work exactly as before.
+- **Suite not on this market**: the error says the suite is not offered at the configured market (an old market may not support suites at all). Fall back to installing the packs the user actually needs one by one, via `doc_market_search`.
 - **User wants a document type nobody wrote**: after a market search comes back empty, use the `docwright-pack-authoring` skill to author a new pack.
-- **Updating instead of installing**: the same tool updates an already-installed pack name; the settings page's Packs tab offers check-for-updates and delete as well. Deleting a pack other installed packs depend on is refused (packInUse) unless the user explicitly confirms the break.
+- **Updating instead of installing**: the same tool updates an already-installed pack name; the settings page's Packs tab offers check-for-updates and delete as well. Deleting a pack other installed packs depend on is refused (packInUse) unless the user explicitly confirms the break. Packs that BELONG to a suite have no per-pack buttons at all — their update/delete live on the Suites tab.
 - **CLI fallback (outside a dsh session only)**: `node install.mjs <pack> --index <marketUrl>/api/index` — this is the market server's legacy installer, not part of the dsh plugin. Prefer the session tools; they run the same verified pipeline and add the confirmation gate.

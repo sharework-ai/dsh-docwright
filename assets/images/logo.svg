@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="docwright">
+  <!--
+    docwright logo: the approval stamp. AI-written documents leave this loop
+    only when a check has been stamped onto them — a slightly tilted stamp
+    impression (double border, the tilt of a hand-pressed stamp) with the
+    accent check inside. Validation made physical.
+
+    Theme adaptation: the ink CSS variable follows the system light/dark
+    preference via the embedded media query.
+  -->
+  <style>
+    :root {
+      --ink: #1f2933;
+      --accent: #7c3aed;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e6eaf0;
+        --accent: #a78bfa;
+      }
+    }
+    .ink { stroke: var(--ink); }
+    .accent { stroke: var(--accent); }
+  </style>
+
+  <g transform="rotate(-8 32 32)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- stamp impression: bold outer frame + thin inner frame -->
+    <rect class="ink" x="10" y="10" width="44" height="44" rx="9" stroke-width="5.5"/>
+    <rect class="ink" x="17" y="17" width="30" height="30" rx="5" stroke-width="2.5" opacity="0.55"/>
+    <!-- the check the stamp presses -->
+    <path class="accent" stroke-width="7" d="M23.5 32.5l7 8L43.5 21"/>
+  </g>
+</svg>

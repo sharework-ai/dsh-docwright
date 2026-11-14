@@ -30,6 +30,7 @@
   "files": [
     "lib",
     "guides",
+    "assets",
     "locale",
     "cordis.patch.yml"
   ],
@@ -96,5 +97,6 @@
     "smoke:host": "node --import tsx/esm scripts/host-smoke.ts",
     "pack:check": "node --import tsx/esm scripts/pack-check.ts",
     "build:client": "tsdown -c tsdown.client.ts && node scripts/normalize-client-banner.mjs"
-  }
+  },
+  "icon": "assets/images/logo.svg"
 }

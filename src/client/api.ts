@@ -72,6 +72,8 @@ export interface ParamsPayload {
   packs: readonly UiPackEntry[]
   groups: readonly UiParamGroup[]
   config: readonly UiConfigEntry[]
+  /** Config's disabledPacks array — the enable/disable toggles read it. */
+  disabledPacks?: readonly string[]
 }
 
 async function parse<T>(response: Response): Promise<T> {
@@ -150,5 +152,62 @@ export async function deleteManagedPack(pack: string, force = false): Promise<vo
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ pack, force }),
+  }))
+}
+
+/** Toggle one pack's enabled state (docs/designs/pack-load-dirs.md). The server guards suite members (disable the suite instead) and in-use packs (force names the consumers). Returns the persisted array. */
+export async function setPackDisabled(pack: string, disabled: boolean, force = false): Promise<readonly string[]> {
+  const body = await parse<{ disabled: readonly string[] }>(await fetch('/api/docwright/pack-disabled', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pack, disabled, force }),
+  }))
+  return body.disabled
+}
+
+/** One suite member's local-vs-market standing. */
+export interface UiSuiteMember {
+  name: string
+  localVersion?: string
+  marketVersion?: string
+  missing: boolean
+  updateAvailable: boolean
+}
+
+/** One market suite projected onto the local packsDir. */
+export interface UiSuiteStatus {
+  name: string
+  version: string
+  description: LocalizedText
+  category: string
+  members: readonly UiSuiteMember[]
+  incomplete: boolean
+  updateAvailable: boolean
+}
+
+/** Suite standing for the Suites tab: the market's suite list with each
+ * member's local placement. An empty array means the market has no suites
+ * (or does not support them) — a one-line note, never an error. */
+export async function fetchSuiteStatus(): Promise<readonly UiSuiteStatus[]> {
+  const body = await parse<{ suites: readonly UiSuiteStatus[] }>(await fetch('/api/docwright/suites', { headers: { accept: 'application/json' } }))
+  return body.suites
+}
+
+/** Update a suite: refresh each outdated member to its market version. */
+export async function updateSuite(suite: string): Promise<{ updated: readonly { name: string; version: string }[]; unchanged: readonly string[]; missing: readonly string[] }> {
+  return parse(await fetch('/api/docwright/suite-update', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ suite }),
+  }))
+}
+
+/** Delete a suite's installed members — all of them; suite members are
+ * consumed inside their suite by design, so there is no keep/force split. */
+export async function deleteSuite(suite: string): Promise<{ deleted: readonly string[] }> {
+  return parse(await fetch('/api/docwright/suite-delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ suite }),
   }))
 }

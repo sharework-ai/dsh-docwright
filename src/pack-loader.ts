@@ -1,4 +1,5 @@
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
+import { readdirSync, realpathSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
@@ -13,13 +14,33 @@ const SEVERITIES: readonly string[] = ['error', 'warning', 'info']
 const RULE_KINDS: readonly string[] = ['minLength', 'maxLength', 'forbiddenKeywords', 'pattern']
 
 /**
- * Directory-convention loader. Built-in packs ship inside the package;
- * `packsDir` entries override same-name packs (DX-H3 merge semantics).
- * Loading validates manifests, rules, prompts, and language coverage loudly:
- * a broken pack fails at plugin apply, never mid-generation.
+ * Directory-convention loader. Roots are ordered (later wins on same-name
+ * packs, DX-H3 merge semantics) and carry their origin so provenance survives
+ * loading. Loading validates manifests, rules, prompts, and language coverage
+ * loudly: a broken pack fails at plugin apply, never mid-generation.
  */
 
+/** One load root: its directory and the origin stamps packs from it carry. */
+export interface PackRootSpec {
+  readonly dir: string
+  readonly origin: { readonly kind: Pack['origin']['kind']; readonly root: string; readonly depth?: number }
+}
+
+/** A same-name pack that lost to a later root: kept so the UI can show what is shadowed (docs/designs/pack-load-dirs.md, P3). */
+export interface ShadowedCopy {
+  readonly name: string
+  readonly origin: Pack['origin']
+  readonly dir: string
+  readonly version: string
+  readonly activeOrigin: Pack['origin']
+  readonly activeDir: string
+  readonly activeVersion: string
+}
+
 interface RawPackDirs {
+  /** Ordered roots; later roots win same-name clashes. */
+  readonly roots?: readonly PackRootSpec[] | undefined
+  /** Legacy shape (tests, older callers): extra roots stamped with packsDir origin, after the builtin root. */
   readonly extra?: readonly string[] | undefined
   /**
    * Load the builtin root (default true). A market-only deployment sets
@@ -28,6 +49,14 @@ interface RawPackDirs {
    * no builtin packs at all.
    */
   readonly includeBuiltin?: boolean | undefined
+  /** 'allow' (default): later roots shadow same-name packs, records kept; 'error': cross-root same-name fails loud (docs/designs/pack-load-dirs.md, P3). */
+  readonly shadowPolicy?: 'allow' | 'error' | undefined
+}
+
+/** Load result with the shadow records the params UI and doc_packs project. */
+export interface LoadedPackSet {
+  readonly packs: ReadonlyMap<string, Pack>
+  readonly shadowed: readonly ShadowedCopy[]
 }
 
 /** Strict param-spec validation: declaration is the allowlist, so a broken declaration must fail at load. */
@@ -340,36 +369,87 @@ async function loadOnePack(dir: string): Promise<Omit<Pack, 'origin'>> {
   return { manifest, schema, rules, functionRules, score, functionsSourceHash: sourceHash, prompts, templates, goldenSample, dir }
 }
 
-async function listPackRoots(root: string): Promise<readonly string[]> {
+/**
+ * List one root's pack directories. Symlinked entries are followed: the link
+ * resolves via realpath (native, so Windows reports the on-disk casing) and
+ * must land on a readable directory; same-target links dedupe by realpath so
+ * two links to one pack load once. No recursion happens here — the loader
+ * reads known files inside each pack directory — so cyclic links cannot loop
+ * (docs/designs/pack-load-dirs.md, P1).
+ */
+async function listPackRoots(root: string): Promise<readonly { dir: string; realDir: string }[]> {
   try {
-    const entries = await readdir(root, { withFileTypes: true })
-    return entries.filter(e => e.isDirectory()).map(e => join(root, e.name))
+    const entries = readdirSync(root, { withFileTypes: true })
+    const out: { dir: string; realDir: string }[] = []
+    const seenReal = new Set<string>()
+    for (const e of entries) {
+      if (!e.isDirectory() && !e.isSymbolicLink()) continue
+      const dir = join(root, e.name)
+      let realDir: string
+      try {
+        realDir = realpathSync.native(dir)
+        if (!statSync(realDir).isDirectory()) continue
+      } catch {
+        continue // dangling link or unreadable target — skip quietly, listing is best-effort
+      }
+      if (seenReal.has(realDir)) continue
+      seenReal.add(realDir)
+      out.push({ dir, realDir })
+    }
+    return out
   } catch {
     return []
   }
 }
 
 /**
- * Load built-in packs then `packsDir` overrides. Same-name later entries win
- * (Config over built-in); failures inside a directory fail loud (ruleset
- * syntax belongs to load time, decision #11).
+ * Load built-in packs then the ordered extra roots. Same-name later entries
+ * win; the loser is recorded in `shadowed` (or, under shadowPolicy 'error',
+ * the clash fails loud). Same-name WITHIN one root still fails outright —
+ * that is a pack-authoring bug, not a layering decision. Failures inside a
+ * directory fail loud (ruleset syntax belongs to load time, decision #11).
  */
-export async function loadPacks(builtinRoot: string, dirs: RawPackDirs): Promise<ReadonlyMap<string, Pack>> {
+export async function loadPackSet(builtinRoot: string, dirs: RawPackDirs): Promise<LoadedPackSet> {
   const withBuiltin = dirs.includeBuiltin !== false
-  const roots = [...(withBuiltin ? [builtinRoot] : []), ...(dirs.extra ?? [])]
+  const legacyExtra = (dirs.extra ?? []).map(dir => ({ dir, origin: { kind: 'packsDir' as const, root: dir } }))
+  const roots = [
+    ...(withBuiltin ? [{ dir: builtinRoot, origin: { kind: 'builtin' as const, root: builtinRoot } }] : []),
+    ...legacyExtra,
+    ...(dirs.roots ?? []),
+  ]
   const packs = new Map<string, Pack>()
-  for (const [rootIndex, root] of roots.entries()) {
-    const origin = { kind: withBuiltin && rootIndex === 0 ? 'builtin' : 'packsDir', root } as const
+  const shadowed: ShadowedCopy[] = []
+  for (const spec of roots) {
     const seen = new Map<string, string>()
-    for (const dir of await listPackRoots(root)) {
-      const pack = await loadOnePack(dir)
+    for (const { dir, realDir } of await listPackRoots(spec.dir)) {
+      const pack = await loadOnePack(realDir)
       const clash = seen.get(pack.manifest.name)
       if (clash !== undefined) {
-        throw new Error(`duplicate pack name "${pack.manifest.name}" within ${root}: both ${clash} and ${dir} declare it; rename or remove one. (An extra packsDir overriding a same-name builtin pack is intended merge semantics, but packs within one root must have unique names.)`)
+        throw new Error(`duplicate pack name "${pack.manifest.name}" within ${spec.dir}: both ${clash} and ${dir} declare it; rename or remove one. (A later root overriding a same-name earlier pack is intended merge semantics, but packs within one root must have unique names.)`)
       }
       seen.set(pack.manifest.name, dir)
-      packs.set(pack.manifest.name, { ...pack, origin })
+      const existing = packs.get(pack.manifest.name)
+      if (existing !== undefined) {
+        if (dirs.shadowPolicy === 'error') {
+          throw new Error(`pack "${pack.manifest.name}" is declared twice across load roots: ${existing.origin.root} (${existing.manifest.version}) is shadowed by ${spec.origin.root} (${pack.manifest.version}); resolve the duplication or set packShadowPolicy to "allow"`)
+        }
+        shadowed.push({
+          name: pack.manifest.name,
+          origin: existing.origin,
+          dir: existing.dir,
+          version: existing.manifest.version,
+          activeOrigin: { ...spec.origin },
+          activeDir: realDir,
+          activeVersion: pack.manifest.version,
+        })
+      }
+      packs.set(pack.manifest.name, { ...pack, origin: { ...spec.origin } })
     }
   }
-  return packs
+  return { packs, shadowed }
+}
+
+/** Back-compat wrapper: packs only, shadow records discarded. */
+export async function loadPacks(builtinRoot: string, dirs: RawPackDirs): Promise<ReadonlyMap<string, Pack>> {
+  return (await loadPackSet(builtinRoot, dirs)).packs
 }
