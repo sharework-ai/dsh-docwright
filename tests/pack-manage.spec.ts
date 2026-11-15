@@ -121,6 +121,43 @@ describe('resolveManagedPackDir', () => {
   })
 })
 
+describe('workspace-tier visibility (settings parity)', () => {
+  it('checkPackUpdates lists workspace-tier packs alongside packsDir packs', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    // A workspace-root with a pack the packsDir does not have.
+    const wsRoot = await mkdtemp(join(tmpdir(), 'docwright-ws-'))
+    marketStack.push({ dispose: async () => { await rm(wsRoot, { recursive: true, force: true }) } })
+    await packFixture(join(wsRoot, '.docwright', 'packs'), 'ws-pack', '3')
+    const market = await marketServer([{ name: 'ext', version: '1', dir: fx.packsDir }])
+    fx.deps.marketUrl = market.url
+    const rows = await checkPackUpdates({ ...fx.deps, workspaceRoot: wsRoot })
+    const names = rows.map(r => r.name)
+    expect(names).toContain('ext')
+    expect(names).toContain('ws-pack')
+    const wsRow = rows.find(r => r.name === 'ws-pack')!
+    expect(wsRow).toMatchObject({ localVersion: '3', onMarket: false, updateAvailable: false })
+  })
+
+  it('checkSuiteStatus counts workspace-tier members as installed', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const wsRoot = await mkdtemp(join(tmpdir(), 'docwright-suite-ws-'))
+    marketStack.push({ dispose: async () => { await rm(wsRoot, { recursive: true, force: true }) } })
+    await packFixture(join(wsRoot, '.docwright', 'packs'), 'ws-member', '2')
+    const market = await suiteMarketServer(
+      [{ name: 'ws-member', version: '2', dir: join(wsRoot, '.docwright', 'packs', 'ws-member') }],
+      [{ name: 's', version: '1', members: ['ws-member'] }],
+    )
+    const statuses = await checkSuiteStatus({
+      packs: fx.packs, packsDir: fx.packsDir, workspaceRoot: wsRoot, marketUrl: market.url,
+    })
+    const suite = statuses.find(s => s.name === 's')!
+    expect(suite.incomplete).toBe(false)
+    expect(suite.members[0]).toMatchObject({ name: 'ws-member', localVersion: '2', missing: false })
+  })
+})
+
 describe('checkPackUpdates', () => {
   it('reports update-available, up-to-date, and not-on-market rows in one fetch', async () => {
     const fx = await managedFixture()

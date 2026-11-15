@@ -150,12 +150,12 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       // The pack lane exists only when a packsDir is configured — without one
       // there is nothing to manage and the routes stay unmounted.
       packLane: {
-        checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }, pack),
+        checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, workspaceRoot: config.workspaceRoot, searchWorkspacePacksUpward: config.searchWorkspacePacksUpward, marketUrl: marketUrlOf(config) }, pack),
         updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack) }),
         deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured, cleanupDisabled: names => updateConfigViaEditor(editorOf(), { disabledPacks: pruneDisabled(config, names) }) }, pack, opts),
         // The suite lane (docs/designs/pack-suites.md): status read + per-suite
         // update/delete, same packsDir, same market, same hot-reload contract.
-        suiteStatus: () => checkSuiteStatus({ packs, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config) }),
+        suiteStatus: () => checkSuiteStatus({ packs, packsDir: packsDirConfigured, workspaceRoot: config.workspaceRoot, searchWorkspacePacksUpward: config.searchWorkspacePacksUpward, marketUrl: marketUrlOf(config) }),
         updateSuite: suite => updateSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
         deleteSuite: suite => deleteSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured, cleanupDisabled: names => updateConfigViaEditor(editorOf(), { disabledPacks: pruneDisabled(config, names) }) }, suite),
         // The enable/disable toggle (docs/designs/pack-load-dirs.md 启用与禁用):

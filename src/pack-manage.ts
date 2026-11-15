@@ -25,6 +25,7 @@ import type { Dirent } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { CodedError } from './coded-error.ts'
+import { workspacePackRoots } from './pack-sources.ts'
 import type { Pack } from './pack.ts'
 
 const execFileAsync = promisify(execFile)
@@ -112,6 +113,41 @@ export interface LocalSuiteEntry {
   readonly members: readonly LocalSuiteMember[]
   readonly updatedAt: string
 }
+/**
+ * Manifest-name → version map across the configured packsDir AND the
+ * workspace tier's pack roots (workspace wins: set later). Settings-page
+ * status (suite members, pack list) counts workspace-tier packs as installed
+ * — they are first-class per docs/designs/pack-load-dirs.md, and a pack the
+ * session actually renders with must not show as "not installed".
+ */
+async function scanLocalVersions(packsDir: string | undefined, workspaceRoot: string | undefined, searchUpward: boolean): Promise<Map<string, string>> {
+  const dirs: string[] = []
+  if (packsDir !== undefined && packsDir.length > 0) dirs.push(packsDir)
+  if (workspaceRoot !== undefined && workspaceRoot.length > 0) {
+    for (const root of workspacePackRoots(workspaceRoot, searchUpward)) dirs.push(root.dir)
+  }
+  const localVersions = new Map<string, string>()
+  for (const dir of dirs) {
+    let entries: Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const dirent of entries) {
+      if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+      const packDir = join(dir, dirent.name)
+      const manifest = await manifestNameOf(packDir)
+      if (manifest === null || localVersions.has(manifest)) continue
+      try {
+        const read = JSON.parse(await readFile(join(packDir, 'manifest.json'), 'utf8')) as { version?: unknown }
+        if (typeof read.version === 'string') localVersions.set(manifest, read.version)
+      } catch { /* unparseable manifest version: treat as absent */ }
+    }
+  }
+  return localVersions
+}
+
 const SUITE_RECORD_FILE = 'suites.json'
 
 export async function readSuiteRecord(packsDir: string | undefined): Promise<LocalSuiteEntry[]> {
@@ -222,12 +258,39 @@ export async function resolveManagedPackDir(packsDir: string, name: string): Pro
 export async function checkPackUpdates(deps: {
   readonly packs: ReadonlyMap<string, Pack>
   readonly packsDir?: string | undefined
+  readonly workspaceRoot?: string | undefined
+  readonly searchWorkspacePacksUpward?: boolean | undefined
   readonly marketUrl: string
   readonly fetchImpl?: typeof fetch
 }, onlyPack?: string | undefined): Promise<readonly PackUpdateStatus[]> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) return []
   const managed = [...deps.packs.values()].filter(p => p.origin.kind === 'packsDir' && (onlyPack === undefined || p.manifest.name === onlyPack))
-  if (managed.length === 0) return []
+  // Workspace-tier packs are listed too (settings visibility parity), but the
+  // update/delete lanes remain packsDir-only: a workspace pack is a directory
+  // the session owns, not something the market lane writes over.
+  const workspacePacks: { name: string; version: string }[] = []
+  if (deps.workspaceRoot !== undefined && deps.workspaceRoot.length > 0) {
+    for (const root of workspacePackRoots(deps.workspaceRoot, deps.searchWorkspacePacksUpward ?? false)) {
+      let entries: Dirent[]
+      try {
+        entries = await readdir(root.dir, { withFileTypes: true })
+      } catch {
+        continue
+      }
+      for (const dirent of entries) {
+        if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+        const dir = join(root.dir, dirent.name)
+        try {
+          const manifest = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as { name?: unknown; version?: unknown }
+          if (typeof manifest.name !== 'string' || typeof manifest.version !== 'string') continue
+          if (managed.some(p => p.manifest.name === manifest.name)) continue
+          if (workspacePacks.some(p => p.name === manifest.name)) continue
+          workspacePacks.push({ name: manifest.name, version: manifest.version })
+        } catch { /* unparseable manifest: skip */ }
+      }
+    }
+  }
+  if (managed.length === 0 && workspacePacks.length === 0) return []
   // Single-pack check: the market's per-pack detail endpoint answers exactly
   // one record — no catalog-wide index fetch for one card.
   if (onlyPack !== undefined) {
@@ -260,7 +323,7 @@ export async function checkPackUpdates(deps: {
     throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); showing local state only`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
   }
   const byName = new Map(index.packs.map(e => [e.name, e]))
-  return managed.map(p => {
+  const managedRows = managed.map(p => {
     const entry = byName.get(p.manifest.name)
     const marketVersion = entry?.version
     return {
@@ -271,6 +334,18 @@ export async function checkPackUpdates(deps: {
       updateAvailable: marketVersion !== undefined && compareVersions(marketVersion, p.manifest.version) > 0,
     }
   })
+  const workspaceRows = workspacePacks.map(p => {
+    const entry = byName.get(p.name)
+    const marketVersion = entry?.version
+    return {
+      name: p.name,
+      localVersion: p.version,
+      onMarket: marketVersion !== undefined,
+      ...(marketVersion === undefined ? {} : { marketVersion }),
+      updateAvailable: marketVersion !== undefined && compareVersions(marketVersion, p.version) > 0,
+    }
+  })
+  return [...managedRows, ...workspaceRows]
 }
 
 /** Parity with install.mjs dirHash: the market and this client must agree on one number. */
@@ -882,6 +957,8 @@ export interface SuiteStatus {
 export async function checkSuiteStatus(deps: {
   readonly packs: ReadonlyMap<string, Pack>
   readonly packsDir?: string | undefined
+  readonly workspaceRoot?: string | undefined
+  readonly searchWorkspacePacksUpward?: boolean | undefined
   readonly marketUrl: string
   readonly fetchImpl?: typeof fetch
 }): Promise<readonly SuiteStatus[]> {
@@ -920,25 +997,7 @@ export async function checkSuiteStatus(deps: {
   // Local placement is the packsDir scan (manifest-name keyed) — NOT the
   // loaded pack map, which also contains builtin packs a suite member must
   // not be credited against.
-  const localVersions = new Map<string, string>()
-  if (deps.packsDir !== undefined && deps.packsDir.length > 0) {
-    let entries: Dirent[]
-    try {
-      entries = await readdir(deps.packsDir, { withFileTypes: true })
-    } catch {
-      entries = []
-    }
-    for (const dirent of entries) {
-      if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
-      const dir = join(deps.packsDir, dirent.name)
-      const manifest = await manifestNameOf(dir)
-      if (manifest === null || localVersions.has(manifest)) continue
-      try {
-        const read = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as { version?: unknown }
-        if (typeof read.version === 'string') localVersions.set(manifest, read.version)
-      } catch { /* unparseable manifest version: treat as absent */ }
-    }
-  }
+  const localVersions = await scanLocalVersions(deps.packsDir, deps.workspaceRoot, deps.searchWorkspacePacksUpward ?? false)
   const statuses = rows.map(record => {
     const suite = suiteRecordOf(record)
     const members: SuiteMemberStatus[] = suite.members.map(member => {
