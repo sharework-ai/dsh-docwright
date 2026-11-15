@@ -1,12 +1,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { join, resolve } from 'node:path'
+import { statSync } from 'node:fs'
 import { AUTHORING_SKILL_NAME, readAuthoringGuide, registerAuthoringSkill, type SkillsHostContext } from './authoring-skill.ts'
 import { INSTALL_SKILL_NAME, readInstallGuide, registerInstallSkill } from './install-skill.ts'
 import { Config, type Config as DocwrightConfig } from './config.ts'
 import { mountParamsRoutes, type ConnectionLike, type WebServerLike, type WriteChannels } from './http.ts'
 import { loadPackSet, type PackRootSpec } from './pack-loader.ts'
 import type { Pack } from './pack.ts'
-import { applyDisabled, resolvePacksDir } from './pack-sources.ts'
+import { applyDisabled, resolvePacksDir, workspacePackRoots } from './pack-sources.ts'
 import { buildParamsPayload } from './params-rpc.ts'
 import { checkPackUpdates, checkSuiteStatus, deletePack, deleteSuite, marketUrlOf, readSuiteRecord, setPackDisabled, updatePack, updateSuite } from './pack-manage.ts'
 import { setPackParamDefault, updateConfigViaEditor, type ConfigEditorLike } from './params-writes.ts'
@@ -71,6 +72,13 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
   const canonicalRoots = (): PackRootSpec[] => [
     { dir: installDir, origin: { kind: 'packsDir', root: installDir } },
     ...(extraDir !== undefined ? [{ dir: extraDir, origin: { kind: 'extraPacksDir' as const, root: extraDir } }] : []),
+    // The workspace tier is part of the apply-time map too when a workspace
+    // root is configured: settings lanes (param-default writes) resolve pack
+    // directories from this map, and workspace packs must be writable where
+    // they live. Per-call sessions still overlay the same roots dynamically.
+    ...workspacePackRoots(config.workspaceRoot ?? '', config.searchWorkspacePacksUpward ?? false)
+      .filter(spec => { try { return statSync(spec.dir).isDirectory() } catch { return false } })
+      .map(spec => ({ dir: spec.dir, origin: { kind: 'workspace' as const, root: spec.dir } })),
   ]
   /** One wiring point: the builtin-load switch applies to the initial load, every hot-reload, and the install lane. The legacy positional args (builtinRoot, { extra: [packsDir] }) are accepted and ignored — canonical roots resolve the same tiers plus extraPacksDir, shadow policy, and the disabled filter. */
   const loadPacksConfigured = (_root?: string, _dirs?: { extra?: readonly string[] | undefined }): Promise<ReadonlyMap<string, Pack>> =>

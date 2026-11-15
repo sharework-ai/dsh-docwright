@@ -87,6 +87,22 @@ describe('setPackParamDefault', () => {
     await rm(root, { recursive: true, force: true })
   })
 
+  it('writes a workspace-tier pack (loaded via workspacePackRoots) in its own directory', async () => {
+    // The apply-time map includes the workspace tier when a workspace root is
+    // configured (index.ts canonicalRoots); pack.dir is the real workspace
+    // directory, so the param write lands there — not in the packsDir.
+    const { workspacePackRoots } = await import('../src/pack-sources.ts')
+    const builtinRoot = await mkdtemp(join(tmpdir(), 'docwright-writes-builtin-'))
+    const wsRoot = await mkdtemp(join(tmpdir(), 'docwright-writes-ws-'))
+    await packFixture(join(wsRoot, '.docwright', 'packs'))
+    const roots = workspacePackRoots(wsRoot, false).map(r => ({ dir: r.dir, origin: { kind: 'workspace' as const, root: r.dir } }))
+    const packs = new Map(await loadPacks(builtinRoot, { includeBuiltin: false, roots }))
+    const deps = { packs, builtinRoot, loadPacks: (r: string, d: { extra?: readonly string[] | undefined }) => loadPacks(r, d) }
+    await setPackParamDefault(deps, 'wp', 'limit', 13)
+    const onDisk = JSON.parse(await readFile(join(wsRoot, '.docwright', 'packs', 'wp', 'manifest.json'), 'utf8')) as { params: { limit: { default: number } } }
+    expect(onDisk.params.limit.default).toBe(13)
+  })
+
   it('persists a packsDir pack edit to the packsDir manifest, never the builtin root', async () => {
     // The write lands in pack.dir — the root the pack was LOADED from — so a
     // packsDir pack (e.g. <workspace>/.docwright/packs/) is edited in place.
