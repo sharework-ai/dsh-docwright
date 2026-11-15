@@ -25,7 +25,7 @@ import type { Dirent } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { CodedError } from './coded-error.ts'
-import { workspacePackRoots } from './pack-sources.ts'
+import { scanManifestVersions, workspacePackRoots } from './pack-sources.ts'
 import type { Pack } from './pack.ts'
 
 const execFileAsync = promisify(execFile)
@@ -126,26 +126,10 @@ async function scanLocalVersions(packsDir: string | undefined, workspaceRoot: st
   if (workspaceRoot !== undefined && workspaceRoot.length > 0) {
     for (const root of workspacePackRoots(workspaceRoot, searchUpward)) dirs.push(root.dir)
   }
-  const localVersions = new Map<string, string>()
-  for (const dir of dirs) {
-    let entries: Dirent[]
-    try {
-      entries = await readdir(dir, { withFileTypes: true })
-    } catch {
-      continue
-    }
-    for (const dirent of entries) {
-      if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
-      const packDir = join(dir, dirent.name)
-      const manifest = await manifestNameOf(packDir)
-      if (manifest === null || localVersions.has(manifest)) continue
-      try {
-        const read = JSON.parse(await readFile(join(packDir, 'manifest.json'), 'utf8')) as { version?: unknown }
-        if (typeof read.version === 'string') localVersions.set(manifest, read.version)
-      } catch { /* unparseable manifest version: treat as absent */ }
-    }
-  }
-  return localVersions
+  const scanned = await scanManifestVersions(dirs)
+  const versions = new Map<string, string>()
+  for (const [name, entry] of scanned) versions.set(name, entry.version)
+  return versions
 }
 
 const SUITE_RECORD_FILE = 'suites.json'

@@ -1,3 +1,5 @@
+import { readdir, readFile } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { Pack } from './pack.ts'
@@ -32,6 +34,42 @@ const WORKSPACE_PACKS_DIR = '.docwright/packs'
  * (inner wins), stopping at the filesystem root. Missing dirs are skipped —
  * absence of a tier is normal, not an error.
  */
+/**
+ * Manifest-name keyed scan of pack-root directories: each subdirectory with a
+ * readable manifest contributes { name, version, dir }. Later dirs WIN on
+ * name clashes (matches the loader's layering: workspace shadows install).
+ * Location (dir) is part of the record so write lanes know where a pack
+ * lives. Zero validation beyond "manifest.json parses" — this is a cheap
+ * status/listing scan, not a load.
+ */
+export interface ScannedPackVersion {
+  readonly name: string
+  readonly version: string
+  readonly dir: string
+}
+
+export async function scanManifestVersions(dirs: readonly string[]): Promise<ReadonlyMap<string, ScannedPackVersion>> {
+  const scanned = new Map<string, ScannedPackVersion>()
+  for (const dir of dirs) {
+    let entries: Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const dirent of entries) {
+      if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+      const packDir = join(dir, dirent.name)
+      try {
+        const manifest = JSON.parse(await readFile(join(packDir, 'manifest.json'), 'utf8')) as { name?: unknown; version?: unknown }
+        if (typeof manifest.name !== 'string' || typeof manifest.version !== 'string') continue
+        scanned.set(manifest.name, { name: manifest.name, version: manifest.version, dir: packDir })
+      } catch { /* unparseable manifest: treat as absent */ }
+    }
+  }
+  return scanned
+}
+
 export function workspacePackRoots(workspaceRoot: string, upward: boolean): readonly PackRootSpec[] {
   const collect: string[] = []
   let current = resolve(workspaceRoot)
