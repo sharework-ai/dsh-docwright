@@ -230,6 +230,20 @@ out-of-range score fails loud.
   (required + default, the numbering convention comes from project reference
   materials) and `topicNo` (type + description — derived by the engine);
   downstream packs re-declare both to inherit (no defaults: a default on a
+- Output subdirectory responsibilities (convention, engine-guaranteed): a
+  topic's `output/` has three distinct layers. The **root** holds the
+  validated artifacts (JSON), their rendered Markdown, and green receipts —
+  everything the engine writes and hash-anchors. **`output/generate/`** holds
+  files further derived from a green artifact by scripts (pack-bundled
+  exporters, CLI post-processing): rendered SVG/PPTX/video, reports — machine
+  outputs that are reproducible from the artifact and never feed back into
+  validation. **`output/assets/`** holds large binary inputs captured during
+  processing (screenshots, audio, fonts) — referenced by file name from the
+  artifact, hash-unchanged by the engine. Packs that post-process declare
+  this layout in their prompt/prompt conventions (`assets` = referenced
+  binaries, `generate` = derived outputs) so every tool reads and writes the
+  same predictable paths; the engine itself never enumerates or cleans these
+  subdirectories.
   re-declaration would be dead data, and a required-no-default one would
   demand the value from every caller, including golden runs). A prefix
   without the pair silently degrades to timestamp names — declare all or
