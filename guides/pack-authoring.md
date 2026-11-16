@@ -218,6 +218,20 @@ out-of-range score fails loud.
   semantics via `materialsRoot`: `references` = project reference knowledge
   shared across work items; `input` = the user's per-work-item input document.
   Never mix the two.
+- **Persist inputs to disk before generating — never inline them.** The reuse
+  pre-check compares the materials manifest (refs + content hashes). An
+  `#!inline` text hashes per call, so any wording drift re-reads the model and
+  regenerates an artifact whose content did not actually change. Write the
+  user's per-work-item input into `<topic>/input/<name>.md` (or
+  `references/` for shared knowledge) and reference it **by path** in the
+  doc_generate materials; state this convention in the pack's prompt ("inputs
+  live in input/, referenced by path — edit the file only when the facts
+  change"). With a stable file and a deterministic pack, the second identical
+  call returns `reused: true` at zero model rounds; `force: true` is the
+  explicit escape hatch and should only be used when the content genuinely
+  changed. Combined with the reuse declaration below this turns a re-run of a
+  walkthrough (plan → records → document) from several model rounds into
+  instant artifact reuse.
 - Upstream: hard dependency → `consumes` (tool-verified green receipts);
   optional background → rider (the caller passes it in `upstream`; your rules
   must tolerate absence) or explicit assumption registration.
@@ -257,7 +271,14 @@ out-of-range score fails loud.
 - Reuse: defaults follow scope (workspace true / topic false). Declaring
   `reuse: true` on a topic pack requires every input class to be anchor-
   verifiable (materials manifest, upstream hashes, param drift policy).
-  Action packs (merges, syncs) declare `reuse: false`.
+  Action packs (merges, syncs) declare `reuse: false`. **Deterministic
+  synthesis packs (merges, summaries, document assembly whose artifact is a
+  pure function of their inputs) should explicitly declare `reuse: true`**
+  even when topic-scoped: the topic default assumes progressive fan-out work,
+  and without the declaration every identical re-call pays full model rounds
+  (observed cost: a walkthrough chain re-ran its document stage on every
+  turn). Pair the declaration with on-disk inputs (above) and verify the
+  reuse path in e2e (below).
 
 ### Stage 5 — Decompose into packs and design the chain
 
@@ -380,6 +401,15 @@ shape; no validation semantics.
      none), the repair loop converges, the receipt is green, reuse returns
      `reused: true` with zero model rounds on a second identical call, and
      `doc_chain_status` accounts for every fan-out item.
+     Drive the reuse observation with **file-based materials** (a real
+     `input/` file, not `#!inline` text): an inline material hashes per call
+     and can never reuse, so it hides a `reuse: false` default or a missing
+     reuse declaration.
+   - Exporters that post-process a green artifact (e.g. render a composed
+     image) may write derived paths back into the artifact (say, a
+     `demoStatic` field). That mutation invalidates the receipt hash — the
+     workflow is generate → run exporter → `doc_validate` to re-seal. State
+     this three-step rhythm in the pack's prompt so hosts follow it.
    A pack is not done because rules are green — it is done when a real model
    converges inside the loop you designed.
 
@@ -413,4 +443,7 @@ shape; no validation semantics.
 - [ ] Params walk complete (no dead defaults; invariants hold — the loader verifies)
 - [ ] required-no-default params covered by `golden.params.json` if rules read them
 - [ ] Real-model e2e observed: gate → converge → green receipt (+ reuse + chain status for chained packs)
+- [ ] Reuse verified with file-based inputs: a second identical call returns
+      `reused: true` at zero model rounds (deterministic packs declare
+      `reuse: true`; inputs live in `input/`/`references/`, not inline)
 - [ ] Version, bilingual description, and the health sheet recorded
