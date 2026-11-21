@@ -6,7 +6,12 @@ import type { ReceiptRuleResult } from './receipt.ts'
 export const SCHEMA_RULE_FAMILY = 'schema/*'
 
 /** Compiled view of a declarative rule; regex is validated once at engine creation. */
-interface CompiledRule { readonly rule: DeclarativeRule; readonly scope: 'root' | { readonly key: string }; readonly re?: RegExp }
+interface CompiledRule {
+  readonly rule: DeclarativeRule
+  /** 'root' = the artifact itself; otherwise the hop chain to the scoped items. */
+  readonly scope: 'root' | { readonly hops: { readonly key: string; readonly each: boolean }[] }
+  readonly re?: RegExp
+}
 import { truncateSnapshot } from './issue.ts'
 
 /**
@@ -26,18 +31,37 @@ function compileRule(rule: DeclarativeRule): CompiledRule {
     }
   }
   if (rule.given === '$') return { rule, scope: 'root', ...(re === undefined ? {} : { re }) }
-  const arrayMatch = /^\$\.([A-Za-z0-9_]+)\[\*\]$/.exec(rule.given)
-  if (arrayMatch === null) {
-    throw new Error(`rule ${rule.id}: given path not supported: ${rule.given} (supported: $, $.field[*])`)
+  // Grammar: $ followed by hops of .field or .field[*]; the LAST hop must be
+  // a [*] (rules check each item of the scoped array). Nested paths like
+  // $.chapters[*].processes[*] scope the inner array's items.
+  const hops = [...rule.given.matchAll(/\.([A-Za-z0-9_]+)(\[\*\])?/g)]
+  const rebuilt = hops.map(m => `.${m[1] ?? ''}${m[2] ?? ''}`).join('')
+  if (hops.length === 0 || rebuilt !== rule.given.slice(1) || hops[hops.length - 1]?.[2] === undefined) {
+    throw new Error(`rule ${rule.id}: given path not supported: ${rule.given} (supported: $, $.field[*], and nested chains like $.chapters[*].processes[*] — the last hop must be [*])`)
   }
-  return { rule, scope: { key: arrayMatch[1] ?? '' }, ...(re === undefined ? {} : { re }) }
+  return {
+    rule,
+    scope: { hops: hops.map(m => ({ key: m[1] ?? '', each: m[2] !== undefined })) },
+    ...(re === undefined ? {} : { re }),
+  }
 }
 
 function scopeFor(artifact: unknown, compiled: CompiledRule): readonly unknown[] {
   if (compiled.scope === 'root') return [artifact]
-  const value = (artifact as Record<string, unknown> | null)?.[compiled.scope.key]
-  // Empty path is schema's business; an absent array simply yields no items.
-  return Array.isArray(value) ? value : []
+  let level: unknown[] = [artifact]
+  for (const hop of compiled.scope.hops) {
+    const next: unknown[] = []
+    for (const item of level) {
+      const value = (item as Record<string, unknown> | null)?.[hop.key]
+      if (hop.each) {
+        if (Array.isArray(value)) next.push(...value)
+      } else if (value !== undefined && value !== null) {
+        next.push(value)
+      }
+    }
+    level = next
+  }
+  return level
 }
 
 /** Resolve a numeric bound: literal, or a pack param reference (effective params are always complete — defaults guarantee it). */
