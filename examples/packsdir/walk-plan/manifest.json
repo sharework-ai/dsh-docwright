@@ -1,0 +1,11 @@
+{
+  "name": "walk-plan",
+  "version": "0.1.0",
+  "description": {
+    "en": "Walk plan: chapters[] each nesting processes[] — the nested fan-out source for walk-rec (fanout array path chapters.processes).",
+    "zh": "走查计划：chapters[] 内嵌 processes[]——walk-rec 的嵌套扇出源（fanout 数组路径 chapters.processes）。"
+  },
+  "consumes": [],
+  "languages": ["en-US"],
+  "requiresTopic": true
+}

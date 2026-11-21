@@ -111,7 +111,7 @@ export interface PackManifest {
    * `funcId`. Drives the targetIndex candidate list, engine naming
    * `<pack>-<id>` and doc_chain_status coverage for non-COSMIC vocabularies.
    */
-  readonly fanout?: { readonly array: string; readonly idField: string; readonly titleField?: string }
+  readonly fanout?: { readonly array: string; readonly idField: string; readonly titleField?: string; readonly depth?: number }
   /**
    * Artifact home scope (docs/designs/cosmic-context.md): "workspace" packs
    * share project-level directories (materials `references/`, artifacts

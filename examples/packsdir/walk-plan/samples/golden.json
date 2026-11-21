@@ -1,0 +1,7 @@
+{
+  "course": { "name": "demo_course", "title": "Demo course" },
+  "chapters": [
+    { "name": "ch1", "title": "Chapter one", "processes": [ { "name": "p1", "title": "Process one" }, { "name": "p2", "title": "Process two" } ] },
+    { "name": "ch2", "title": "Chapter two", "processes": [ { "name": "p3", "title": "Process three" } ] }
+  ]
+}

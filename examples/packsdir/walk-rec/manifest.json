@@ -1,0 +1,26 @@
+{
+  "name": "walk-rec",
+  "version": "0.1.0",
+  "description": {
+    "en": "One walkthrough record per process: consumes walk-plan and declares fanout {array: 'chapters.processes', depth: 2, idField: 'name'} — nested fan-out addressing, naming and coverage.",
+    "zh": "每个流程一份走查记录：消费 walk-plan 并声明 fanout {array: 'chapters.processes', depth: 2, idField: 'name'}——嵌套扇出的寻址、命名与覆盖对账。"
+  },
+  "consumes": ["walk-plan"],
+  "languages": ["en-US"],
+  "fanout": {
+    "array": "chapters.processes",
+    "depth": 2,
+    "idField": "name",
+    "titleField": "title"
+  },
+  "params": {
+    "targetIndex": {
+      "type": "number",
+      "required": true,
+      "description": {
+        "en": "1-based position across the plan's chapters[].processes[]; candidates are listed when missing",
+        "zh": "计划 chapters[].processes[] 展平后的 1 起始序号；缺失时引擎列出候选"
+      }
+    }
+  }
+}

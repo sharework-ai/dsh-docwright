@@ -215,6 +215,8 @@ export type FunctionCandidate = {
   readonly index: number
   readonly funcId: string
   readonly l2Name?: string
+  /** Enclosing-level names when the fan-out array is nested ("chapter › sub"), for path-bearing hints. */
+  readonly path?: string
 }
 
 /**
@@ -470,21 +472,60 @@ const CONFIRM_HINT = 'Present the paramTable to the user (values, sources, missi
  * Drives the targetIndex candidate list and the per-function artifact naming
  * (docs/designs/params-and-chain-contract.md, fan-out contract).
  */
-function planCandidates(records: readonly { artifact: unknown }[], fanout?: { array: string; idField: string; titleField?: string }): FunctionCandidate[] {
+/** Display label for an enclosing fan-out level entry: the identity name
+ * first (stable, matches rule references), then title/label, then index. */
+function enclosingLabel(entry: unknown, index: number): string {
+  const e = entry as Record<string, unknown> | null
+  const cand = e?.name ?? e?.title ?? e?.label
+  if (typeof cand === 'string' && cand !== '') return cand
+  return `#${index + 1}`
+}
+
+/** Resolve a fan-out array dot path against a plan artifact: returns the leaf
+ * entries plus, for each, the enclosing-level labels ("chapter › …"). */
+function resolveFanoutPath(artifact: Record<string, unknown>, segments: readonly string[]): { entries?: readonly { entry: unknown; path: string }[] } {
+  let level: { entry: unknown; path: string }[] = [{ entry: artifact, path: '' }]
+  for (const [depth, seg] of segments.entries()) {
+    const next: { entry: unknown; path: string }[] = []
+    for (const { entry, path } of level) {
+      const container = entry as Record<string, unknown> | null
+      const arr = container !== null && typeof container === 'object' && Array.isArray(container[seg]) ? container[seg] as unknown[] : undefined
+      if (arr === undefined) return {}
+      for (const [i, e] of arr.entries()) {
+        next.push({ entry: e, path: depth === segments.length - 1 ? path : (path !== '' ? path + ' › ' : '') + enclosingLabel(e, i) })
+      }
+    }
+    if (next.length === 0) return { entries: [] }
+    level = next
+    if (depth === segments.length - 1) return { entries: level }
+  }
+  return {}
+}
+
+function planCandidates(records: readonly { artifact: unknown }[], fanout?: { array: string; idField: string; titleField?: string; depth?: number }): FunctionCandidate[] {
   // Declared fan-out (docs/designs/pack-load-dirs.md generalization): the
-  // consuming pack declares the upstream array and its identity field, so
-  // any domain vocabulary drives the addressing — not just functions[].
+  // consuming pack declares the upstream array — a field name or a dot path
+  // of nested array fields — and its identity field, so any domain vocabulary
+  // drives the addressing — not just functions[].
   if (fanout !== undefined) {
+    const segments = fanout.array.split('.')
     for (const record of records) {
       const artifact = record.artifact as Record<string, unknown> | null
-      const entries = artifact !== null && Array.isArray(artifact[fanout.array]) ? artifact[fanout.array] as unknown[] : undefined
+      if (artifact === null || typeof artifact !== 'object') continue
+      const resolved = resolveFanoutPath(artifact, segments)
+      const entries = resolved.entries
       if (entries === undefined) continue
       const out: FunctionCandidate[] = []
-      for (const [i, entry] of entries.entries()) {
+      for (const [i, { entry, path }] of entries.entries()) {
         const id = (entry as Record<string, unknown> | null)?.[fanout.idField]
         if (typeof id !== 'string') continue
         const title = fanout.titleField !== undefined ? (entry as Record<string, unknown> | null)?.[fanout.titleField] : undefined
-        out.push({ index: i + 1, funcId: id, ...(typeof title === 'string' && title !== '' ? { l2Name: title } : {}) })
+        out.push({
+          index: i + 1,
+          funcId: id,
+          ...(typeof title === 'string' && title !== '' ? { l2Name: title } : {}),
+          ...(path !== '' ? { path } : {}),
+        })
       }
       return out
     }
@@ -511,12 +552,15 @@ function planCandidates(records: readonly { artifact: unknown }[], fanout?: { ar
 }
 
 /** The consuming pack's declared fan-out shape, if any. */
-function fanoutOf(pack: Pack): { array: string; idField: string; titleField?: string } | undefined {
+function fanoutOf(pack: Pack): { array: string; idField: string; titleField?: string; depth?: number } | undefined {
   const f = pack.manifest.fanout
   if (f === undefined) return undefined
-  return f.titleField !== undefined
-    ? { array: f.array, idField: f.idField, titleField: f.titleField }
-    : { array: f.array, idField: f.idField }
+  return {
+    array: f.array,
+    idField: f.idField,
+    ...(f.titleField !== undefined ? { titleField: f.titleField } : {}),
+    ...(f.depth !== undefined ? { depth: f.depth } : {}),
+  }
 }
 
 /** Order-insensitive multiset equality of two upstream anchor lists. */
@@ -888,7 +932,7 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       if (preview.missingRequired.length > 0) {
         const candidates = preview.missingRequired.includes('targetIndex') ? planCandidates(upstreamRecords, fanoutOf(pack)) : []
         const listed = candidates.length > 0
-          ? ` Candidates from the upstream plan: ${candidates.map(c => `${c.index}. ${c.funcId}${c.l2Name === undefined ? '' : ` (${c.l2Name})`}`).join('; ')}.`
+          ? ` Candidates from the upstream plan: ${candidates.map(c => `${c.index}. ${c.path === undefined ? '' : c.path + ' › '}${c.funcId}${c.l2Name === undefined ? '' : ` (${c.l2Name})`}`).join('; ')}.`
           : ''
         // Extraction ran but found nothing quotable: say so per param and
         // surface the model's suggestion — the user may give the value or
@@ -1163,12 +1207,15 @@ export function defineDocChainStatusTool(deps: ToolDeps) {
       const declared = stages.slice(1).map(s => fanoutOf(sessionView.get(s) ?? ({} as Pack))).find(f => f !== undefined)
       const planArrayField = declared !== undefined ? declared.array : 'functions'
       const planIdField = declared !== undefined ? declared.idField : 'funcId'
-      const planEntries = Array.isArray(planArtifact[planArrayField]) ? planArtifact[planArrayField] as unknown[] : []
+      // The fan-out array may be a dot path of nested arrays; each entry then
+      // carries the enclosing-level labels as its path.
+      const resolved = resolveFanoutPath(planArtifact, planArrayField.split('.'))
+      const planEntries = resolved.entries ?? []
       if (planEntries.length === 0) {
         throw new Error(`plan artifact ${args.plan} declares no ${planArrayField}[]; coverage is defined over the fan-out array (a downstream stage declares its shape via manifest.fanout for non-COSMIC vocabularies)`)
       }
-      const planFuncIds = new Set(planEntries.map(fn => (fn as Record<string, unknown> | null)?.[planIdField]).filter((id): id is string => typeof id === 'string'))
-      const rows: Array<{ index: number; funcId: string; l2Name?: string; coverage: Record<string, string | null> }> = []
+      const planFuncIds = new Set(planEntries.map(({ entry }) => (entry as Record<string, unknown> | null)?.[planIdField]).filter((id): id is string => typeof id === 'string'))
+      const rows: Array<{ index: number; funcId: string; l2Name?: string; path?: string; coverage: Record<string, string | null> }> = []
       const stageMaps = new Map<string, Map<string, string>>()
       for (const stage of stages.slice(1)) {
         // Each stage's own declared fan-out id field wins; undeclared stages
@@ -1176,7 +1223,7 @@ export function defineDocChainStatusTool(deps: ToolDeps) {
         stageMaps.set(stage, await scanStageArtifacts(outputRoot, stage, planIdField, sessionView))
       }
       const orphaned: Array<{ stage: string; file: string }> = []
-      for (const [i, fn] of planEntries.entries()) {
+      for (const [i, { entry: fn, path }] of planEntries.entries()) {
         const funcId = (fn as Record<string, unknown> | null)?.[planIdField]
         if (typeof funcId !== 'string') continue
         const l2Name = (fn as { l2Name?: unknown } | null)?.l2Name
@@ -1190,12 +1237,13 @@ export function defineDocChainStatusTool(deps: ToolDeps) {
           index: i + 1,
           funcId,
           ...(typeof l2Name === 'string' && l2Name !== '' ? { l2Name } : {}),
+          ...(path !== '' ? { path } : {}),
           coverage,
         })
       }
       for (const [stage, map] of stageMaps) {
         for (const [funcId, file] of map) {
-          orphaned.push({ stage, file: `${file}.json (funcId ${funcId} matches no plan function)` })
+          orphaned.push({ stage, file: `${file}.json (${planIdField} ${funcId} matches no plan function)` })
         }
       }
       const coverage: Record<string, { covered: number; total: number }> = {}

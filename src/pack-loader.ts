@@ -149,11 +149,26 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
   if (m.consumes !== undefined && !Array.isArray(m.consumes)) throw new Error(`pack ${dir}: manifest.consumes must be an array when present`)
   if (m.fanout !== undefined) {
     const f = m.fanout as Partial<NonNullable<PackManifest['fanout']>> | null
-    if (typeof f !== 'object' || f === null) throw new Error(`pack ${dir}: manifest.fanout must be an object { array, idField, titleField? }`)
+    if (typeof f !== 'object' || f === null) throw new Error(`pack ${dir}: manifest.fanout must be an object { array, idField, titleField?, depth? }`)
     for (const k of ['array', 'idField'] as const) {
       if (typeof f[k] !== 'string' || (f[k] as string).length === 0) throw new Error(`pack ${dir}: manifest.fanout.${k} must be a non-empty string (the upstream array and its identity field the engine addresses by)`)
     }
+    // array may be a dot path naming nested arrays ("chapters.processes"):
+    // the fan-out leaf lives at the path's last segment, each segment being an
+    // array field of the previous level's entries.
+    if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(f.array as string)) {
+      throw new Error(`pack ${dir}: manifest.fanout.array must be a field name or a dot path of array field names (e.g. "processes" or "chapters.processes"), got ${JSON.stringify(f.array)}`)
+    }
     if (f.titleField !== undefined && (typeof f.titleField !== 'string' || f.titleField.length === 0)) throw new Error(`pack ${dir}: manifest.fanout.titleField must be a non-empty string when present`)
+    if (f.depth !== undefined) {
+      if (!Number.isInteger(f.depth) || (f.depth as number) < 1) {
+        throw new Error(`pack ${dir}: manifest.fanout.depth must be a positive integer (the 1-based level of the fan-out array in the plan tree: 1 = top level, 2 = nested one level), got ${JSON.stringify(f.depth)}`)
+      }
+      const segments = (f.array as string).split('.').length
+      if (f.depth !== segments) {
+        throw new Error(`pack ${dir}: manifest.fanout.depth (${f.depth}) must equal the number of segments in fanout.array ("${f.array}" has ${segments}) — depth is the 1-based level of the fan-out array in the plan tree`)
+      }
+    }
   }
   if (m.scope !== undefined && m.scope !== 'workspace' && m.scope !== 'topic') {
     throw new Error(`pack ${dir}: manifest.scope must be "workspace" or "topic" (got ${JSON.stringify(m.scope)})`)
