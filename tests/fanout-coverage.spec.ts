@@ -280,4 +280,38 @@ describe('doc_chain_status: coverage accounting', () => {
     }), 'utf8')
     await expect(tool.execute({ plan: 'output/p.json' } as never, { signal } as never)).rejects.toThrow(/declares no functions\[\]/)
   })
+
+  it('surfaces undecided fan-out addressing as a pendingConfirmation pick, and auto-infers a sole candidate', async () => {
+    const { req, plan } = await packs()
+    const deps = await makeDeps([JSON.stringify(plan.goldenSample), JSON.stringify(req.goldenSample)])
+    const gen = defineDocGenerateTool(deps as never)
+    await seedContext(deps as never)
+    await gen.execute({ pack: 'cosmic-plan', topic: 'topic-a', materials: ['#!inline\nx'], language: 'zh-CN', upstream: ['context/context.json'], params: { cfpTotal: BUDGET }, confirm: true, artifactName: 'plan' } as never, { signal } as never)
+
+    // Two candidates and no targetIndex: not a hard error — a pendingConfirmation
+    // table with the selectable candidates and a pick hint (zero LLM cost).
+    const pending = await gen.execute({ pack: 'cosmic-req', topic: 'topic-a', materials: ['#!inline\n素材'], language: 'zh-CN', upstream: ['topic-a/output/plan.json'],
+    } as never, { signal } as never) as { pendingConfirmation: boolean; candidates?: Array<{ index: number; funcId: string }>; missingRequired: string[]; hint: string }
+    expect(pending.pendingConfirmation).toBe(true)
+    expect(pending.missingRequired).toEqual(['targetIndex'])
+    expect(pending.candidates?.map(c => c.funcId)).toEqual(['KERQ-352-01', 'KERQ-352-02'])
+    expect(pending.hint).toMatch(/targetIndex/)
+
+    // A sole candidate leaves nothing to choose: the engine injects it, the
+    // generation proceeds, and the result names the inferred param.
+    const planPath = join(deps.ws, 'topic-a', 'output', 'plan.json')
+    const sliced = JSON.parse(await readFile(planPath, 'utf8')) as { functions: unknown[] }
+    sliced.functions = sliced.functions.slice(0, 1)
+    const { artifactHashOf } = await import('../src/receipt.ts')
+    await writeFile(planPath, JSON.stringify(sliced), 'utf8')
+    const receiptPath = join(deps.ws, 'topic-a', 'output', 'plan.receipt.json')
+    const receipt = JSON.parse(await readFile(receiptPath, 'utf8')) as Record<string, unknown>
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, artifactHash: artifactHashOf(sliced) }), 'utf8')
+    const out = await gen.execute({ pack: 'cosmic-req', topic: 'topic-a', materials: ['#!inline\n收藏功能需求素材'], language: 'zh-CN', upstream: ['topic-a/output/plan.json'], confirm: true,
+    } as never, { signal } as never) as { inferredParams?: string[]; artifactPath: string; receipt: { isValid: boolean; params: Record<string, unknown> } }
+    expect(out.inferredParams).toEqual(['targetIndex'])
+    expect(out.receipt.isValid).toBe(true)
+    expect(out.receipt.params.targetIndex).toBe(1)
+    expect(out.artifactPath).toContain('KERQ-352-01')
+  })
 })

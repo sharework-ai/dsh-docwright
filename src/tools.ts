@@ -220,6 +220,8 @@ export type GenerateToolResult = {
    * topic-level file wins, and a session-cwd pre-read of the same ref can
    * easily have read the shared one instead (real-session finding). */
   readonly materials?: { ref: string; path: string }[]
+  /** Required fan-out params the engine resolved itself (single plan candidate); the receipt records the value like any explicit param. */
+  readonly inferredParams?: string[]
 }
 
 /** Fan-out coverage of one stage (docs/designs/params-and-chain-contract.md). */
@@ -832,6 +834,27 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           throw new Error(`topicNoPattern is not a valid regex: ${(error as Error).message}`)
         }
       }
+      // Fan-out addressing inference: targetIndex is caller routing, but a
+      // fan-out source with exactly ONE entry leaves nothing to choose —
+      // inject it (recorded in the receipt params like any explicit value)
+      // and report the provenance, instead of failing the call and burning a
+      // round on an answer the engine could see itself (real session: a
+      // single-process plan still required a hand-supplied targetIndex).
+      // Runs BEFORE engine naming so the injected value drives the
+      // per-function deterministic name.
+      let inferredTargetIndex: number | undefined
+      if (
+        overrides?.targetIndex === undefined && paramsBase?.targetIndex === undefined
+        && upstreamRecords.length > 0
+        && pack.manifest.params?.targetIndex?.required === true
+      ) {
+        const sole = planCandidates(upstreamRecords, fanoutOf(pack))
+        const only = sole.length === 1 ? sole[0] : undefined
+        if (only !== undefined) {
+          ;(overrides ??= {}).targetIndex = only.index
+          inferredTargetIndex = only.index
+        }
+      }
       // Fan-out naming: a per-function call is ENGINE-named `<pack>-<funcId>`
       // from the upstream plan — distinct functions never collide and
       // regeneration is idempotent. An explicit artifactName on a
@@ -955,6 +978,12 @@ export function defineDocGenerateTool(deps: ToolDeps) {
         const candidateFields = preview.missingRequired.includes('targetIndex')
           ? { candidates: planCandidates(upstreamRecords, fanoutOf(pack)) }
           : {}
+        // When fan-out addressing is among the undecided rows, the generic
+        // confirm hint is not enough — the caller must PICK a candidate and
+        // pass it via params, not just re-confirm.
+        const hint = candidateFields.candidates !== undefined && (candidateFields.candidates as unknown[]).length > 0
+          ? CONFIRM_HINT + ' Fan-out addressing is undecided: pick ONE candidate from "candidates" and pass params {"targetIndex": <index>} along with confirm: true.'
+          : CONFIRM_HINT
         return {
           pendingConfirmation: true,
           pack: pack.manifest.name,
@@ -963,11 +992,31 @@ export function defineDocGenerateTool(deps: ToolDeps) {
           missingRequired: [...preview.missingRequired],
           ...candidateFields,
           ...driftFields,
-          hint: CONFIRM_HINT,
+          hint,
         } satisfies PendingConfirmationResult as unknown as DocGenerateResult
       }
       if (preview.missingRequired.length > 0) {
+        // Fan-out addressing left undecided: with the plan candidates in
+        // hand, refusing outright wastes a round — surface the choice as a
+        // pendingConfirmation table (same shape as the params gate) and let
+        // the caller pick. Headless (policy "none") and an already-confirmed
+        // call that still lacks the value keep the loud error: a machine
+        // caller has no one to present the table to, and confirm: true
+        // without the value is a caller bug worth seeing.
+        const pickable = preview.missingRequired.length === 1 && preview.missingRequired[0] === 'targetIndex'
+          && upstreamRecords.length > 0 && args.confirm !== true
         const candidates = preview.missingRequired.includes('targetIndex') ? planCandidates(upstreamRecords, fanoutOf(pack)) : []
+        if (pickable && policy !== 'none' && candidates.length > 0) {
+          return {
+            pendingConfirmation: true,
+            pack: pack.manifest.name,
+            language,
+            paramTable: [...preview.rows],
+            missingRequired: [...preview.missingRequired],
+            candidates,
+            hint: 'Fan-out addressing is undecided: pick ONE candidate from "candidates" and re-call doc_generate passing params {"targetIndex": <index>} (with the same materials/upstream/topic). No confirm flag is needed unless another gate row appears.',
+          } satisfies PendingConfirmationResult as unknown as DocGenerateResult
+        }
         const listed = candidates.length > 0
           ? ` Candidates from the upstream plan: ${candidates.map(c => `${c.index}. ${c.path === undefined ? '' : c.path + ' › '}${c.funcId}${c.l2Name === undefined ? '' : ` (${c.l2Name})`}`).join('; ')}.`
           : ''
@@ -1020,7 +1069,8 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       const coverage = await coverageProgress(pack, upstreamRecords, outputRoot)
       const withCoverage = coverage === undefined ? result : { ...result, coverage }
       const withMaterials = { ...withCoverage, materials: materialPaths }
-      return (upstreamWarnings === undefined ? withMaterials : { ...withMaterials, upstreamWarnings }) as unknown as DocGenerateResult
+      const withInferred = inferredTargetIndex === undefined ? withMaterials : { ...withMaterials, inferredParams: ['targetIndex'] }
+      return (upstreamWarnings === undefined ? withInferred : { ...withInferred, upstreamWarnings }) as unknown as DocGenerateResult
     },
   })
 }
