@@ -2,6 +2,7 @@ import { mkdir, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { resolveLocalized } from './description.ts'
+import { readBuildStamp } from './build-info.ts'
 import { DEFAULT_CONFIRM_POLICY, DEFAULT_UPSTREAM_VERSION_POLICY, type Config, type ConfirmPolicy, type UpstreamVersionPolicy } from './config.ts'
 import { generateDocument, getDocService, parseUpstreamArtifacts, summarizeArtifact, writeAtomic } from './doc-service.ts'
 import { buildExtractionFile, extractionFilePath, extractableParams, processProposals, readExtractionFile, verifyExtraction, writeExtractionFile } from './extract.ts'
@@ -272,9 +273,17 @@ export function defineDocPacksTool(deps: ToolDeps) {
     },
     async execute(_args: Record<string, never>, exec?: SessionWorkspaceCarrier) {
       const { packs, shadowed } = await packsForSession(deps, exec)
+      // Build stamp (issue #3): the loaded runtime reports which commit built
+      // it, so a stale dist/ is visible at discovery time instead of surfacing
+      // later as a mid-generation engine error. Missing stamp = source checkout
+      // or a build older than the stamp mechanism.
+      const stamp = readBuildStamp()
       return {
         confirmPolicy: deps.config.confirmPolicy ?? DEFAULT_CONFIRM_POLICY,
         marketSearch: deps.config.marketSearch !== false,
+        ...(stamp === undefined
+          ? { build: { stamped: false, note: 'no build stamp found next to the loaded runtime — the plugin build predates stamping or is a source checkout; if packs rely on newer engine features, rebuild the plugin (pnpm run build) and restart the session' } }
+          : { build: { stamped: true, gitSha: stamp.gitSha, builtAt: stamp.builtAt } }),
         packs: [...packs.values()].map(p => ({
         name: p.manifest.name,
         version: p.manifest.version,

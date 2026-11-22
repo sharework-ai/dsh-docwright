@@ -31,18 +31,33 @@ function compileRule(rule: DeclarativeRule): CompiledRule {
     }
   }
   if (rule.given === '$') return { rule, scope: 'root', ...(re === undefined ? {} : { re }) }
-  // Grammar: $ followed by hops of .field or .field[*]; the LAST hop must be
-  // a [*] (rules check each item of the scoped array). Nested paths like
-  // $.chapters[*].processes[*] scope the inner array's items.
+  assertGivenPath(rule.id, rule.given)
   const hops = [...rule.given.matchAll(/\.([A-Za-z0-9_]+)(\[\*\])?/g)]
-  const rebuilt = hops.map(m => `.${m[1] ?? ''}${m[2] ?? ''}`).join('')
-  if (hops.length === 0 || rebuilt !== rule.given.slice(1) || hops[hops.length - 1]?.[2] === undefined) {
-    throw new Error(`rule ${rule.id}: given path not supported: ${rule.given} (supported: $, $.field[*], and nested chains like $.chapters[*].processes[*] — the last hop must be [*])`)
-  }
   return {
     rule,
     scope: { hops: hops.map(m => ({ key: m[1] ?? '', each: m[2] !== undefined })) },
     ...(re === undefined ? {} : { re }),
+  }
+}
+
+/**
+ * Grammar check for a declarative rule's `given` path: `$` alone, or `$`
+ * followed by hops of `.field` or `.field[*]`; the LAST hop must be a `[*]`
+ * (rules check each item of the scoped array). Nested paths like
+ * `$.chapters[*].processes[*]` scope the inner array's items.
+ *
+ * Exported so the pack loader can run this at LOAD time (issue #2): a rule
+ * whose grammar this engine build cannot execute must fail at pack load with
+ * an actionable cause, not mid-generation as an engine-looking crash. The
+ * usual real-world cause of an unsupported path is a pack newer than the
+ * running plugin build.
+ */
+export function assertGivenPath(ruleId: string, given: string): void {
+  if (given === '$') return
+  const hops = [...given.matchAll(/\.([A-Za-z0-9_]+)(\[\*\])?/g)]
+  const rebuilt = hops.map(m => `.${m[1] ?? ''}${m[2] ?? ''}`).join('')
+  if (hops.length === 0 || rebuilt !== given.slice(1) || hops[hops.length - 1]?.[2] === undefined) {
+    throw new Error(`rule ${ruleId}: given path not supported by this engine build: ${given} (supported: $, $.field[*], and nested chains like $.chapters[*].processes[*] — the last hop must be [*]); if this pack is newer than the plugin runtime, rebuild the plugin (see issue #2)`)
   }
 }
 

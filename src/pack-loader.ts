@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import type { DeclarativeRule, FunctionRule, Pack, PackManifest, ParamSpec, ScoreFn } from './pack.ts'
 import { isParamRef } from './pack.ts'
 import { assertLocalizedText } from './description.ts'
+import { assertGivenPath } from './rule-engine.ts'
 import type { LocalizedText } from './description.ts'
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
@@ -384,7 +385,15 @@ async function loadOnePack(dir: string): Promise<Omit<Pack, 'origin'>> {
   for (const lang of manifest.languages) {
     const rawRules = JSON.parse(await readFile(join(dir, 'rules', `${lang}.json`), 'utf8')) as unknown[]
     if (!Array.isArray(rawRules)) throw new Error(`pack ${dir}: rules/${lang}.json must be an array`)
-    rules.set(lang, rawRules.map((r, i) => assertRule(r, dir, i, manifest.params)))
+    rules.set(lang, rawRules.map((r, i) => {
+      const rule = assertRule(r, dir, i, manifest.params)
+      // Load-time grammar check (issue #2): a rule this engine build cannot
+      // execute must fail at pack load with an actionable cause — the usual
+      // real-world cause is a pack newer than the running plugin build —
+      // instead of mid-generation as an engine-looking crash.
+      if (rule.given !== '$') assertGivenPath(rule.id, rule.given)
+      return rule
+    }))
     const prompt = await readFile(join(dir, 'prompts', `${lang}.md`), 'utf8')
     if (!prompt.includes('{{materials}}')) {
       throw new Error(`pack ${dir}: prompts/${lang}.md is missing the {{materials}} slot; materials would be silently dropped`)
