@@ -122,7 +122,22 @@ function assertTopicName(topic: string): string {
  * the workspace-level `<workspace>/<dir>/` of the same name — a topic's own
  * input shadows the shared one (dir: manifest materialsRoot, default
  * config materialsRoot).
+ *
+ * After the pack's own roots, `<runtime>/` candidates are appended at both
+ * levels (docs/designs/material-origin.md): refs falling through to a runtime
+ * root resolve there and get origin=runtime — intermediate-stage inputs a
+ * chain-head pack refuses. Same-name files under the pack's own roots win the
+ * race, so user material always shadows a runtime copy.
  */
+const RUNTIME_DIR = 'runtime'
+
+function runtimeRoots(scopedRoots: readonly string[], workspaceRoot: string): readonly string[] {
+  const runtime = scopedRoots
+    .map(base => resolve(base, '..'))
+    .map(parent => resolve(parent, RUNTIME_DIR))
+  return [...new Set(runtime)]
+}
+
 function resolveScopedRoots(
   workspaceRoot: string,
   config: Config,
@@ -131,23 +146,26 @@ function resolveScopedRoots(
 ): { materialsRoots: readonly string[]; outputRoot: string } {
   const spec = pack.manifest.materialsRoot ?? config.materialsRoot
   if (pack.manifest.scope === 'workspace') {
+    const materialsRoots = [resolveRootWithin(workspaceRoot, spec, 'materialsRoot')]
     return {
-      materialsRoots: [resolveRootWithin(workspaceRoot, spec, 'materialsRoot')],
+      materialsRoots: [...materialsRoots, ...runtimeRoots(materialsRoots, workspaceRoot)],
       outputRoot: resolveRootWithin(workspaceRoot, WORKSPACE_CONTEXT_DIR, 'outputRoot'),
     }
   }
   if (topic !== undefined && topic.length > 0) {
     const topicRoot = confinePath(workspaceRoot, assertTopicName(topic), 'topic')
+    const materialsRoots = [
+      resolveRootWithin(topicRoot, spec, 'materialsRoot'),
+      resolveRootWithin(workspaceRoot, spec, 'materialsRoot'),
+    ]
     return {
-      materialsRoots: [
-        resolveRootWithin(topicRoot, spec, 'materialsRoot'),
-        resolveRootWithin(workspaceRoot, spec, 'materialsRoot'),
-      ],
+      materialsRoots: [...materialsRoots, ...runtimeRoots(materialsRoots, workspaceRoot)],
       outputRoot: resolveRootWithin(topicRoot, config.outputRoot, 'outputRoot'),
     }
   }
+  const materialsRoots = [resolveRootWithin(workspaceRoot, spec, 'materialsRoot')]
   return {
-    materialsRoots: [resolveRootWithin(workspaceRoot, spec, 'materialsRoot')],
+    materialsRoots: [...materialsRoots, ...runtimeRoots(materialsRoots, workspaceRoot)],
     outputRoot: resolveRootWithin(workspaceRoot, config.outputRoot, 'outputRoot'),
   }
 }
@@ -857,6 +875,16 @@ export function defineDocGenerateTool(deps: ToolDeps) {
       // for the receipt's manifest — the double read keeps the service
       // self-contained). An unreadable ref fails loud regardless of reuse.
       const materialEntries = await readMaterialEntries(materials, workspaceRoot, materialsRoots)
+      // Chain-head gate (docs/designs/material-origin.md): an entry pack must
+      // start from the caller's own material — an intermediate-stage input
+      // (runtime/) would silently re-derive a "fresh" chain head from
+      // downstream conclusions.
+      if (pack.manifest.consumes.length === 0) {
+        const runtimeRefs = materialEntries.filter(e => e.origin === 'runtime').map(e => e.ref)
+        if (runtimeRefs.length > 0) {
+          throw new Error(`pack "${pack.manifest.name}" is a chain head (consumes is empty) and does not accept runtime materials (origin=runtime): ${runtimeRefs.join(', ')}. Re-run the head only from the caller's own material under input/ — intermediate inputs belong to the chained stages that consume upstream artifacts.`)
+        }
+      }
       const materialPaths = materialEntries
         .filter((entry): entry is typeof entry & { path: string } => entry.path !== undefined)
         .map(entry => ({ ref: entry.ref, path: entry.path }))

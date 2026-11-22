@@ -9,7 +9,7 @@ import type { Pack, RuleContext } from './pack.ts'
 import { resolveEffectiveParams, type ExtractionView } from './params.ts'
 import { createRuleEngine, rollupRules } from './rule-engine.ts'
 import { materialAnchors, readMaterialEntries } from './materials.ts'
-import { assembleGeneratorPrompt, estimateTokens } from './prompt.ts'
+import { assembleGeneratorPrompt, estimateTokens} from './prompt.ts'
 import { createSchemaCheck } from './schema-check.ts'
 import { artifactHashOf, RECEIPT_FORMAT_VERSION, sha256, type Json, type MaterialAnchor, type Receipt, type UpstreamAnchor } from './receipt.ts'
 import { createRenderer } from './render.ts'
@@ -245,7 +245,8 @@ export async function generateDocument(input: GenerateInput): Promise<GenerateOu
     materials: materialTexts,
     ...(upstreamArtifacts === undefined ? {} : { upstream: upstreamArtifacts }),
   }
-  const firstPrompt = assembleGeneratorPrompt({ promptTemplate: service.promptTemplate, materials: materialTexts, upstream: input.upstream, params: effectiveParams, overridableParams })
+  const taggedMaterials = materialEntries.map(e => ({ text: e.text, ...(e.path === undefined ? {} : { path: e.path }), ...(e.origin === undefined ? {} : { origin: e.origin }) }))
+  const firstPrompt = assembleGeneratorPrompt({ promptTemplate: service.promptTemplate, materials: taggedMaterials, upstream: input.upstream, params: effectiveParams, overridableParams })
   const budget = estimateTokens(firstPrompt)
   const tokenBudget = input.config.promptTokenBudget ?? DEFAULT_PROMPT_TOKEN_BUDGET
   if (budget > tokenBudget) {
@@ -264,7 +265,7 @@ export async function generateDocument(input: GenerateInput): Promise<GenerateOu
     {
       llm: input.llm,
       promptTemplate: service.promptTemplate,
-      materials: materialTexts,
+      materials: taggedMaterials,
       upstream: input.upstream,
       params: effectiveParams,
       overridableParams,

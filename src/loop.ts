@@ -4,7 +4,7 @@ import type { Issue } from './issue.ts'
 import { issueFingerprint, isAbortError, severityCounts } from './issue.ts'
 import type { LlmPort } from './llm-port.ts'
 import { withSingleRetry } from './llm-port.ts'
-import { assembleGeneratorPrompt, assembleRepairPrompt, estimateTokens, extractJson } from './prompt.ts'
+import { assembleGeneratorPrompt, assembleRepairPrompt, estimateTokens, extractJson, type MaterialTag } from './prompt.ts'
 import { sha256, type ReceiptRound } from './receipt.ts'
 
 /** Loop-internal issue rule ids; ride the same repair path as pack rules. */
@@ -17,7 +17,7 @@ export type LoopExhaustReason = 'stagnation' | 'decline' | 'fingerprint-repeat' 
 export interface LoopOptions {
   readonly llm: LlmPort
   readonly promptTemplate: string
-  readonly materials: readonly string[]
+  readonly materials: readonly (string | MaterialTag)[]
   readonly upstream?: readonly string[] | undefined
   /** Effective pack params; rendered into the {{params}} slot of every round's prompt. */
   readonly params?: Readonly<Record<string, unknown>> | undefined

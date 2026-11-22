@@ -6,16 +6,33 @@ import type { Issue } from './issue.ts'
  * the loop's budget pre-check before any model call is spent.
  */
 
+/** One material as the prompt should present it. A bare string stays a plain
+ * `<material>` block; a tag renders origin (user/runtime) and the engine's
+ * resolved path so the model can arbitrate conflicts between materials by
+ * provenance (docs/designs/material-origin.md). */
+export interface MaterialTag {
+  readonly text: string
+  readonly path?: string
+  readonly origin?: 'user' | 'runtime'
+}
+
+function materialBlock(m: string | MaterialTag): string {
+  if (typeof m === 'string') return `<material>\n${m}\n</material>`
+  const attrs = [`origin="${m.origin ?? 'user'}"`]
+  if (m.path !== undefined) attrs.push(`path="${m.path.replace(/"/g, '&quot;')}"`)
+  return `<material ${attrs.join(' ')}>\n${m.text}\n</material>`
+}
+
 export function assembleGeneratorPrompt(options: {
   promptTemplate: string
-  materials: readonly string[]
+  materials: readonly (string | MaterialTag)[]
   upstream?: readonly string[] | undefined
   /** Effective pack params; rendered into the {{params}} slot when the template offers it. */
   params?: Readonly<Record<string, unknown>> | undefined
   /** Declared overridable param names; renders the materials-may-adjust hint after the params block. */
   overridableParams?: readonly string[] | undefined
 }): string {
-  const materialsBlock = options.materials.map(m => `<material>\n${m}\n</material>`).join('\n\n')
+  const materialsBlock = options.materials.map(materialBlock).join('\n\n')
   const upstreamBlock = options.upstream === undefined || options.upstream.length === 0
     ? ''
     : `\n\n<upstream-artifacts>\n${options.upstream.join('\n\n')}\n</upstream-artifacts>`

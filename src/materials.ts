@@ -8,6 +8,14 @@ export interface MaterialEntry {
   readonly ref: string
   readonly hash: string
   readonly text: string
+  /** Where this material sits in the chain (docs/designs/material-origin.md):
+   * `user` = the caller's original material (input/ roots, inline text,
+   * references/); `runtime` = an intermediate-stage input persisted under a
+   * runtime/ root — model-visible so prompt conflicts have an arbitration
+   * basis, and refused by chain-head packs (consumes = []) at the tool layer.
+   * File entries always carry it; inline text is a caller-authored string and
+   * stays untagged. */
+  readonly origin?: 'user' | 'runtime'
   /** Absolute path the content was read from (file entries only; inline text has none).
    * Surfaced in the doc_generate result so a verifying model checks the SAME
    * file the engine anchored — under dual materials roots the winner is the
@@ -132,7 +140,18 @@ export async function readMaterialEntries(
       throw await notReadable(ref, bases, root, lastError)
     }
     const text = await readFile(real, 'utf8')
-    out.push({ ref: relative(resolvedBase, real).split(sep).join('/'), hash: sha256(text), text, path: real })
+    // Origin by root location (docs/designs/material-origin.md): a runtime/
+    // root marks an intermediate-stage input. The basename check is the
+    // convention the roots are registered under — resolveScopedRoots appends
+    // runtime/ roots after the pack's own materials roots, so the same-name
+    // input/ file always wins the resolution race and keeps origin=user.
+    out.push({
+      ref: relative(resolvedBase, real).split(sep).join('/'),
+      hash: sha256(text),
+      text,
+      origin: basename(resolvedBase) === 'runtime' ? 'runtime' : 'user',
+      path: real,
+    })
   }
   return out
 }

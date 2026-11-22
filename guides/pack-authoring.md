@@ -447,3 +447,52 @@ shape; no validation semantics.
       `reused: true` at zero model rounds (deterministic packs declare
       `reuse: true`; inputs live in `input/`/`references/`, not inline)
 - [ ] Version, bilingual description, and the health sheet recorded
+
+## Where materials live (user vs runtime)
+
+A topic directory separates the caller's own material from the chain's
+working data:
+
+- `input/` — material the caller wrote or gathered (briefs, screenshots,
+  coordinates). Every file here resolves with `origin="user"`.
+- `runtime/<stage>/` — inputs produced by an earlier stage and persisted so a
+  later stage's regeneration anchors on them (a record brief, a step
+  decomposition). Files here resolve with `origin="runtime"`; keep each
+  stage's files under its own subdirectory.
+- `output/` — artifacts, receipts, renders. Never a materials root.
+
+The origin tag is model-visible in the prompt (`<material origin="..."
+path="...">`), so when material text and an upstream artifact disagree, the
+upstream receipt wins and the stale material gets corrected. A chain-head
+pack (`consumes: []`) refuses runtime materials outright at `doc_generate` —
+a head must start from the caller's own material, never from a downstream
+conclusion. Pack authors don't implement this; the engine enforces it.
+
+## Fan-out and aggregation pattern
+
+A chain that splits into many small units and later merges back into one
+publishable document follows the walkthrough series' shape (the worked
+example; see `walkthrough-doc`):
+
+1. **Plan pack**: declares the tree that drives fan-out
+   (`manifest.fanout: { array, idField, depth }`; nested arrays need
+   `depth` ≥ 2). Pure data — narrative and process identity, no results.
+2. **Per-unit packs**: one record per fan-out entry, addressed by
+   `targetIndex`; each carries only what that stage produced plus small
+   identity keys (`course`/`chapter`/`name`/`shot`). Results live here, never
+   copied upward.
+3. **Aggregation pack**: consumes plan + every record (+ any referenced
+   side artifacts) and assembles ONE self-contained tree. The merge is a
+   deterministic pure-function rule (`doc/matches-merge` in the walkthrough
+   pack): the rule recomputes the expected tree from the upstreams and
+   compares field by field — the model never copies data by hand, so copying
+   mistakes are rejected, not rendered.
+4. **Coverage**: `doc_chain_status` accounts every fan-out entry; the
+   aggregation rule warns about planned-but-unwalked entries and supports an
+   explicit `excluded` list for entries intentionally not published.
+
+Reuse this shape as-is for the next fan-out domain. Extract a generic
+merge/fan-out engine layer only when a second real domain proves the
+abstraction (rule of three — the merge semantics are domain knowledge and
+belong in pack rules, not engine code).
+
