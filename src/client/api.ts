@@ -211,3 +211,34 @@ export async function deleteSuite(suite: string): Promise<{ deleted: readonly st
     body: JSON.stringify({ suite }),
   }))
 }
+
+/** One landed market-install outcome (pack-manage.ts InstallOutcome). */
+export interface UiInstallOutcome {
+  name: string
+  version: string
+  dest: string
+  /** True when the pack replaced an existing packsDir directory. */
+  existed: boolean
+  /** True when the market version was already installed and nothing was written. */
+  unchanged?: boolean
+}
+
+/** Install one pack (with its consumed closure) from the market into packsDir. */
+export async function installMarketPack(pack: string): Promise<readonly UiInstallOutcome[]> {
+  const body = await parse<{ ok: true; installed: readonly UiInstallOutcome[] }>(await fetch('/api/docwright/pack-install', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pack }),
+  }))
+  return body.installed
+}
+
+/** Install every suite member from the market into packsDir. */
+export async function installMarketSuite(suite: string): Promise<readonly UiInstallOutcome[]> {
+  const body = await parse<{ ok: true; installed: readonly UiInstallOutcome[] }>(await fetch('/api/docwright/suite-install', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ suite }),
+  }))
+  return body.installed
+}

@@ -96,6 +96,9 @@ export interface WriteChannels {
     readonly suiteStatus?: () => Promise<unknown>
     readonly updateSuite?: (suite: string) => Promise<unknown>
     readonly deleteSuite?: (suite: string) => Promise<unknown>
+    /** Market installs (docs/designs/pack-suites.md install lanes): one pack with its consumed closure, or every suite member. Optional — deployments without a packsDir never install. */
+    readonly installPack?: (pack: string) => Promise<unknown>
+    readonly installSuite?: (suite: string) => Promise<unknown>
   } | undefined
 }
 
@@ -111,6 +114,8 @@ export interface WriteChannels {
  * - `GET  /api/docwright/suites` — market suites projected onto the local packsDir (read; mounted with the pack lane).
  * - `POST /api/docwright/suite-update` — `{ suite }` updates the suite's outdated members from the market.
  * - `POST /api/docwright/suite-delete` — `{ suite }` deletes the suite's installed members (all of them).
+ * - `POST /api/docwright/pack-install` — `{ pack }` installs one pack (with its consumed closure) from the market into packsDir.
+ * - `POST /api/docwright/suite-install` — `{ suite }` installs every suite member from the market.
  */
 export function mountParamsRoutes(
   webServer: WebServerLike,
@@ -199,6 +204,8 @@ export function mountParamsRoutes(
   let disposeSuiteStatus: (() => void) | undefined
   let disposeSuiteUpdate: (() => void) | undefined
   let disposeSuiteDelete: (() => void) | undefined
+  let disposePackInstall: (() => void) | undefined
+  let disposeSuiteInstall: (() => void) | undefined
   if (deps.writes!.packLane !== undefined) {
     const lane = deps.writes!.packLane
     const packName = (body: unknown): string => {
@@ -295,8 +302,26 @@ export function mountParamsRoutes(
       const result = await lane.deleteSuite(suite)
       return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
     })
+    // Install lanes: the browser market page sends these through the tab's
+    // postMessage bridge (the site itself is cross-origin and cannot POST
+    // here directly). Same guard set as update/delete — the host gate plus
+    // same-origin — and the same coded-envelope error contract.
+    disposePackInstall = post('/api/docwright/pack-install', async body => {
+      if (lane.installPack === undefined) throw new CodedError('installLaneMissing', 'the install lane is not wired on this deployment (no packsDir configured); nothing was written')
+      const pack = packName(body)
+      const result = await lane.installPack(pack)
+      return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
+    })
+    disposeSuiteInstall = post('/api/docwright/suite-install', async body => {
+      if (lane.installSuite === undefined) throw new CodedError('installLaneMissing', 'the install lane is not wired on this deployment (no packsDir configured); nothing was written')
+      const suite = suiteName(body)
+      const result = await lane.installSuite(suite)
+      return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
+    })
   }
   return () => {
+    disposeSuiteInstall?.()
+    disposePackInstall?.()
     disposeSuiteDelete?.()
     disposeSuiteUpdate?.()
     disposeSuiteStatus?.()

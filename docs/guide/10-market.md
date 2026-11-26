@@ -2,6 +2,10 @@
 
 pack 市场按关键词分发场景包和套件。安装产物落在部署配置的 `packsDir`，下载逐个做完整性校验，安装完成后包在本会话立即可用，无需重启。市场地址由部署配置的 `marketUrl` 决定（默认 `https://dm.shrwk.com`）；工具不内置任何市场地址，测试与生产市场共用同一套工具。
 
+## 网页里的一键安装
+
+docwright 插件的 Plugins 页有 pack market 栏目，内嵌市场网站。网站页面检测到自己被嵌在 DSH 里（`window.parent !== window`）时，pack 和 suite 详情页会出现"一键安装到本机"按钮：点击后向内嵌它的标签页发安装请求，标签页校验来源是配置的市场地址后，调用插件自己的 `/api/docwright/pack-install`、`/api/docwright/suite-install` 路由完成安装（走与工具完全相同的校验与热重载管线），并把结果回传给页面显示。网站独立打开时不显示该按钮，仍保留会话安装与 CLI 两种方式。
+
 ## 两个市场工具
 
 **doc_market_search**：按关键词搜索市场。查询词由模型把用户意图拆成领域词加文档体裁（英文命中最好，如 "cosmic function point CFP"）；市场在名称、分类和双语描述上做关键词匹配，不做向量检索。返回包卡片（name、version、description、languages、consumes、suites、install 提示）和套件卡片（name、members、install 提示）。市场不可达时报错并给出市场地址，不编造目录内容。limit 参数默认 20，上限 50。

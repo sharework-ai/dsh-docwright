@@ -9,7 +9,7 @@ import { loadPackSet, type PackRootSpec } from './pack-loader.ts'
 import type { Pack } from './pack.ts'
 import { applyDisabled, resolvePacksDir, workspacePackRoots } from './pack-sources.ts'
 import { buildParamsPayload } from './params-rpc.ts'
-import { checkPackUpdates, checkSuiteStatus, deletePack, deleteSuite, marketUrlOf, readSuiteRecord, setPackDisabled, updatePack, updateSuite } from './pack-manage.ts'
+import { checkPackUpdates, checkSuiteStatus, deletePack, deleteSuite, installPack, installSuite, marketUrlOf, readSuiteRecord, setPackDisabled, updatePack, updateSuite } from './pack-manage.ts'
 import { setPackParamDefault, updateConfigViaEditor, type ConfigEditorLike } from './params-writes.ts'
 import { defineDocChainStatusTool, defineDocExtractTool, defineDocGenerateTool, defineDocPacksTool, defineDocValidateTool, defineMarketInstallTool, defineMarketSearchTool } from './tools.ts'
 
@@ -166,6 +166,11 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
         suiteStatus: () => checkSuiteStatus({ packs, packsDir: packsDirConfigured, workspaceRoot: config.workspaceRoot, searchWorkspacePacksUpward: config.searchWorkspacePacksUpward, marketUrl: marketUrlOf(config) }),
         updateSuite: suite => updateSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
         deleteSuite: suite => deleteSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured, cleanupDisabled: names => updateConfigViaEditor(editorOf(), { disabledPacks: pruneDisabled(config, names) }) }, suite),
+        // Market installs (docs/designs/pack-suites.md): the browser market
+        // page's one-click install rides the same verified download +
+        // hot-reload pipeline as the doc_market_install tool.
+        installPack: pack => installPack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack),
+        installSuite: suite => installSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
         // The enable/disable toggle (docs/designs/pack-load-dirs.md 启用与禁用):
         // reads the live disabledPacks array, guards suite members and
         // in-use packs like the delete lanes, persists via the host editor.

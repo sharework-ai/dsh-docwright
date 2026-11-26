@@ -1,6 +1,5 @@
-window.__ModuleLoader__.load({
-	id: "@sharework-ai/dsh-docwright",
-	factory: (require) => {
+window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (require) => {
+
 		var module = { exports: {} };
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
@@ -153,6 +152,22 @@ window.__ModuleLoader__.load({
 				body: JSON.stringify({ suite })
 			}));
 		}
+		/** Install one pack (with its consumed closure) from the market into packsDir. */
+		async function installMarketPack(pack) {
+			return (await parse(await fetch("/api/docwright/pack-install", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ pack })
+			}))).installed;
+		}
+		/** Install every suite member from the market into packsDir. */
+		async function installMarketSuite(suite) {
+			return (await parse(await fetch("/api/docwright/suite-install", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ suite })
+			}))).installed;
+		}
 		//#endregion
 		//#region src/client/icons.ts
 		const DEPENDS_ICON_PATH = "M914.285 292.572h-73.142c-21.943 0-36.571 14.628-36.571 36.571 0 21.942 14.628 36.572 36.571 36.572h73.142c21.943 0 36.572 14.628 36.572 36.57v512c0 21.943-14.629 36.572-36.572 36.572h-512c-21.942 0-36.57-14.629-36.57-36.572V621.716c0-21.943-14.63-36.572-36.572-36.572-21.943 0-36.571 14.629-36.571 36.572v292.568c0 58.515 51.2 109.715 109.713 109.715h512C972.8 1024 1024 972.8 1024 914.285v-512c0-58.513-51.2-109.713-109.715-109.713M694.857 694.857c14.628-14.629 14.628-36.572 0-51.2L380.343 329.143c-14.628-14.628-36.571-14.628-51.2 0-14.628 14.629-14.628 36.572 0 51.2l321.829 321.829c7.313 7.313 29.256 7.313 43.885-7.315m-512-36.572h-73.141c-21.943 0-36.572-14.628-36.572-36.57v-512c0-21.943 14.629-36.572 36.572-36.572h512c21.942 0 36.57 14.629 36.57 36.572v292.569c0 21.943 14.63 36.572 36.572 36.572 21.943 0 36.572-14.629 36.572-36.572V109.716C731.428 51.2 680.228 0 621.716 0h-512C51.2 0 0 51.2 0 109.715v512c0 58.513 51.2 109.713 109.715 109.713h73.142c21.943 0 36.571-14.628 36.571-36.571 0-21.942-14.628-36.572-36.571-36.572";
@@ -180,6 +195,7 @@ window.__ModuleLoader__.load({
 			title: "Docwright parameters",
 			marketTitle: "Docwright pack market",
 			openExternal: "Open in new window ↗",
+			bridgeInstalling: "Installing…",
 			intro: "Maintains the parameter values defined in the plugin and the packs. Parameters obtained during the conversation, from materials or user input, are not managed here.",
 			viewGroups: "Parameters",
 			viewPacks: "Packs",
@@ -285,6 +301,7 @@ window.__ModuleLoader__.load({
 			title: "Docwright 参数",
 			marketTitle: "Docwright pack 市场",
 			openExternal: "在新窗口打开 ↗",
+			bridgeInstalling: "正在安装…",
 			intro: "此处维护插件和包中定义的参数值，不包括那些在会话中从素材或用户输入中获得的参数。",
 			viewGroups: "参数",
 			viewPacks: "包",
@@ -1414,19 +1431,79 @@ window.__ModuleLoader__.load({
 			if (typeof value !== "string" || !/^https:\/\//.test(value)) return void 0;
 			return value.endsWith("/") ? value : `${value}/`;
 		}
+		function isMarketMessage(event, marketOrigin, frame) {
+			if (event.origin !== marketOrigin) return false;
+			if (frame === null || event.source !== frame.contentWindow) return false;
+			const data = event.data;
+			return typeof data === "object" && data !== null && data.source === "docwright-market";
+		}
 		function MarketTab(props) {
 			const t = translate(props.lang === "zh" ? zh : en);
 			const [url, setUrl] = (0, react.useState)(MARKET_URL);
+			const [bridgeStatus, setBridgeStatus] = (0, react.useState)(null);
+			const frameRef = (0, react.useRef)(null);
 			(0, react.useEffect)(() => {
 				fetchParams().then((payload) => {
 					const configured = normalizeMarketUrl(payload.config.find((e) => e.key === "marketUrl")?.value);
 					if (configured !== void 0) setUrl(configured);
 				}).catch(() => {});
 			}, []);
+			const marketOrigin = (() => {
+				try {
+					return new URL(url).origin;
+				} catch {
+					return "";
+				}
+			})();
+			(0, react.useEffect)(() => {
+				if (marketOrigin === "") return;
+				const onMessage = (event) => {
+					if (!isMarketMessage(event, marketOrigin, frameRef.current)) return;
+					const { type, id, kind, name } = event.data;
+					if (type !== "install-request") return;
+					const reply = (message) => {
+						event.source?.postMessage({
+							source: "docwright-market",
+							id,
+							...message
+						}, { targetOrigin: event.origin });
+					};
+					if (typeof id !== "string" || id.length === 0 || kind !== "pack" && kind !== "suite" || typeof name !== "string" || name.length === 0) {
+						reply({
+							type: "install-result",
+							ok: false,
+							message: "malformed install request (need string id, kind \"pack\"|\"suite\", non-empty name)"
+						});
+						return;
+					}
+					reply({ type: "install-accepted" });
+					setBridgeStatus(t("bridgeInstalling"));
+					(kind === "pack" ? installMarketPack(name) : installMarketSuite(name)).then((installed) => {
+						setBridgeStatus(null);
+						reply({
+							type: "install-result",
+							ok: true,
+							installed
+						});
+					}, (error) => {
+						setBridgeStatus(null);
+						reply({
+							type: "install-result",
+							ok: false,
+							message: error instanceof ApiError ? error.message : String(error?.message ?? error)
+						});
+					});
+				};
+				window.addEventListener("message", onMessage);
+				return () => window.removeEventListener("message", onMessage);
+			}, [marketOrigin, t]);
 			return (0, react.createElement)("div", { style: rootStyle }, (0, react.createElement)("div", { style: barStyle }, (0, react.createElement)("span", { style: titleStyle }, t("marketTitle")), (0, react.createElement)("span", { style: {
 				...linkStyle,
 				textDecoration: "none"
-			} }, url.replace(/\/$/, "")), (0, react.createElement)("a", {
+			} }, url.replace(/\/$/, "")), bridgeStatus !== null && (0, react.createElement)(react.Fragment, null, (0, react.createElement)("span", { style: {
+				...linkStyle,
+				color: "var(--dsw-static-blue-500, rgb(59 130 246))"
+			} }, bridgeStatus)), (0, react.createElement)("a", {
 				href: url,
 				target: "_blank",
 				rel: "noreferrer",
@@ -1435,7 +1512,8 @@ window.__ModuleLoader__.load({
 				key: url,
 				src: url,
 				title: t("marketTitle"),
-				style: frameStyle
+				style: frameStyle,
+				ref: frameRef
 			}));
 		}
 		//#endregion

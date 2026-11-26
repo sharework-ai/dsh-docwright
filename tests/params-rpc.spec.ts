@@ -273,8 +273,9 @@ describe('registerTools wiring', () => {
     expect(registered).toContain('doc_market_install')
     // The read catalog plus the two write channels, then the pack lane
     // (always mounted since packsDir has a $DSH_HOME default — six lane
-    // routes plus the disable toggle; docs/designs/pack-load-dirs.md).
-    expect(handlers.length - first).toBe(10)
+    // routes plus the disable toggle and the two install lanes;
+    // docs/designs/pack-load-dirs.md, docs/designs/pack-suites.md).
+    expect(handlers.length - first).toBe(12)
     const [read, configRoute, paramRoute] = handlers.slice(first)
     const res = fakeResMaker()
     await read!({}, res)
@@ -525,8 +526,8 @@ describe('registerTools wiring: the pack lane', () => {
     }
     const laneConfig: Record<string, unknown> = { workspaceRoot: '/w', packsDir: dir, marketUrl: 'http://127.0.0.1:1' }
     await registerTools(ctx as never, laneConfig as never, packsRoot)
-    const paths = ['pack-updates', 'pack-update', 'pack-delete', 'pack-disabled', 'suites', 'suite-update', 'suite-delete']
-    const byPath = (suffix: string) => handlers[handlers.length - 7 + paths.findIndex(p => suffix.endsWith(p))]!
+    const paths = ['pack-updates', 'pack-update', 'pack-delete', 'pack-disabled', 'suites', 'suite-update', 'suite-delete', 'pack-install', 'suite-install']
+    const byPath = (suffix: string) => handlers[handlers.length - 9 + paths.findIndex(p => suffix.endsWith(p))]!
     const fakeRes = () => { const res = { statusCode: 0, body: '', writeHead(s: number) { res.statusCode = s }, end(b: string) { res.body = b } }; return res }
     const req = (method: string, body?: unknown) => ({ method, headers: { origin: 'https://h', host: 'h' }, async *[Symbol.asyncIterator]() { if (body !== undefined) yield Buffer.from(JSON.stringify(body)) } })
 
@@ -583,6 +584,17 @@ describe('registerTools wiring: the pack lane', () => {
     const resSuiteDelete = fakeRes()
     await byPath('suite-delete')(req('POST', { suite: 'gw' }), resSuiteDelete)
     expect(resSuiteDelete.statusCode).toBe(422)
+    // The install lanes ride the same live market: pack-install answers 200
+    // (gw is already at the market version → an unchanged closure), and the
+    // suite install fails coded like the suite update (this fake market
+    // serves binary bytes where the suite detail JSON belongs).
+    const resPackInstall = fakeRes()
+    await byPath('pack-install')(req('POST', { pack: 'gw' }), resPackInstall)
+    expect(resPackInstall.statusCode).toBe(200)
+    expect(JSON.parse(resPackInstall.body)).toMatchObject({ ok: true })
+    const resSuiteInstall = fakeRes()
+    await byPath('suite-install')(req('POST', { suite: 'gw' }), resSuiteInstall)
+    expect(resSuiteInstall.statusCode).toBe(422)
     market.close()
 
     // Delete needs no market: the directory goes, the reload succeeds.
@@ -644,11 +656,11 @@ describe('registerTools wiring: lane gates and bad bodies', () => {
     }
     await registerTools(plainCtx as never, { workspaceRoot: '/w', packsDir: '/tmp/docwright-lane-gate' } as never, packsRoot)
     const resUpdate = fakeRes()
-    await plainHandlers[plainHandlers.length - 5]!(req('POST', {}), resUpdate)
+    await plainHandlers[plainHandlers.length - 8]!(req('POST', {}), resUpdate)
     expect(resUpdate.statusCode).toBe(422)
     expect(JSON.parse(resUpdate.body).code).toBe('invalidParamBody')
     const resSuiteUpdate = fakeRes()
-    await plainHandlers[plainHandlers.length - 2]!(req('POST', {}), resSuiteUpdate)
+    await plainHandlers[plainHandlers.length - 4]!(req('POST', {}), resSuiteUpdate)
     expect(resSuiteUpdate.statusCode).toBe(422)
     expect(JSON.parse(resSuiteUpdate.body).code).toBe('invalidParamBody')
     // A packLane without the suite functions: the status read answers an
@@ -660,8 +672,14 @@ describe('registerTools wiring: lane gates and bad bodies', () => {
       writes: { updateConfig: async () => {}, setPackParamDefault: async () => {}, packLane: { checkUpdates: async () => [], updatePack: async () => ({ version: '1' }), deletePack: async () => {} } },
     })
     const resEmpty = fakeRes()
-    await bareHandlers[bareHandlers.length - 3]!(req('GET'), resEmpty)
+    await bareHandlers[bareHandlers.length - 5]!(req('GET'), resEmpty)
     expect(resEmpty.statusCode).toBe(200)
     expect(JSON.parse(resEmpty.body)).toEqual({ suites: [] })
+    // The install writes on the bare lane fail loud with their own code (no
+    // packsDir on that lane) instead of pretending success.
+    const resBareInstall = fakeRes()
+    await bareHandlers[bareHandlers.length - 2]!(req('POST', { pack: 'x' }), resBareInstall)
+    expect(resBareInstall.statusCode).toBe(422)
+    expect(JSON.parse(resBareInstall.body).code).toBe('installLaneMissing')
   })
 })
