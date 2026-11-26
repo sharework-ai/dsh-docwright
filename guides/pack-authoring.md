@@ -16,8 +16,9 @@ A pack = five aligned contracts plus proof that green is reachable:
 | `samples/golden.params.json` | param values for golden validation (optional) | `pack:check` only |
 
 Optional manifest metadata for the pack market (dm.shrwk.com): `author`
-(display name), `category` (whitelist: `estimation`, `dev`, `pm`, `test`,
-`docs`, `other`), `license` (SPDX: `MIT`, `Apache-2.0`, `BSD-3-Clause`,
+(display name), `category` (whitelist: `general`, `business`, `it`,
+`finance`, `education`, `entertainment`, `media`, `healthcare`, `legal`,
+`engineering`, `other`), `license` (SPDX: `MIT`, `Apache-2.0`, `BSD-3-Clause`,
 `BSD-2-Clause`, `ISC`), `homepage` (URL). The loader ignores unknown keys, so
 these never break loading; the market's submission page reads them from the
 archive and LOCKS them, so include them in `manifest.json` — filling them by

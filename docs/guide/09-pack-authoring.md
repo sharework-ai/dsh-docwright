@@ -32,8 +32,8 @@
 manifest.json 允许携带市场展示用的附加字段，装载期校验只检查已知键、忽略额外键，所以这些字段不影响包加载。市场投稿页（dm.shrwk.com）上传压缩包时会解出 manifest.json，这几个字段读到了就锁定不可改、直接随投稿入库；没写就得在投稿页手工填，所以建议包作者直接写进 manifest：
 
 - `author`：作者显示名（字符串）。市场卡片和详情页的"作者"来自这里。
-- `category`：分类，服务端白名单只有六个值：`estimation`（估算）、`dev`（开发）、`pm`（项目管理）、`test`（测试）、`docs`（文档）、`other`（其他）。写成白名单之外的值投稿页无法锁定，得手工重选。
-- `license`：SPDX 标识符，常用 `MIT`、`Apache-2.0`、`BSD-3-Clause`、`BSD-2-Clause`、`ISC`。
+- `category`：分类，服务端白名单有十一个值：`general`（通用）、`business`（商务）、`it`（信息技术）、`finance`（财经）、`education`（教育）、`entertainment`（娱乐）、`media`（多媒体）、`healthcare`（医疗）、`legal`（法律）、`engineering`（工程）、`other`（其他）。写成白名单之外的值投稿页无法锁定，得手工重选。
+- `license`：SPDX 标识符，常用值如 `MIT`、`Apache-2.0`、`BSD-3-Clause`、`BSD-2-Clause`、`ISC`。
 - `homepage`：项目主页 URL（可选）。
 
 示例：
