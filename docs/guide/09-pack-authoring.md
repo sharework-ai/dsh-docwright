@@ -27,6 +27,33 @@
 
 判定结论要在阶段 5 的产出里明确呈现给用户（建议或建议不定义，附一句话理由），经用户同意才进发布清单。成员清单直接取自包分解结果；suite 本身是表单投稿不是压缩包。
 
+## 市场投稿元数据（manifest 附加字段）
+
+manifest.json 允许携带市场展示用的附加字段，装载期校验只检查已知键、忽略额外键，所以这些字段不影响包加载。市场投稿页（dm.shrwk.com）上传压缩包时会解出 manifest.json，这几个字段读到了就锁定不可改、直接随投稿入库；没写就得在投稿页手工填，所以建议包作者直接写进 manifest：
+
+- `author`：作者显示名（字符串）。市场卡片和详情页的"作者"来自这里。
+- `category`：分类，服务端白名单只有六个值：`estimation`（估算）、`dev`（开发）、`pm`（项目管理）、`test`（测试）、`docs`（文档）、`other`（其他）。写成白名单之外的值投稿页无法锁定，得手工重选。
+- `license`：SPDX 标识符，常用 `MIT`、`Apache-2.0`、`BSD-3-Clause`、`BSD-2-Clause`、`ISC`。
+- `homepage`：项目主页 URL（可选）。
+
+示例：
+
+```json
+{
+  "name": "my-pack",
+  "version": "0.1.0",
+  "description": { "en": "…", "zh": "…" },
+  "languages": ["zh-CN"],
+  "consumes": [],
+  "author": "peng_long",
+  "category": "dev",
+  "license": "MIT",
+  "homepage": "https://github.com/sharework-ai/my-pack"
+}
+```
+
+注意区分：`author` 是 manifest 里的人名展示；市场的 `org` 是发布者组织，来自投稿账号的设置，与 manifest 无关。市场卡片上的全限定名是 `org/name@version`，suite 同理为 `org/suite-name@version`。suite 投稿是表单（维护页选成员），没有压缩包，元数据在维护页填写。
+
 ## rules/functions.js 写法
 
 函数规则是 Node 原生 ESM JavaScript，无构建步骤、无 TypeScript、无 npm 依赖。文件导出 `rules` 数组：

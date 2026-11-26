@@ -15,6 +15,16 @@ A pack = five aligned contracts plus proof that green is reachable:
 | `samples/golden.json` | proof that a compliant document exists | `pack:check`, tests |
 | `samples/golden.params.json` | param values for golden validation (optional) | `pack:check` only |
 
+Optional manifest metadata for the pack market (dm.shrwk.com): `author`
+(display name), `category` (whitelist: `estimation`, `dev`, `pm`, `test`,
+`docs`, `other`), `license` (SPDX: `MIT`, `Apache-2.0`, `BSD-3-Clause`,
+`BSD-2-Clause`, `ISC`), `homepage` (URL). The loader ignores unknown keys, so
+these never break loading; the market's submission page reads them from the
+archive and LOCKS them, so include them in `manifest.json` — filling them by
+hand on the submit page is the fallback, not the norm. The market `org` shown
+on cards (`org/name@version`) comes from the submitter's account, not the
+manifest.
+
 The engine gives you for free: the closed repair loop (generate → validate →
 fix, with convergence detection and budgets), replayable receipts, the
 confirmation gate for params, chain verification of upstream green artifacts,
@@ -420,6 +430,11 @@ shape; no validation semantics.
 - `description`: bilingual (`{ "en": "...", "zh": "..." }`); the `en` line is
   what the model sees in `doc_packs` — state what the pack generates, what it
   consumes, and its granularity, in one sentence.
+- Market metadata lives IN the manifest (see the table above): `author`,
+  `category`, `license`, `homepage`. The submission page locks whatever it
+  reads from the archive, so write these before packing — a missing `author`
+  or an out-of-whitelist `category` means hand-filling them on the submit
+  page.
 - Repository lane: feature branch, full gates (tests, coverage, typecheck,
   build), merge, README/manual section, changelog entry. packsDir lane: the
   health sheet from `pack:check` plus the real e2e observation log are the
