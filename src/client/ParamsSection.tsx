@@ -310,6 +310,18 @@ function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 
 
 /** Which installed suites a pack belongs to, keyed by pack name (derived
  * once per suites fetch; a pure display marker on the pack card). */
+/** Trigger a same-origin ZIP download (the packaging route answers the raw
+ * bytes; an <a download> anchor would work too, but a Button keeps the card
+ * actions uniform). */
+function downloadZipFile(url: string, filename: string): void {
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
 function suitesByPack(rows: readonly UiSuiteStatus[]): ReadonlyMap<string, readonly string[]> {
   const map = new Map<string, string[]>()
   for (const suite of rows) {
@@ -513,7 +525,7 @@ function PackLaneActions(props: {
       checkLabel),
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
       armed === 'delete' ? (props.consumers.length > 0 ? fill(t('confirmDeleteBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDelete')) : t('deleteBtn')),
-    h('a', { href: `/api/docwright/pack-zip?pack=${encodeURIComponent(props.pack.name)}`, download: `${props.pack.name}.zip`, title: t('zipBtn'), style: { fontSize: '0.82rem', color: 'var(--dsw-alias-label-secondary, inherit)', textDecoration: 'none', cursor: 'pointer' } }, t('zipBtn')),
+    h(Button, { size: 'sm', variant: 'ghost', title: t('zipBtn'), onClick: () => downloadZipFile(`/api/docwright/pack-zip?pack=${encodeURIComponent(props.pack.name)}`, `${props.pack.name}.zip`) }, t('zipBtn')),
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy,
       onClick: () => {
         const kind = props.disabled ? 'enable' : 'disable'
@@ -611,7 +623,7 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
       h('div', { style: actions },
         h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
         h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
-          armedDelete ? t('cancel') : t('deleteBtn')),        h('a', { href: `/api/docwright/suite-zip?suite=${encodeURIComponent(suite.name)}`, download: `${suite.name}.zip`, title: t('zipBtn'), style: { fontSize: '0.82rem', color: 'var(--dsw-alias-label-secondary, inherit)', textDecoration: 'none', cursor: 'pointer' } }, t('zipBtn')),
+          armedDelete ? t('cancel') : t('deleteBtn')),        h(Button, { size: 'sm', variant: 'ghost', title: t('zipBtn'), onClick: () => downloadZipFile(`/api/docwright/suite-zip?suite=${encodeURIComponent(suite.name)}`, `${suite.name}.zip`) }, t('zipBtn')),
         busy ? h('span', { style: smallMuted }, t('saving')) : null,
         done !== undefined && !busy ? h('span', { style: smallMuted }, done) : null,
         rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null),
