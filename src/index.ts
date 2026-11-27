@@ -177,9 +177,24 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
         // author's re-submission source); a suite is fetched from the market
         // (root manifest + member tarballs unpacked here via node:zlib).
         zipPack: async pack => {
-          const target = packs.get(pack)
-          const dir = target?.dir
-          if (!dir) throw new Error(`pack "${pack}" is not loaded from a local directory`)
+          // Prefer the loaded pack's own directory; fall back to a manifest
+          // scan of the packsDir (a pack that failed to load — or was
+          // disabled — is still zip-able from disk for a re-submission).
+          let dir = packs.get(pack)?.dir
+          if (!dir && packsDirConfigured) {
+            const { readdir } = await import('node:fs/promises')
+            const { readFile } = await import('node:fs/promises')
+            const { join } = await import('node:path')
+            for (const dirent of await readdir(packsDirConfigured, { withFileTypes: true })) {
+              if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+              const candidate = join(packsDirConfigured, dirent.name)
+              try {
+                const manifest = JSON.parse(await readFile(join(candidate, 'manifest.json'), 'utf8'))
+                if (manifest.name === pack) { dir = candidate; break }
+              } catch { /* not a pack directory */ }
+            }
+          }
+          if (!dir) throw new Error(`pack "${pack}" was not found under the configured packsDir`)
           const entries = await packEntriesFromDir(dir)
           return makeZipSync(entries)
         },

@@ -597,11 +597,6 @@ describe('registerTools wiring: the pack lane', () => {
     expect(resSuiteInstall.statusCode).toBe(422)
     market.close()
 
-    // Delete needs no market: the directory goes, the reload succeeds.
-    const resDelete = fakeRes()
-    await byPath('pack-delete')(req('POST', { pack: 'gw' }), resDelete)
-    expect(resDelete.statusCode).toBe(200)
-    expect(JSON.parse(resDelete.body)).toEqual({ ok: true })
 
     // Settings-page packaging: pack-zip answers the LOCAL pack directory
     // (gw seeded above) as raw zip bytes — no market involved.
@@ -617,6 +612,13 @@ describe('registerTools wiring: the pack lane', () => {
     const resZipBad = fakeRes()
     await byPath('pack-zip')(req('GET'), resZipBad)
     expect(resZipBad.statusCode).toBe(400)
+
+    // Delete needs no market: the directory goes, the reload succeeds.
+    const resDelete = fakeRes()
+    await byPath('pack-delete')(req('POST', { pack: 'gw' }), resDelete)
+    expect(resDelete.statusCode).toBe(200)
+    expect(JSON.parse(resDelete.body)).toEqual({ ok: true })
+
 
     await rm(dir, { recursive: true, force: true })
   })
