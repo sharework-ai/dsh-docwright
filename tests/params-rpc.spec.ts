@@ -603,6 +603,21 @@ describe('registerTools wiring: the pack lane', () => {
     expect(resDelete.statusCode).toBe(200)
     expect(JSON.parse(resDelete.body)).toEqual({ ok: true })
 
+    // Settings-page packaging: pack-zip answers the LOCAL pack directory
+    // (gw seeded above) as raw zip bytes — no market involved.
+    const resZip = fakeRes()
+    const zipReq = { ...req('GET'), url: '/api/docwright/pack-zip?pack=gw' }
+    await byPath('pack-zip')(zipReq, resZip)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(resZip.statusCode).toBe(200)
+    const zipBytes = Buffer.from(resZip.body, 'binary')
+    expect(zipBytes.subarray(0, 4).readUInt32LE(0)).toBe(0x04034b50)
+    expect(zipBytes.subarray(zipBytes.length - 22).readUInt32LE(0)).toBe(0x06054b50)
+    // a missing ?pack= names the query shape (400)
+    const resZipBad = fakeRes()
+    await byPath('pack-zip')(req('GET'), resZipBad)
+    expect(resZipBad.statusCode).toBe(400)
+
     await rm(dir, { recursive: true, force: true })
   })
 })
