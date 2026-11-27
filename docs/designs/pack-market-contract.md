@@ -30,7 +30,7 @@ UI 文案、市场 JSON、文档一律用这组词：不要混用 "name/标题/�
 - `license: string` — SPDX（`MIT`、`Apache-2.0`、`BSD-3-Clause`、`BSD-2-Clause`、`ISC`）
 - `homepage: string` — http(s) URL
 - `title: { en: string, zh?: string }` — 多语言标题（可选）
-- `suite: string` — 所属套件的 code（可选）。装载期只校验 kebab-case 形状；市场在**套件发布时统一改写**：把该套件全部成员置为该套件，把 `suite` 仍指向本套件但已不在成员名单里的 pack 清空。成员关系因此是「pack 上的声明 + 发布时的物化」，读取端不再现场演算（旧读法 `membership_map` 保留作兼容兜底）。
+- `suite: string` — 所属套件，**写全限定名 `org/suite-code`**（作者只写 code 时，市场在发布时用 pack 自己的 org 补全；装载期只校验 code 形状）。市场在**套件发布时统一物化**：成员全部置为 `org/套件code`，`suite` 仍指向本套件但已不在成员名单的 pack 清空。套件行自带 `org` 字段（发布者组织，发布时从账号组织取），因此 `/api/suites` 与 pack 详情都能给出全限定身份。
 - `assets: { icon?: string, images?: string[] }` — 展示资产（可选）。路径相对 pack 根目录，按约定放在 `assets/` 下；装载期校验形状（不得以 `/` 开头、不得含 `..`）。资产**仍随包 tgz 分发**：市场页面在浏览器里解 tgz 取图，服务端不存资产副本。
 
 市场的 `org` 不在 manifest——来自投稿账号的发布者组织。卡片全限定名 `org/name@version`（suite 同理）。
