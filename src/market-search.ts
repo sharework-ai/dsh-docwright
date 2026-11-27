@@ -6,16 +6,25 @@ import type { LocalizedText } from './description.ts'
  * Division of labor: the MODEL decomposes the user's need into query terms
  * (it reads the intent; "split by function point, check data-movement types,
  * control CFP" becomes e.g. "cosmic function point CFP"); the MARKET does
- * traditional keyword matching (ILIKE over name, category, and both
+ * traditional keyword matching (ILIKE over name, tags, and both
  * description languages — no vectors at catalog scale). The tool fails loud
  * with problem+cause+fix when the market is unreachable: the model relays
  * that, it never guesses catalog contents.
  */
 
+/** Tags as a string array; a legacy single `category` string degrades to a
+ * one-element array so old markets keep rendering (shared contract — see the
+ * tag list in both repos' docs; read defensively at every boundary). */
+function tagsOf(row: { tags?: unknown; category?: unknown }): string[] {
+  if (Array.isArray(row.tags)) return row.tags.filter((t): t is string => typeof t === 'string')
+  return typeof row.category === 'string' && row.category.length > 0 ? [row.category] : []
+}
+
 interface MarketPackRow {
   name?: unknown
   version?: unknown
   description?: unknown
+  tags?: unknown
   category?: unknown
   author?: unknown
   org?: unknown
@@ -33,6 +42,7 @@ interface MarketSuiteRow {
   name?: unknown
   version?: unknown
   description?: unknown
+  tags?: unknown
   category?: unknown
   members?: unknown
 }
@@ -42,7 +52,7 @@ export type MarketSuiteCard = {
   name: string
   version: string
   description: string
-  category: string
+  tags: string[]
   members: string[]
   install: string
 }
@@ -52,7 +62,7 @@ export type MarketPackCard = {
   name: string
   version: string
   description: string
-  category: string
+  tags: string[]
   author: string
   license: string
   languages: string[]
@@ -110,7 +120,7 @@ export async function searchMarket(deps: {
     name: asString(row.name),
     version: asString(row.version),
     description: resolveLocalized(row.description as LocalizedText | undefined, 'en'),
-    category: asString(row.category),
+    tags: tagsOf(row),
     author: asString(row.author),
     license: asString(row.license),
     languages: asStringArray(row.languages),
@@ -138,11 +148,11 @@ async function suiteRowsOf(marketUrl: string, fetchImpl: typeof fetch): Promise<
 }
 
 /** Free-text matching over a suite card: every whitespace-separated term must
- * appear in the name, the category, either description language, or a MEMBER
+ * appear in the name, the tags, either description language, or a MEMBER
  * pack name — suite members are hidden from the market's pack listing, so a
  * member-name query must still land on its suite. */
 function suiteMatches(row: MarketSuiteRow, terms: readonly string[]): boolean {
-  const haystack = [asString(row.name), asString(row.category),
+  const haystack = [asString(row.name), tagsOf(row).join(' '),
     typeof row.description === 'string' ? row.description
       : typeof row.description === 'object' && row.description !== null
         ? `${(row.description as Record<string, unknown>).en ?? ''} ${(row.description as Record<string, unknown>).zh ?? ''}`
@@ -161,7 +171,7 @@ async function suiteCardsFor(deps: { readonly marketUrl: string; readonly fetchI
     name: asString(row.name),
     version: asString(row.version),
     description: resolveLocalized(row.description as LocalizedText | undefined, 'en'),
-    category: asString(row.category),
+    tags: tagsOf(row),
     members: asStringArray(row.members),
     install: suiteInstallHint.replace('<name>', asString(row.name)),
   })).filter(c => c.name.length > 0 && c.members.length > 0)

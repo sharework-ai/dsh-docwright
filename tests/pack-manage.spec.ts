@@ -939,7 +939,7 @@ describe('checkSuiteStatus', () => {
     const market = await suiteMarketServer(
       [{ name: 'ext', version: '2', dir: v2Dir }],
       [{
-        name: 'cosmic', version: '3', category: 'estimation',
+        name: 'cosmic', version: '3', tags: ['business'],
         description: { en: 'COSMIC suite', zh: 'COSMIC 套件' },
         members: ['ext', 'wp', 'ghost'],
       }],
@@ -948,7 +948,7 @@ describe('checkSuiteStatus', () => {
     const suites = await checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: market.url })
     expect(suites).toHaveLength(1)
     const suite = suites[0]!
-    expect(suite).toMatchObject({ name: 'cosmic', version: '3', category: 'estimation', incomplete: true, updateAvailable: true })
+    expect(suite).toMatchObject({ name: 'cosmic', version: '3', tags: ['business'], incomplete: true, updateAvailable: true })
     expect(suite.members).toEqual([
       { name: 'ext', localVersion: '1', marketVersion: '2', missing: false, updateAvailable: true },
       // wp is a BUILTIN fixture pack — suite placement is the packsDir scan,

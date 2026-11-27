@@ -156,3 +156,7 @@ request that never names the pack must find it via `doc_packs` and generate gree
    `topicNoPattern` param degrades silently to timestamp names — `pack:check`
    fails the pairing; fix by declaring the pattern at the chain head or
    dropping the prefix.
+
+## Pack/suite 数据契约（跨仓库）
+
+pack 和 suite 的数据结构（manifest 字段、市场 API 的 index/suite/pack 形状、`tags` 数组等）被本插件、市场后端（`~/projects/lab/dsh-docwright-market/server-rs`）、市场前端（同仓库 `web/`）三方共享。**唯一事实源：`docs/designs/pack-market-contract.md`**——改任何字段前先读它；改完必须同步：本仓库（类型 + assertManifest + 测试）、server-rs（结构 + SQL + 迁移 + 测试）、web（页面 + fixture）、契约文档，四处一起改。历史上 category→tags、软件研发→it 两轮都出现过某端静默漏改的 bug——动手前先盘点所有消费点，改完用 assert 式替换并全量跑测试。

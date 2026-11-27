@@ -682,6 +682,14 @@ export async function deletePack(deps: {
 }
 
 /** One market suite record (GET /api/suites rows and /api/suites/{name}). */
+/** Tags as a string array; a legacy single `category` string degrades to a
+ * one-element array (market contract: the server may be older than the
+ * plugin — read defensively at every boundary). */
+function tagsOf(record: { tags?: unknown; category?: unknown }): string[] {
+  if (Array.isArray(record.tags)) return record.tags.filter((t): t is string => typeof t === 'string')
+  return typeof record.category === 'string' && record.category.length > 0 ? [record.category] : []
+}
+
 interface MarketSuiteRecord {
   readonly name?: unknown
   readonly version?: unknown
@@ -694,7 +702,8 @@ export interface SuiteDetail {
   readonly name: string
   readonly version: string
   readonly description: unknown
-  readonly category: string
+  /** Domain tags; legacy single-category markets degrade to one element. */
+  readonly tags: readonly string[]
   readonly members: readonly string[]
 }
 
@@ -703,7 +712,7 @@ function suiteRecordOf(record: MarketSuiteRecord): SuiteDetail {
     name: typeof record.name === 'string' ? record.name : '',
     version: typeof record.version === 'string' ? record.version : '',
     description: record.description,
-    category: typeof record.category === 'string' ? record.category : '',
+    tags: tagsOf(record),
     members: Array.isArray(record.members) ? record.members.filter((m): m is string => typeof m === 'string') : [],
   }
 }
@@ -924,7 +933,7 @@ export interface SuiteStatus {
   readonly name: string
   readonly version: string
   readonly description: unknown
-  readonly category: string
+  readonly tags: readonly string[]
   readonly members: readonly SuiteMemberStatus[]
   /** True when at least one member pack is not installed. */
   readonly incomplete: boolean
@@ -999,7 +1008,7 @@ export async function checkSuiteStatus(deps: {
       name: suite.name,
       version: suite.version,
       description: suite.description,
-      category: suite.category,
+      tags: suite.tags,
       members,
       incomplete: members.some(m => m.localVersion === undefined),
       updateAvailable: members.some(m => m.updateAvailable),
@@ -1037,7 +1046,7 @@ function statusesFromRecord(record: readonly LocalSuiteEntry[], marketVersions: 
       name: entry.name,
       version: entry.version,
       description: {},
-      category: '',
+      tags: [],
       members,
       incomplete: false,
       updateAvailable: false,

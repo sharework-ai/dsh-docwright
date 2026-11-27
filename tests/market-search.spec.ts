@@ -7,7 +7,7 @@ const CATALOG = {
       name: 'cosmic-plan',
       version: '0.7.1',
       description: { en: 'COSMIC function-point estimation plan', zh: 'COSMIC 功能点估算计划' },
-      category: 'estimation',
+      tags: ['business'],
       author: 'peng_long',
       license: 'MIT',
       consumes: ['cosmic-context'],
@@ -29,7 +29,7 @@ describe('searchMarket', () => {
       name: 'cosmic-plan',
       version: '0.7.1',
       description: 'COSMIC function-point estimation plan',
-      category: 'estimation',
+      tags: ['business'],
       consumes: ['cosmic-context'],
       requiresTopic: true,
       artifactPrefix: 'PLAN',
@@ -98,15 +98,15 @@ describe('searchMarket: suites', () => {
       { name: 'solo', version: '1', description: { en: 'solo' } },
     ],
     suites: [
-      { name: 'cosmic', version: '2', description: { en: 'the COSMIC suite', zh: 'COSMIC 套件' }, category: 'estimation', members: ['cosmic-plan', 'cosmic-req'] },
-      { name: 'other', version: '1', description: { en: 'unrelated' }, category: 'other', members: ['x'] },
+      { name: 'cosmic', version: '2', description: { en: 'the COSMIC suite', zh: 'COSMIC 套件' }, tags: ['business'], members: ['cosmic-plan', 'cosmic-req'] },
+      { name: 'other', version: '1', description: { en: 'unrelated' }, tags: ['other'], members: ['x'] },
     ],
   }
 
   it('returns suite cards hit by the query and the suites each pack belongs to', async () => {
     const result = await searchMarket({ marketUrl: 'https://market.test', fetchImpl: okFetch(catalogWithSuites) }, 'cosmic')
     expect(result.suites).toHaveLength(1)
-    expect(result.suites[0]).toMatchObject({ name: 'cosmic', version: '2', description: 'the COSMIC suite', category: 'estimation', members: ['cosmic-plan', 'cosmic-req'] })
+    expect(result.suites[0]).toMatchObject({ name: 'cosmic', version: '2', description: 'the COSMIC suite', tags: ['business'], members: ['cosmic-plan', 'cosmic-req'] })
     expect(result.suites[0].install).toContain('"suite"')
     expect(result.suites[0].install).toContain('cosmic')
     expect(result.packs.find(p => p.name === 'cosmic-plan')?.suites).toEqual(['cosmic', 'pro'])

@@ -179,7 +179,7 @@ export interface UiSuiteStatus {
   name: string
   version: string
   description: LocalizedText
-  category: string
+  tags: string[]
   members: readonly UiSuiteMember[]
   incomplete: boolean
   updateAvailable: boolean
