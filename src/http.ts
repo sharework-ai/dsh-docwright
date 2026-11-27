@@ -99,6 +99,9 @@ export interface WriteChannels {
     /** Market installs (docs/designs/pack-suites.md install lanes): one pack with its consumed closure, or every suite member. Optional — deployments without a packsDir never install. */
     readonly installPack?: (pack: string) => Promise<unknown>
     readonly installSuite?: (suite: string) => Promise<unknown>
+    /** Settings-page packaging (submit round-trip): a pack zips its LOCAL directory, a suite zips the market's suite + member tarballs. Return raw zip bytes. */
+    readonly zipPack?: (pack: string) => Promise<Uint8Array>
+    readonly zipSuite?: (suite: string) => Promise<Uint8Array>
   } | undefined
 }
 
@@ -116,6 +119,8 @@ export interface WriteChannels {
  * - `POST /api/docwright/suite-delete` — `{ suite }` deletes the suite's installed members (all of them).
  * - `POST /api/docwright/pack-install` — `{ pack }` installs one pack (with its consumed closure) from the market into packsDir.
  * - `POST /api/docwright/suite-install` — `{ suite }` installs every suite member from the market.
+ * - `GET  /api/docwright/pack-zip?pack=` — the local pack directory as a ZIP (settings-page packaging).
+ * - `GET  /api/docwright/suite-zip?suite=` — the market suite plus member tarballs as a ZIP.
  */
 export function mountParamsRoutes(
   webServer: WebServerLike,
@@ -206,6 +211,8 @@ export function mountParamsRoutes(
   let disposeSuiteDelete: (() => void) | undefined
   let disposePackInstall: (() => void) | undefined
   let disposeSuiteInstall: (() => void) | undefined
+  let disposePackZip: (() => void) | undefined
+  let disposeSuiteZip: (() => void) | undefined
   if (deps.writes!.packLane !== undefined) {
     const lane = deps.writes!.packLane
     const packName = (body: unknown): string => {
@@ -318,8 +325,48 @@ export function mountParamsRoutes(
       const result = await lane.installSuite(suite)
       return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
     })
+    // Packaging for the market's submit flow: the browser downloads the zip
+    // bytes as a file (same layout the market's download buttons produce).
+    const zipGet = (path: string, kind: 'pack' | 'suite') =>
+      webServer.register({
+        kind: 'exact',
+        path,
+        handler: (request, response) => {
+          const rejected = hostRejection(deps.connection?.(), request)
+          if (rejected !== undefined) {
+            sendJson(response, rejected, errorEnvelope(new CodedError('gateRejected', `request rejected by the host gate (status ${rejected})`, { params: { status: rejected } })))
+            return
+          }
+          const url = new URL(request.url ?? '', 'http://local')
+          const code = url.searchParams.get(kind) ?? ''
+          if (!code) {
+            sendJson(response, 400, errorEnvelope(new CodedError('invalidParamBody', `query must include ?${kind}=<name>`)))
+            return
+          }
+          const build = kind === 'pack' ? lane.zipPack?.(code) : lane.zipSuite?.(code)
+          if (build === undefined) {
+            sendJson(response, 422, errorEnvelope(new CodedError('installLaneMissing', 'the packaging lane is not wired on this deployment')))
+            return
+          }
+          void build.then(
+            bytes => {
+              response.writeHead(200, {
+                'content-type': 'application/zip',
+                'content-disposition': `attachment; filename="${code}.zip"`,
+                'cache-control': 'no-store',
+              })
+              response.end(Buffer.from(bytes))
+            },
+            error => sendJson(response, 422, errorEnvelope(error)),
+          )
+        },
+      })
+    disposePackZip = zipGet('/api/docwright/pack-zip', 'pack')
+    disposeSuiteZip = zipGet('/api/docwright/suite-zip', 'suite')
   }
   return () => {
+    disposeSuiteZip?.()
+    disposePackZip?.()
     disposeSuiteInstall?.()
     disposePackInstall?.()
     disposeSuiteDelete?.()

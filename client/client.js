@@ -195,6 +195,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			title: "Docwright parameters",
 			marketTitle: "Docwright pack market",
 			openExternal: "Open in new window ↗",
+			zipBtn: "Package ZIP",
 			bridgeInstalling: "Installing…",
 			intro: "Maintains the parameter values defined in the plugin and the packs. Parameters obtained during the conversation, from materials or user input, are not managed here.",
 			viewGroups: "Parameters",
@@ -301,6 +302,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			title: "Docwright 参数",
 			marketTitle: "Docwright pack 市场",
 			openExternal: "在新窗口打开 ↗",
+			zipBtn: "打包 ZIP",
 			bridgeInstalling: "正在安装…",
 			intro: "此处维护插件和包中定义的参数值，不包括那些在会话中从素材或用户输入中获得的参数。",
 			viewGroups: "参数",
@@ -1001,7 +1003,17 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => armed === "delete" ? run("delete") : setArmed("delete")
-			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			}, armed === "delete" ? props.consumers.length > 0 ? fill(t("confirmDeleteBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDelete") : t("deleteBtn")), (0, react.createElement)("a", {
+				href: `/api/docwright/pack-zip?pack=${encodeURIComponent(props.pack.name)}`,
+				download: `${props.pack.name}.zip`,
+				title: t("zipBtn"),
+				style: {
+					fontSize: "0.82rem",
+					color: "var(--dsw-alias-label-secondary, inherit)",
+					textDecoration: "none",
+					cursor: "pointer"
+				}
+			}, t("zipBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
@@ -1133,7 +1145,17 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				disabled: busy,
 				onClick: () => setArmedDelete((v) => !v)
-			}, armedDelete ? t("cancel") : t("deleteBtn")), busy ? (0, react.createElement)("span", { style: smallMuted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: smallMuted }, done) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
+			}, armedDelete ? t("cancel") : t("deleteBtn")), (0, react.createElement)("a", {
+				href: `/api/docwright/suite-zip?suite=${encodeURIComponent(suite.name)}`,
+				download: `${suite.name}.zip`,
+				title: t("zipBtn"),
+				style: {
+					fontSize: "0.82rem",
+					color: "var(--dsw-alias-label-secondary, inherit)",
+					textDecoration: "none",
+					cursor: "pointer"
+				}
+			}, t("zipBtn")), busy ? (0, react.createElement)("span", { style: smallMuted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: smallMuted }, done) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
 				error,
 				lang: props.lang
 			}) : null), armedDelete ? (0, react.createElement)("div", { style: {

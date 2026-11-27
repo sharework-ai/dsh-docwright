@@ -10,6 +10,8 @@ import type { Pack } from './pack.ts'
 import { applyDisabled, resolvePacksDir, workspacePackRoots } from './pack-sources.ts'
 import { buildParamsPayload } from './params-rpc.ts'
 import { checkPackUpdates, checkSuiteStatus, deletePack, deleteSuite, installPack, installSuite, marketUrlOf, readSuiteRecord, setPackDisabled, updatePack, updateSuite } from './pack-manage.ts'
+import { packEntriesFromDir, packEntriesFromMarket, suiteZipBytes } from './pack-zip.ts'
+import { makeZipSync } from './pack-zip.ts'
 import { setPackParamDefault, updateConfigViaEditor, type ConfigEditorLike } from './params-writes.ts'
 import { defineDocChainStatusTool, defineDocExtractTool, defineDocGenerateTool, defineDocPacksTool, defineDocValidateTool, defineMarketInstallTool, defineMarketSearchTool } from './tools.ts'
 
@@ -171,6 +173,17 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
         // hot-reload pipeline as the doc_market_install tool.
         installPack: pack => installPack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack),
         installSuite: suite => installSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
+        // Settings-page packaging: a pack zips its LOCAL directory (the
+        // author's re-submission source); a suite is fetched from the market
+        // (root manifest + member tarballs unpacked here via node:zlib).
+        zipPack: async pack => {
+          const target = packs.get(pack)
+          const dir = target?.dir
+          if (!dir) throw new Error(`pack "${pack}" is not loaded from a local directory`)
+          const entries = await packEntriesFromDir(dir)
+          return makeZipSync(entries)
+        },
+        zipSuite: suite => suiteZipBytes(marketUrlOf(config), suite, fetch),
         // The enable/disable toggle (docs/designs/pack-load-dirs.md 启用与禁用):
         // reads the live disabledPacks array, guards suite members and
         // in-use packs like the delete lanes, persists via the host editor.
