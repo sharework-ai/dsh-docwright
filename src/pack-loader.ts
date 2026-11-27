@@ -183,6 +183,25 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
   if (m.materialsRoot !== undefined && (typeof m.materialsRoot !== 'string' || m.materialsRoot.length === 0 || isAbsolute(m.materialsRoot) || m.materialsRoot.split('/').includes('..'))) {
     throw new Error(`pack ${dir}: manifest.materialsRoot must be a workspace-relative directory path without ".." when present`)
   }
+  if (m.title !== undefined) assertLocalizedText(m.title, `pack ${dir}: manifest.title`)
+  if (m.suite !== undefined && (typeof m.suite !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(m.suite))) {
+    throw new Error(`pack ${dir}: manifest.suite must be a suite code (lowercase kebab-case, up to 64 chars) when present`)
+  }
+  if (m.assets !== undefined) {
+    const assets = m.assets as Partial<NonNullable<PackManifest['assets']>> | null
+    if (typeof assets !== 'object' || assets === null) throw new Error(`pack ${dir}: manifest.assets must be an object { icon?, images? }`)
+    const relAsset = (value: unknown, what: string): string => {
+      if (typeof value !== 'string' || value.length === 0 || value.startsWith('/') || value.includes('..')) {
+        throw new Error(`pack ${dir}: manifest.assets.${what} must be a pack-relative path without leading '/' or '..'`)
+      }
+      return value
+    }
+    if (assets.icon !== undefined) relAsset(assets.icon, 'icon')
+    if (assets.images !== undefined) {
+      if (!Array.isArray(assets.images)) throw new Error(`pack ${dir}: manifest.assets.images must be an array of pack-relative paths`)
+      for (const image of assets.images) relAsset(image, 'images[]')
+    }
+  }
   if (m.artifactPrefix !== undefined && (typeof m.artifactPrefix !== 'string' || !/^[A-Za-z0-9-]{1,12}$/.test(m.artifactPrefix))) {
     throw new Error(`pack ${dir}: manifest.artifactPrefix must be a 1-12 char [A-Za-z0-9-] string when present`)
   }

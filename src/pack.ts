@@ -157,6 +157,24 @@ export interface PackManifest {
    * ones `<prefix>-<topicNo>`; absent keeps `<pack>-<funcId>` / timestamp.
    */
   readonly artifactPrefix?: string | undefined
+  /**
+   * Multilingual display title (the pack's NAME in UI terms — `name` above is
+   * the machine CODE). Optional; surfaces fall back to `name` when absent.
+   * Market metadata only: the loader passes it through, the market locks it.
+   */
+  readonly title?: LocalizedText | undefined
+  /**
+   * The suite this pack belongs to (suite CODE = the suite's `name`), when the
+   * pack is a suite member. The market sets/clears the stored flag when a
+   * suite is published — the manifest value is the author's declaration.
+   */
+  readonly suite?: string | undefined
+  /**
+   * Presentational assets shipped inside the pack directory (paths relative to
+   * the pack root, conventionally under `assets/`): an icon and any number of
+   * explanatory images the market pages may render.
+   */
+  readonly assets?: { readonly icon?: string; readonly images?: readonly string[] } | undefined
   /** Declared tunables; declaration is the allowlist — undeclared names are rejected at call time. */
   readonly params?: Readonly<Record<string, ParamSpec>> | undefined
 }

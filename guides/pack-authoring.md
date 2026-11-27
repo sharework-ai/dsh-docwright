@@ -19,7 +19,12 @@ Optional manifest metadata for the pack market (dm.shrwk.com): `author`
 (display name), `tags` (ARRAY — multi-select; whitelist: `general`, `business`, `it`,
 `finance`, `education`, `entertainment`, `media`, `healthcare`, `legal`,
 `engineering`, `other`), `license` (SPDX: `MIT`, `Apache-2.0`, `BSD-3-Clause`,
-`BSD-2-Clause`, `ISC`), `homepage` (URL). The loader ignores unknown keys, so
+`BSD-2-Clause`, `ISC`), `homepage` (URL), `title` (multilingual display title —
+`name` is the CODE, `title` the human name; the market falls back to `name`),
+`suite` (the suite code this pack belongs to; the market materializes
+membership when a suite is published — never hand-edit it), and `assets`
+(`{ icon?, images? }` — pack-relative paths under `assets/`, shipped inside
+the tarball and rendered by the market pages). The loader ignores unknown keys, so
 these never break loading; the market's submission page reads them from the
 archive and LOCKS them, so include them in `manifest.json` — filling them by
 hand on the submit page is the fallback, not the norm. The market `org` shown

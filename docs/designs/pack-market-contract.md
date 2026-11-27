@@ -8,6 +8,17 @@ pack 和 suite 的数据结构被三个代码库共享，**任何字段变更必
 | 市场后端（存储 + HTTP） | `~/projects/lab/dsh-docwright-market` | `server-rs/src/api/{packs,suites,submissions,owner,admin}.rs`、`supabase/migrations/` |
 | 市场前端（浏览 + 投稿） | 同上 | `web/assets/app.js`、`web/*.html` |
 
+## 术语（三端统一用词）
+
+| 概念 | 字段 | 说明 |
+|---|---|---|
+| **code** | `name` | 英文机器标识（小写 kebab-case）。字段名保留 `name`：它是 docwright 全链路的身份（目录名、`consumes`、产物命名、packsDir、suites.json），改名无收益且破坏兼容。文档与 UI 里称它为 code。 |
+| **title** | `title` | 多语言显示标题（`{en, zh}`，可选）。市场标题显示它，缺省回落 `name`。pack 与 suite 都有。 |
+| **description** | `description` | 多语言描述（`{en, zh}`，en 必填）。 |
+| **全限定名** | — | `<org>/<name>@<version>`；org 来自投稿账号，不在 manifest 里。 |
+
+UI 文案、市场 JSON、文档一律用这组词：不要混用 "name/标题/名字"，不要新增 `title` 以外的别名。
+
 ## Pack manifest（manifest.json）
 
 装载期必填（`assertManifest` 校验，缺失即 fail loud）：`name`、`version`、`description`（双语，en 必有）、`languages`（非空数组）、`consumes`（数组，可为空）。可选插件语义键：`scope`、`reuse`、`fanout`、`maxRounds`、`paramDriftPolicy`、`materialsRoot`、`requiresTopic`、`artifactPrefix`、`params`。
@@ -18,6 +29,9 @@ pack 和 suite 的数据结构被三个代码库共享，**任何字段变更必
 - `tags: string[]` — 领域标签数组（v2 起；v1 的单选 `category` 已废弃）。白名单（服务端 `TAG_WHITELIST`，投稿/编辑/套件三入口共用）：`general`、`business`、`it`、`finance`、`education`、`entertainment`、`media`、`healthcare`、`legal`、`engineering`、`other`。至少一个。
 - `license: string` — SPDX（`MIT`、`Apache-2.0`、`BSD-3-Clause`、`BSD-2-Clause`、`ISC`）
 - `homepage: string` — http(s) URL
+- `title: { en: string, zh?: string }` — 多语言标题（可选）
+- `suite: string` — 所属套件的 code（可选）。装载期只校验 kebab-case 形状；市场在**套件发布时统一改写**：把该套件全部成员置为该套件，把 `suite` 仍指向本套件但已不在成员名单里的 pack 清空。成员关系因此是「pack 上的声明 + 发布时的物化」，读取端不再现场演算（旧读法 `membership_map` 保留作兼容兜底）。
+- `assets: { icon?: string, images?: string[] }` — 展示资产（可选）。路径相对 pack 根目录，按约定放在 `assets/` 下；装载期校验形状（不得以 `/` 开头、不得含 `..`）。资产**仍随包 tgz 分发**：市场页面在浏览器里解 tgz 取图，服务端不存资产副本。
 
 市场的 `org` 不在 manifest——来自投稿账号的发布者组织。卡片全限定名 `org/name@version`（suite 同理）。
 
@@ -25,8 +39,12 @@ pack 和 suite 的数据结构被三个代码库共享，**任何字段变更必
 
 纯元数据表单：`name`（kebab-case）、`version`、`description`（双语，en 必填）、**`tags: string[]`**（白名单内、至少一个）、`members: string[]`（已发布的 pack 名，去重非空）。套件没有压缩包。
 
+## 部署顺序与迁移追踪
+
+市场部署必须**先跑数据库迁移、再滚动新镜像**（新镜像先起、DDL 后到会出现 500 窗口）。`deploy/deploy.sh` 与 `deploy/deploy-dev.sh` 都走 `<schema>.schema_migrations` 追踪表：按文件名顺序应用未记录的迁移，应用后写记录；重复执行是安全的 no-op。生产是 `public` schema，开发是 `market_dev` schema（`PGOPTIONS=-c search_path=market_dev`）；`0000_auth_stub.sql` 在真 supabase 上跳过。
+
 ## 兼容性纪律
 
 - 插件读市场 API 必须**防御式读取**：新字段缺失时按旧形状降级（见 `tagsOf` 的 category 单串回退），旧市场不能打崩新插件。
 - 服务端改字段必须出迁移（`supabase/migrations/`），生产手工执行、dev 由 `deploy-dev.sh` 循环执行，两库都要跑。
-- 改本文任何字段：docwright（类型+校验+测试）、server-rs（结构+SQL+测试）、web（页面+文案+fixture）、本文，**四处一起改，缺一处就是 bug**（历史教训：category→tags、软件研发→it 两轮都有静默漏改）。
+- 改本文任何字段：docwright（类型+校验+测试）、server-rs（结构+SQL+测试）、web（页面+文案+fixture）、本文，**四处一起改，缺一处就是 bug**（历史教训：category→tags、软件研发→it 两轮都有静默漏改，以及一次「镜像先行、迁移后跑」的 500 窗口）。

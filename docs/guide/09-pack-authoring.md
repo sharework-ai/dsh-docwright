@@ -38,6 +38,12 @@ manifest.json 允许携带市场展示用的附加字段，装载期校验只检
 - `license`：SPDX 标识符，常用值如 `MIT`、`Apache-2.0`、`BSD-3-Clause`、`BSD-2-Clause`、`ISC`。
 - `homepage`：项目主页 URL（可选）。
 
+另外两个可选字段：
+
+- `title`：多语言**标题**（`{ "en": ..., "zh": ... }`）。市场页面的标题显示它，没写就显示 `name`。注意区分：`name` 是 code（英文机器标识），`title` 是给人看的名字，`description` 是描述。
+- `suite`：本包所属套件的 code。**不要手工维护成员关系**：发布套件时市场会把成员 pack 的该标记统一置为套件名、并把已退出成员的标记清空。
+- `assets`：展示资产，`{ "icon": "assets/icon.svg", "images": ["assets/flow.png"] }`，路径相对包根目录。图标和说明图随包 tgz 分发，市场页面在浏览器里解包展示，不需要单独上传。
+
 示例：
 
 ```json
@@ -50,7 +56,9 @@ manifest.json 允许携带市场展示用的附加字段，装载期校验只检
   "author": "peng_long",
   "category": "dev",
   "license": "MIT",
-  "homepage": "https://github.com/sharework-ai/my-pack"
+  "homepage": "https://github.com/sharework-ai/my-pack",
+  "title": { "en": "My pack", "zh": "我的包" },
+  "assets": { "icon": "assets/icon.svg", "images": ["assets/flow.png"] }
 }
 ```
 
