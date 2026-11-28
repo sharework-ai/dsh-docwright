@@ -639,9 +639,10 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
   const rendered = rendered_error(error, props.lang)
   const installedNames = new Set(props.packs.map(p => p.name))
   return h('div', { id: suiteAnchorId(suite.name), className: card },
-    h('div', { className: suiteHead, title: suite.org !== undefined && suite.org !== '' ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` },
-      suite.org !== undefined && suite.org !== '' ? h('span', { className: `${muted} font-normal` }, `${suite.org}/`) : null,
-      suite.name, ' ', h('span', { className: muted }, `v${suite.version}`),
+    h('div', { className: suiteHead },
+      h('span', { className: `${name} text-[0.95rem]` },
+        suite.org !== undefined && suite.org !== '' ? `${suite.org}/` : '', suite.name),
+      ' ', h('span', { className: muted }, `v${suite.version}`),
       suite.incomplete ? h('span', { className: smallMuted }, t('suiteFillHint')) : null),
     h('div', { className: `${desc} mb-1` }, resolveText(suite.description)),
     h('div', null,
@@ -774,7 +775,7 @@ function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 
           showAdvanced ? advanced.map(e => renderRow(e)) : null)
       : null,
     h('div', { className: actions },
-      h(Button, { size: 'sm', disabled: !dirty || busy, onClick: () => void saveAll() }, busy ? t('saving') : t('saveConfig')),
+      h(Button, { variant: 'primary', disabled: !dirty || busy, onClick: () => void saveAll() }, busy ? t('saving') : t('saveConfig')),
       done && !dirty ? h('span', { className: muted }, t('saved')) : null,
       error !== undefined ? h(ErrorLine, { error, lang: props.lang }) : null))
 }
