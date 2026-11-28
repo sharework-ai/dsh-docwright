@@ -55,23 +55,29 @@ const card = 'border-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] rou
 /** The pack card's full-width header band: a quiet wash in the market's
  * primary blue that separates "which pack am I looking at" from the rows. */
 const packHead = `${rowHead} -mx-4 -my-3 mb-2.5 px-4 py-2.5 bg-[color-mix(in_srgb,var(--color-primary)_7%,transparent)]`
+// The suite header wash sits one step deeper than the pack card's — the
+// suite is the grouping container and should read as the stronger section.
+const suiteHead = `${rowHead} -mx-4 -my-3 mb-2.5 px-4 py-2.5 bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)]`
 const actions = 'flex items-center gap-2 mt-2'
 /** Gray rounded chip: the shared container for a dependency or a member
  * pack. Translucent gray reads on both themes and, being a plain background,
  * never intercepts clicks. Missing renders the red variant. */
-const chip = 'inline-flex rounded-full px-2 py-px text-[0.82rem] whitespace-nowrap border'
+// Dependency and suite-member references are plain link text, not pills:
+// a rounded chip on names reads as a static badge (or, in gray, as a
+// disabled control), while these entries ARE links — theme-blue link face,
+// hover underline, code font for the identifier.
+const linkText = `${code} text-[var(--color-primary,#155dfc)] cursor-pointer hover:underline`
 // Interactive chip: the theme's primary blue in a quiet tint — gray read as
 // "disabled, not clickable", which is wrong for dependency and member chips
 // that open their target in place. Hover deepens the tint (an affordance the
 // red/amber variants deliberately keep off — they are states, not links).
-const chipOk = `${chip} bg-[rgba(21,93,252,0.08)] border-[rgba(21,93,252,0.35)] text-[var(--color-primary,#155dfc)] hover:bg-[rgba(21,93,252,0.16)]`
-const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`
+const chipOk = linkText
+const chipMissing = errorText
 /** Suite chips keep the market suite cards' translucent purple. */
-const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`
 /** The external-reference mark: a suite member consumed by packs OUTSIDE its
  * suite (delete-time impact; the consumer list is named in the delete
  * confirm, never on the row). */
-const chipExternal = `${chip} cursor-pointer bg-[rgba(212,140,34,0.12)] border-[rgba(212,140,34,0.55)]`
+const chipExternal = `${code} text-[rgba(212,140,34,1)] cursor-pointer hover:underline`
 //#endregion
 
 /** Anchor ids of the pack and suite cards (jump targets for the chips). The
@@ -457,38 +463,23 @@ function PackCard(props: {
       pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null,
       props.disabled ? h(Pill, {}, t('disabledPill')) : null),
     h('div', { className: `${desc} mb-1` }, props.resolveText(pack.description)),
-    pack.consumes.length > 0 || props.suites.length > 0
+    pack.consumes.length > 0
       ? h('div', { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` },
-        pack.consumes.length > 0
-          ? h('span', { className: 'inline-flex gap-1.5 items-center flex-wrap' },
-            h('span', { title: t('consumed'), className: 'inline-flex items-center' },
-              icon(DEPENDS_ICON_PATH)),
-            pack.consumes.map(dep => {
-              const depPack = props.rootOf(dep)
-              const installed = depPack !== undefined
-              const origin = depPack?.origin
-              return h('span', {
-                key: dep,
-                title: installed ? (origin !== undefined ? `${dep} · ${origin.kind} ${origin.root}` : dep) : `${dep}${t('missingDep')}`,
-                // An installed dependency jumps to its pack card; a missing
-                // one cannot go anywhere, it just reads red.
-                onClick: installed && origin !== undefined ? () => props.onJump('packs', packAnchorId(origin, dep)) : undefined,
-                className: installed ? `${chipOk} cursor-pointer` : chipMissing,
-              }, dep)
-            }))
-          : null,
-        pack.consumes.length > 0 && props.suites.length > 0
-          ? h('span', { className: 'opacity-60' }, '·')
-          : null,
-        props.suites.map(suite => h('span', {
-          key: suite,
-          title: t('suiteManagedTip'),
-          onClick: () => props.onJump('packs', suiteAnchorId(suite)),
-          className: suiteChip,
-        },
-          h('span', { className: 'inline-flex items-center' },
-            icon(SUITE_ICON_PATH, 12)),
-          suite)))
+        h('span', { title: t('consumed'), className: 'inline-flex items-center' },
+          icon(DEPENDS_ICON_PATH)),
+        pack.consumes.map(dep => {
+          const depPack = props.rootOf(dep)
+          const installed = depPack !== undefined
+          const origin = depPack?.origin
+          return h('span', {
+            key: dep,
+            title: installed ? (origin !== undefined ? `${dep} · ${origin.kind} ${origin.root}` : dep) : `${dep}${t('missingDep')}`,
+            // An installed dependency jumps to its pack card; a missing
+            // one cannot go anywhere, it just reads red.
+            onClick: installed && origin !== undefined ? () => props.onJump('packs', packAnchorId(origin, dep)) : undefined,
+            className: installed ? chipOk : chipMissing,
+          }, dep)
+        }))
       : null,
     h('div', { className: 'mt-1 flex gap-2 items-center flex-wrap' },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
@@ -653,7 +644,7 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
   const rendered = rendered_error(error, props.lang)
   const installedNames = new Set(props.packs.map(p => p.name))
   return h('div', { id: suiteAnchorId(suite.name), className: card },
-    h('div', { className: `${rowHead} mb-0.5`, title: suite.org !== undefined && suite.org !== '' ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` },
+    h('div', { className: suiteHead, title: suite.org !== undefined && suite.org !== '' ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` },
       suite.org !== undefined && suite.org !== '' ? h('span', { className: `${muted} font-normal` }, `${suite.org}/`) : null,
       suite.name, ' ', h('span', { className: muted }, `v${suite.version}`),
       suite.incomplete ? h('span', { className: smallMuted }, t('suiteFillHint')) : null),
