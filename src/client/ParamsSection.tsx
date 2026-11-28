@@ -60,7 +60,11 @@ const actions = 'flex items-center gap-2 mt-2'
  * pack. Translucent gray reads on both themes and, being a plain background,
  * never intercepts clicks. Missing renders the red variant. */
 const chip = 'inline-flex rounded-full px-2 py-px text-[0.82rem] whitespace-nowrap border'
-const chipOk = `${chip} bg-[rgba(127,127,127,0.12)] border-[rgba(127,127,127,0.30)]`
+// Interactive chip: the theme's primary blue in a quiet tint — gray read as
+// "disabled, not clickable", which is wrong for dependency and member chips
+// that open their target in place. Hover deepens the tint (an affordance the
+// red/amber variants deliberately keep off — they are states, not links).
+const chipOk = `${chip} bg-[rgba(21,93,252,0.08)] border-[rgba(21,93,252,0.35)] text-[var(--color-primary,#155dfc)] hover:bg-[rgba(21,93,252,0.16)]`
 const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`
 /** Suite chips keep the market suite cards' translucent purple. */
 const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`
