@@ -97,6 +97,15 @@ export interface ParamSpec {
 export interface PackManifest {
   readonly name: string
   readonly version: string
+  /**
+   * Backward-compat floor: this version keeps working with consumers whose
+   * OWN version is at least this one. Optional; absent means "compatible
+   * with everything". The pack-market update lane checks it BEFORE swapping
+   * a consumed pack: an installed consumer below the floor gets named in the
+   * confirmation warning (upgrade those consumers first), and the update
+   * only proceeds on explicit force (docs/designs/pack-market-contract.md).
+   */
+  readonly compatibleFrom?: string | undefined
   /** One line naming the document this pack generates; `doc_packs` shows it to the model (projected to `en`). */
   readonly description: LocalizedText
   /** Artifact type names this pack consumes (chained generation); root packs use []. */

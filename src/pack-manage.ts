@@ -56,10 +56,31 @@ interface MarketIndexEntry {
   readonly tarballSha256: string
   readonly contentHash: string
   readonly consumes?: readonly unknown[]
+  readonly compatibleFrom?: unknown
 }
 
 function consumesOf(entry: MarketIndexEntry): readonly string[] {
   return Array.isArray(entry.consumes) ? entry.consumes.filter((c): c is string => typeof c === 'string') : []
+}
+
+/** The index entry's backward-compat floor, read defensively: an old market
+ * never sends the field, which reads as "no floor, no check" (market
+ * contract compatibility discipline). A malformed value degrades the same
+ * way rather than failing the whole update. */
+function compatibleFromOf(entry: MarketIndexEntry): string | undefined {
+  return typeof entry.compatibleFrom === 'string' && entry.compatibleFrom.length > 0 ? entry.compatibleFrom : undefined
+}
+
+/** Installed packs that consume `name` and sit BELOW `floor` — updating
+ * `name` may break exactly these consumers. The caller's `exclude` keeps
+ * suite siblings out of the suite-update lane's report (only consumers
+ * OUTSIDE the suite count there). */
+function consumersBelowFloor(packs: ReadonlyMap<string, Pack>, name: string, floor: string, exclude?: ReadonlySet<string>): readonly { name: string; version: string }[] {
+  return [...packs.values()]
+    .filter(p => p.manifest.name !== name && p.manifest.consumes.includes(name) && exclude?.has(p.manifest.name) !== true)
+    .filter(p => compareVersions(p.manifest.version, floor) < 0)
+    .map(p => ({ name: p.manifest.name, version: p.manifest.version }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 interface MarketIndex {
@@ -419,7 +440,7 @@ export async function updatePack(deps: {
   readonly marketUrl: string
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
   readonly fetchImpl?: typeof fetch
-}, name: string, opts: { bypassSuiteGuard?: boolean } = {}): Promise<string> {
+}, name: string, opts: { bypassSuiteGuard?: boolean; force?: boolean } = {}): Promise<string> {
   if (deps.packsDir === undefined || deps.packsDir.length === 0) {
     throw new CodedError('packNotManaged', `pack "${name}" is not managed here: no packsDir is configured, and builtin packs ship with the plugin package; nothing was written`, { params: { pack: name } })
   }
@@ -440,6 +461,17 @@ export async function updatePack(deps: {
   const entry = index.packs.find(e => e.name === name)
   if (entry === undefined) {
     throw new CodedError('absentFromMarket', `pack "${name}" is not listed on the market at ${deps.marketUrl}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly`, { params: { pack: name, url: deps.marketUrl } })
+  }
+  // Backward-compat gate (docs/designs/pack-market-contract.md): when the NEW
+  // version declares a compat floor and an installed consumer sits below it,
+  // the update needs an explicit force — the first call refuses and names the
+  // affected consumers (upgrade them first), the confirmed re-call proceeds.
+  const floor = compatibleFromOf(entry)
+  if (floor !== undefined && opts.force !== true) {
+    const affected = consumersBelowFloor(deps.packs, name, floor)
+    if (affected.length > 0) {
+      throw new CodedError('compatBreak', `updating "${name}" to ${entry.version} may break installed consumers below its compat floor ${floor}: ${affected.map(a => `${a.name}@${a.version}`).join(', ')}. Upgrade those consumers to their latest versions first, then update; or re-call with force: true to update anyway`, { params: { pack: name, floor, consumers: affected.map(a => `${a.name}@${a.version}`).join(', ') } })
+    }
   }
   const packsDir = deps.packsDir
   return swapFromMarket({ ...deps, packsDir }, name, entry, dest)
@@ -833,7 +865,7 @@ export async function updateSuite(deps: {
   readonly marketUrl: string
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
   readonly fetchImpl?: typeof fetch
-}, suite: string): Promise<{ suite: SuiteDetail; updated: readonly { name: string; version: string }[]; unchanged: readonly string[]; missing: readonly string[] }> {
+}, suite: string, opts: { force?: boolean } = {}): Promise<{ suite: SuiteDetail; updated: readonly { name: string; version: string }[]; unchanged: readonly string[]; missing: readonly string[] }> {
   const detail = await fetchSuiteDetail(deps.marketUrl, suite, deps.fetchImpl ?? fetch)
   if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
   let index: MarketIndex
@@ -845,6 +877,27 @@ export async function updateSuite(deps: {
     throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
   }
   const byName = new Map(index.packs.map(e => [e.name, e]))
+  // Aggregated backward-compat gate (docs/designs/pack-market-contract.md):
+  // ONE confirmation covers the whole suite — every member whose new version
+  // declares a compat floor reports its below-floor consumers OUTSIDE the
+  // suite here; the confirmed re-call proceeds for all of them at once.
+  if (opts.force !== true) {
+    const members = new Set(detail.members)
+    const rows: string[] = []
+    for (const member of detail.members) {
+      const entry = byName.get(member)
+      const local = deps.packs.get(member)
+      if (entry === undefined || local === undefined) continue
+      if (compareVersions(entry.version, local.manifest.version) <= 0) continue
+      const floor = compatibleFromOf(entry)
+      if (floor === undefined) continue
+      const affected = consumersBelowFloor(deps.packs, member, floor, members)
+      if (affected.length > 0) rows.push(`${member} → ${affected.map(a => `${a.name}@${a.version}`).join(', ')} (floor ${floor})`)
+    }
+    if (rows.length > 0) {
+      throw new CodedError('compatBreak', `updating suite "${suite}" may break installed consumers outside the suite: ${rows.join('; ')}. Upgrade those consumers to their latest versions first, then update; or re-call with force: true to update anyway`, { params: { pack: suite, consumers: rows.join('; ') } })
+    }
+  }
   const updated: { name: string; version: string }[] = []
   const unchanged: string[] = []
   const missing: string[] = []
@@ -860,7 +913,7 @@ export async function updateSuite(deps: {
       unchanged.push(member)
       continue
     }
-    updated.push({ name: member, version: await updatePack(deps, member, { bypassSuiteGuard: true }) })
+    updated.push({ name: member, version: await updatePack(deps, member, { bypassSuiteGuard: true, force: true }) })
   }
   // Refresh the local record: bumped members get their new versions, and the
   // suite's own version tracks the market's current suite version. A suite
@@ -883,13 +936,12 @@ export async function updateSuite(deps: {
 
 /**
  * Delete a suite: the installed members are the unit — EVERY installed
- * member goes (members are consumed inside their suite by design; a
- * downstream pack outside the suite keeps loading and fails loud on its
- * next generation). Members never installed are skipped; the market only
- * supplies the member list. Internally each member deletes with force +
- * guard bypass: sibling suite members legitimately consume each other and
- * the per-pack guards must not fire on them.
- * the market only supplies the member list.
+ * member goes together (members are never deleted one by one, whether or
+ * not something outside the suite consumes them). When NO member has an
+ * external consumer, one confirm deletes. When some member IS consumed
+ * outside the suite, the first call refuses and names those consumers
+ * (their chains break); the explicit force re-call — the UI's force
+ * checkbox — deletes the whole suite anyway.
  */
 export async function deleteSuite(deps: {
   readonly packs: Map<string, Pack>
@@ -899,13 +951,22 @@ export async function deleteSuite(deps: {
   readonly loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
   readonly fetchImpl?: typeof fetch
   readonly cleanupDisabled?: (names: readonly string[]) => Promise<void>
-}, suite: string): Promise<{ deleted: readonly string[] }> {
+}, suite: string, opts: { force?: boolean } = {}): Promise<{ deleted: readonly string[] }> {
   const detail = await fetchSuiteDetail(deps.marketUrl, suite, deps.fetchImpl ?? fetch)
   if (detail === null || detail.members.length === 0) throw suiteAbsentError(suite, deps.marketUrl)
-  // EVERY installed member goes — no keep/force split. Suite members are
-  // consumers INSIDE their suite by design; a member that something outside
-  // the suite consumes is a modeling smell, and the downstream pack keeps
-  // loading and fails loud on its next generation.
+  // The member set is the inside-suite boundary: a consumer outside it is
+  // the only reason the delete needs force. Sibling members consuming each
+  // other is the designed shape and never triggers it.
+  const members = new Set(detail.members)
+  const external: string[] = []
+  for (const member of detail.members) {
+    for (const consumer of [...deps.packs.values()].filter(p => p.manifest.name !== member && p.manifest.consumes.includes(member)).map(p => p.manifest.name)) {
+      if (!members.has(consumer) && !external.includes(consumer)) external.push(consumer)
+    }
+  }
+  if (external.length > 0 && opts.force !== true) {
+    throw new CodedError('suiteConsumed', `suite "${suite}" has members consumed by packs outside the suite (${external.sort().join(', ')}); deleting it breaks their chains. Re-call with force: true to delete the whole suite anyway, or keep it`, { params: { pack: suite, consumers: external.sort().join(', ') } })
+  }
   const deleted: string[] = []
   for (const member of detail.members) {
     const installed = deps.packs.has(member) && await findManagedPackDir(deps.packsDir ?? '', member) !== undefined

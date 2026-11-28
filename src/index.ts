@@ -161,13 +161,13 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       // there is nothing to manage and the routes stay unmounted.
       packLane: {
         checkUpdates: (pack?: string | undefined) => checkPackUpdates({ packs, packsDir: packsDirConfigured, workspaceRoot: config.workspaceRoot, searchWorkspacePacksUpward: config.searchWorkspacePacksUpward, marketUrl: marketUrlOf(config) }, pack),
-        updatePack: async pack => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack) }),
+        updatePack: async (pack, force) => ({ version: await updatePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, pack, { force: force === true }) }),
         deletePack: (pack, opts) => deletePack({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured, cleanupDisabled: names => updateConfigViaEditor(editorOf(), { disabledPacks: pruneDisabled(config, names) }) }, pack, opts),
         // The suite lane (docs/designs/pack-suites.md): status read + per-suite
         // update/delete, same packsDir, same market, same hot-reload contract.
         suiteStatus: () => checkSuiteStatus({ packs, packsDir: packsDirConfigured, workspaceRoot: config.workspaceRoot, searchWorkspacePacksUpward: config.searchWorkspacePacksUpward, marketUrl: marketUrlOf(config) }),
-        updateSuite: suite => updateSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite),
-        deleteSuite: suite => deleteSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured, cleanupDisabled: names => updateConfigViaEditor(editorOf(), { disabledPacks: pruneDisabled(config, names) }) }, suite),
+        updateSuite: (suite, force) => updateSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured }, suite, { force: force === true }),
+        deleteSuite: (suite, force) => deleteSuite({ packs, builtinRoot, packsDir: packsDirConfigured, marketUrl: marketUrlOf(config), loadPacks: loadPacksConfigured, cleanupDisabled: names => updateConfigViaEditor(editorOf(), { disabledPacks: pruneDisabled(config, names) }) }, suite, { force: force === true }),
         // Market installs (docs/designs/pack-suites.md): the browser market
         // page's one-click install rides the same verified download +
         // hot-reload pipeline as the doc_market_install tool.

@@ -99,11 +99,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			return (await parse(await fetch(`/api/docwright/pack-updates${suffix}`, { headers: { accept: "application/json" } }))).updates;
 		}
 		/** Update one managed pack from the market (verified download, atomic swap). */
-		async function updateManagedPack(pack) {
+		async function updateManagedPack(pack, force = false) {
 			return (await parse(await fetch("/api/docwright/pack-update", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ pack })
+				body: JSON.stringify({
+					pack,
+					force
+				})
 			}))).version;
 		}
 		/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). `force` bypasses the in-use guard (the UI sends it from the second confirm click, which named the consumers). */
@@ -135,21 +138,30 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		async function fetchSuiteStatus() {
 			return (await parse(await fetch("/api/docwright/suites", { headers: { accept: "application/json" } }))).suites;
 		}
-		/** Update a suite: refresh each outdated member to its market version. */
-		async function updateSuite(suite) {
+		/** Update a suite: refresh each outdated member to its market version. `force`
+		* answers the server's aggregated compat-break gate (consumers below a
+		* member's compat floor) after the user confirmed the warning. */
+		async function updateSuite(suite, force = false) {
 			return parse(await fetch("/api/docwright/suite-update", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ suite })
+				body: JSON.stringify({
+					suite,
+					force
+				})
 			}));
 		}
-		/** Delete a suite's installed members — all of them; suite members are
-		* consumed inside their suite by design, so there is no keep/force split. */
-		async function deleteSuite(suite) {
+		/** Delete a suite's installed members — all of them. Members with consumers
+		* outside the suite need force (the UI's force checkbox after the warning
+		* named those consumers). */
+		async function deleteSuite(suite, force = false) {
 			return parse(await fetch("/api/docwright/suite-delete", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ suite })
+				body: JSON.stringify({
+					suite,
+					force
+				})
 			}));
 		}
 		/** Install one pack (with its consumed closure) from the market into packsDir. */
@@ -258,8 +270,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmDeleteBreaks: "Confirm delete ({packs} consume it — their chains break)",
 			updatedDone: "Updated to v{version}.",
 			deletedDone: "Deleted.",
-			viewSuites: "Suites",
-			suitesEmpty: "The market lists no suites (or this market does not support suites). Single-pack installs are unaffected.",
+			suitesSection: "Suites",
+			packsSection: "Standalone packs",
+			suitesEmpty: "No suites installed (the market lists none, or it does not support suites). Single-pack installs are unaffected.",
 			suitesUnreachable: "Could not reach the pack market; suite status is unavailable.",
 			suiteManagedTip: "Suite-managed — install, update, and delete go through the suite",
 			suiteIncomplete: "incomplete",
@@ -269,11 +282,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			colMembers: "Members",
 			suiteDeleteSummary: "Delete members: {packs}",
 			suiteDeleteConfirm: "Confirm delete suite",
-			suiteKeepColumn: "Will keep",
-			suiteKeptBy: "consumed by {packs}",
-			suiteForce: "Also delete members consumed outside the suite (force)",
+			suiteExternalRef: "consumed outside the suite",
+			suiteExternalMembers: "Members consumed by packs outside the suite: {list}. Deleting breaks their chains.",
+			suiteForce: "Force delete (the whole suite goes, outside consumers break)",
 			suiteDeletedDone: "Deleted: {packs}.",
 			suiteFillHint: "Members are missing. Ask the session: doc_market_install { \"suite\": \"<name>\" } installs the rest.",
+			confirmForceUpdate: "Update anyway",
 			"err.gateRejected": "The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.",
 			"err.crossSiteWrite": "Write refused: the request origin does not match the deployment host (cross-site request). Operate from the dsh web UI.",
 			"err.bodyTooLarge": "The request body exceeds the {max}-byte limit; nothing was written. Reduce the request size.",
@@ -295,7 +309,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.updateFailed": "Pack \"{pack}\" update failed; the installed version is unchanged.",
 			"err.absentFromMarket": "Pack \"{pack}\" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.",
 			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it.",
-			"err.suiteLaneMissing": "The suite lane is not wired on this deployment; nothing was written."
+			"err.suiteLaneMissing": "The suite lane is not wired on this deployment; nothing was written.",
+			"err.compatBreak": "Updating \"{pack}\" may break consumers below the compat floor: {consumers}. Upgrade those consumers to their latest versions first, then update; or confirm again to update anyway.",
+			"err.suiteConsumed": "Suite \"{pack}\" has members consumed by packs outside the suite ({consumers}); deleting it breaks their chains. Tick the force box to delete the whole suite anyway, or keep it."
 		};
 		const zh = {
 			nav: "Docwright 参数",
@@ -365,8 +381,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmDeleteBreaks: "确认删除（{packs} 消费它，删除将断链）",
 			updatedDone: "已更新到 v{version}。",
 			deletedDone: "已删除。",
-			viewSuites: "套件",
-			suitesEmpty: "市场没有套件（或该市场不支持套件）。单个 pack 的安装不受影响。",
+			suitesSection: "套件",
+			packsSection: "独立包",
+			suitesEmpty: "没有已安装的套件（市场没有套件，或该市场不支持套件）。单个 pack 的安装不受影响。",
 			suitesUnreachable: "无法连接 pack 市场，套件状态不可用。",
 			suiteManagedTip: "由套件管理：安装、更新、删除都走套件",
 			suiteIncomplete: "不完整",
@@ -376,11 +393,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			colMembers: "成员",
 			suiteDeleteSummary: "删除成员：{packs}",
 			suiteDeleteConfirm: "确认删除套件",
-			suiteKeepColumn: "将保留",
-			suiteKeptBy: "被 {packs} 消费",
-			suiteForce: "同时删除被套件外 pack 消费的成员（强制）",
+			suiteExternalRef: "被套件外引用",
+			suiteExternalMembers: "以下成员被套件外的 pack 消费：{list}。删除会影响它们。",
+			suiteForce: "强制删除（整个套件删除，外部引用断链）",
 			suiteDeletedDone: "已删除：{packs}。",
 			suiteFillHint: "成员未装齐。请在会话中执行 doc_market_install { \"suite\": \"<名称>\" } 补齐。",
+			confirmForceUpdate: "仍要更新",
 			"err.gateRejected": "请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。",
 			"err.crossSiteWrite": "写入被拒绝：请求来源与部署主机不一致（跨站请求）。请从 dsh web 界面发起操作。",
 			"err.bodyTooLarge": "请求体超过 {max} 字节上限，未写入任何内容。请缩小请求内容。",
@@ -402,7 +420,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.updateFailed": "pack「{pack}」更新失败，已装版本未变。",
 			"err.absentFromMarket": "pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。",
 			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。",
-			"err.suiteLaneMissing": "该部署未接入套件通道，未做任何改动。"
+			"err.suiteLaneMissing": "该部署未接入套件通道，未做任何改动。",
+			"err.compatBreak": "更新「{pack}」可能影响低于兼容下限的消费方：{consumers}。建议先把它们升级到最新版本再更新；再次确认可强制更新。",
+			"err.suiteConsumed": "套件「{pack}」有成员被套件外的 pack 消费（{consumers}），删除会影响它们。勾选强制删除才会删除整个套件，否则不删除。"
 		};
 		function translate(dict) {
 			return (key) => {
@@ -427,10 +447,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		//#endregion
 		//#region src/client/ParamsSection.tsx
 		/**
-		* The Docwright params section: four views over one catalog fetch — per-pack
-		* flat view, the suite overview (docs/designs/pack-suites.md), shared-param
-		* groups (the aggregation with effective-source resolution), and the plugin
-		* Config form. Controls map from the
+		* The Docwright params section: three views over one catalog fetch — the
+		* installed list (suites with their member rows first, then standalone packs
+		* — docs/designs/pack-suites.md), shared-param groups (the aggregation with
+		* effective-source resolution), and the plugin Config form. Controls map from the
 		* ParamSpec type (number → numeric input, enum → select, boolean → switch,
 		* object → JSON-per-value with endpoints read-only); every parameter shows
 		* its author's description inline beneath the name, resolved to the active
@@ -438,8 +458,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* en-fallback semantics of src/description.ts). Writes go through the
 		* plugin's own routes (src/http.ts), never the conversation; their error
 		* envelopes render through the locale catalog (locales.ts renderError). Any
-		* change in ANY view re-fetches the whole block, so the Packs and Suites
-		* tabs can never disagree.
+		* change in ANY view re-fetches the whole block, so the suite cards and the
+		* standalone list can never disagree.
 		*
 		* Typography follows the host conversation body, not ad-hoc sizes: one
 		* family and size for all running text (`--dsw-font-family` +
@@ -824,6 +844,18 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}
 			return map;
 		}
+		/** Per-suite external consumers: for each member, the installed packs that
+		* consume it and are NOT suite members themselves (the delete-time impact
+		* list; a member with entries renders the external-reference mark). */
+		function externalConsumersOf(suite, packs) {
+			const members = new Set(suite.members.map((m) => m.name));
+			const map = /* @__PURE__ */ new Map();
+			for (const member of suite.members) {
+				const consumers = packs.filter((p) => p.name !== member.name && !members.has(p.name) && p.consumes.includes(member.name)).map((p) => p.name);
+				if (consumers.length > 0) map.set(member.name, consumers);
+			}
+			return map;
+		}
 		/** Per-pack flat view (pack-author / troubleshooting perspective). Each card
 		* opens with a full-width blue-wash header band — pack identity reads as a
 		* section of its own. The card is the overview: identity, description, and
@@ -854,7 +886,35 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
 			const installedNames = (0, react.useMemo)(() => new Set(payload.packs.map((p) => p.name)), [payload.packs]);
 			const disabledNames = (0, react.useMemo)(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks]);
-			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
+			const standalone = payload.packs.filter((p) => (props.suites.get(p.name) ?? []).length === 0);
+			const suiteRows = props.suitesLane?.state === "ok" ? props.suitesLane.rows : [];
+			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, suiteRows.length > 0 ? [(0, react.createElement)("h4", {
+				key: "suites-head",
+				style: {
+					...muted,
+					margin: "0 0 8px",
+					fontWeight: 600
+				}
+			}, t("suitesSection")), ...suiteRows.map((s) => (0, react.createElement)(SuiteCard, {
+				key: s.name,
+				suite: s,
+				packs: payload.packs,
+				t,
+				lang: props.lang,
+				resolveText: props.resolveText,
+				onJump: props.onJump,
+				onSaved: props.onSaved
+			}))] : props.suitesLane !== void 0 ? (0, react.createElement)("p", {
+				key: "suites-empty",
+				style: muted
+			}, props.suitesLane.state === "unreachable" ? t("suitesUnreachable") : t("suitesEmpty")) : null, standalone.length > 0 && suiteRows.length > 0 ? (0, react.createElement)("h4", {
+				key: "packs-head",
+				style: {
+					...muted,
+					margin: "12px 0 8px",
+					fontWeight: 600
+				}
+			}, t("packsSection")) : null, standalone.map((p) => (0, react.createElement)(PackCard, {
 				key: p.name,
 				pack: p,
 				status: byName.get(p.name),
@@ -920,7 +980,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			})) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { style: { opacity: .6 } }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
 				key: suite,
 				title: t("suiteManagedTip"),
-				onClick: () => props.onJump("suites", suiteAnchorId(suite)),
+				onClick: () => props.onJump("packs", suiteAnchorId(suite)),
 				style: {
 					display: "inline-flex",
 					gap: "4px",
@@ -983,19 +1043,31 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const [armed, setArmed] = (0, react.useState)(void 0);
 			const [busy, setBusy] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(void 0);
-			const run = (kind) => {
+			const run = (kind, updateForce = false) => {
 				setBusy(true);
 				setError(void 0);
-				const call = kind === "update" ? updateManagedPack(props.pack.name) : kind === "delete" ? deleteManagedPack(props.pack.name, props.consumers.length > 0) : setPackDisabled(props.pack.name, kind === "disable", props.consumers.length > 0 && kind === "disable");
+				const call = kind === "update" ? updateManagedPack(props.pack.name, updateForce) : kind === "delete" ? deleteManagedPack(props.pack.name, props.consumers.length > 0) : setPackDisabled(props.pack.name, kind === "disable", props.consumers.length > 0 && kind === "disable");
 				const doneText = kind === "update" ? void 0 : kind === "disable" ? t("disableDone") : kind === "enable" ? t("enableDone") : t("deletedDone");
 				call.then((result) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof result === "string" ? result : "" }) : doneText ?? ""), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
 					setBusy(false);
 					setArmed(void 0);
 				});
 			};
+			const compatBlocked = error?.code === "compatBreak";
+			const updateClick = () => {
+				if (!updateAvailable) {
+					props.check(props.pack.name);
+					return;
+				}
+				if (armed === "update") {
+					run("update", compatBlocked);
+					return;
+				}
+				setArmed("update");
+			};
 			const standing = props.checked && props.laneState === "ready" ? props.status === void 0 || !props.status.onMarket ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
 			const updateAvailable = props.checked && props.laneState === "ready" && props.status !== void 0 && props.status.onMarket && props.status.updateAvailable;
-			const checkLabel = props.checked && props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
+			const checkLabel = props.checked && props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? compatBlocked ? t("confirmForceUpdate") : t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
 			const rendered = rendered_error(error, props.lang);
 			return (0, react.createElement)("span", { style: {
 				display: "inline-flex",
@@ -1008,7 +1080,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				size: "sm",
 				variant: "ghost",
 				disabled: busy || props.checked && props.laneState === "checking",
-				onClick: () => updateAvailable ? armed === "update" ? run("update") : setArmed("update") : props.check(props.pack.name)
+				onClick: updateClick
 			}, checkLabel), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
@@ -1046,45 +1118,31 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				...coded.detail !== void 0 ? { detail: coded.detail } : {}
 			}, lang);
 		}
-		/** Suites view (docs/designs/pack-suites.md): one card per market suite,
-		* each member row showing local vs market version. An empty list (the market
-		* has no suites or does not support them) and an unreachable market each
-		* render one explanatory line — never an error wall. Every action goes
-		* through the section-level refresh, so the Packs tab re-renders in sync. */
-		/** Suites tab: ONE table (same font as the rest of the page — no monospace
-		* member rows). Columns: suite, members (local → market), status, actions.
-		* The delete confirm is a single expanded line per suite: what goes, what
-		* stays (only when something is kept, with the force switch next to it). */
-		/** Suites tab: one card per suite, same two-column shape as the pack cards —
-		* suite identity on the left, info (description, member packs, actions) on
-		* the right. No table, no header row; the page font throughout. */
-		function SuitesView(props) {
-			const { lane, t } = props;
-			if (lane === void 0) return null;
-			if (lane.state === "unreachable") return (0, react.createElement)("p", { style: muted }, t("suitesUnreachable"));
-			if (lane.rows.length === 0) return (0, react.createElement)("p", { style: muted }, t("suitesEmpty"));
-			return (0, react.createElement)("div", null, lane.rows.map((s) => (0, react.createElement)(SuiteCard, {
-				key: s.name,
-				suite: s,
-				packs: props.payload.packs,
-				t,
-				lang: props.lang,
-				resolveText: props.resolveText,
-				onJump: props.onJump,
-				onSaved: props.onSaved
-			})));
-		}
+		/** One suite card INSIDE the packs view (docs/designs/pack-suites.md): the
+		* suite is a grouping of the one installed list, not a separate tab. Member
+		* rows are read-only — install/update/delete go through the suite buttons;
+		* a member chip click expands the member's full pack card in place (its
+		* parameter declarations stay editable there, its lane actions stay hidden).
+		* Members with consumers OUTSIDE the suite carry the external-reference
+		* mark; deleting such a suite needs the force box (the confirm area names
+		* the affected consumers). A compatBreak refusal on 更新套件 arms one force
+		* re-run that answers the server's aggregated warning. */
 		function SuiteCard(props) {
 			const { suite, t, resolveText } = props;
 			const [armedDelete, setArmedDelete] = (0, react.useState)(false);
+			const [forceDelete, setForceDelete] = (0, react.useState)(false);
+			const [openMember, setOpenMember] = (0, react.useState)(void 0);
 			const [busy, setBusy] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [done, setDone] = (0, react.useState)(void 0);
 			const installed = suite.members.filter((m) => m.localVersion !== void 0);
-			const runUpdate = () => {
+			const external = (0, react.useMemo)(() => externalConsumersOf(suite, props.packs), [suite, props.packs]);
+			const needsForce = external.size > 0;
+			const compatBlocked = error?.code === "compatBreak";
+			const runUpdate = (force) => {
 				setBusy(true);
 				setError(void 0);
-				updateSuite(suite.name).then((result) => {
+				updateSuite(suite.name, force).then((result) => {
 					setDone(fill(t("suiteUpdateDone"), { packs: result.updated.map((u) => `${u.name}@${u.version}`).join(", ") || t("upToDate") }));
 					props.onSaved();
 				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
@@ -1092,7 +1150,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const runDelete = () => {
 				setBusy(true);
 				setError(void 0);
-				deleteSuite(suite.name).then((result) => {
+				deleteSuite(suite.name, forceDelete).then((result) => {
 					setDone(fill(t("suiteDeletedDone"), { packs: result.deleted.join(", ") }));
 					setArmedDelete(false);
 					props.onSaved();
@@ -1104,6 +1162,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				flex: "none",
 				fontWeight: 600
 			};
+			const installedNames = new Set(props.packs.map((p) => p.name));
 			return (0, react.createElement)("div", {
 				id: suiteAnchorId(suite.name),
 				style: {
@@ -1131,26 +1190,35 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					alignItems: "center"
 				}
 			}, icon(SUITE_ICON_PATH)), suite.members.map((m) => {
-				const installed = m.localVersion !== void 0;
+				const referenced = external.has(m.name);
+				const isOpen = openMember === m.name;
 				return (0, react.createElement)("span", {
 					key: m.name,
-					title: m.name,
-					onClick: installed ? () => props.onJump("packs", packAnchorId(m.name)) : void 0,
+					title: referenced ? `${m.name}: ${t("suiteExternalRef")}` : m.name,
+					onClick: installedNames.has(m.name) ? () => setOpenMember(isOpen ? void 0 : m.name) : void 0,
 					style: {
 						...chipStyle(m.localVersion === void 0),
-						...installed ? { cursor: "pointer" } : {}
+						...referenced ? {
+							border: "1px solid rgba(212, 140, 34, 0.55)",
+							background: "rgba(212, 140, 34, 0.12)"
+						} : {},
+						...installedNames.has(m.name) ? { cursor: "pointer" } : {},
+						...isOpen ? { fontWeight: 600 } : {}
 					}
-				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}`);
+				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}${referenced ? " ↗" : ""}`);
 			})), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
-				onClick: runUpdate
-			}, t("suiteUpdateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				onClick: () => runUpdate(compatBlocked)
+			}, compatBlocked ? t("confirmForceUpdate") : t("suiteUpdateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
-				onClick: () => setArmedDelete((v) => !v)
+				onClick: () => {
+					setArmedDelete((v) => !v);
+					setForceDelete(false);
+				}
 			}, armedDelete ? t("cancel") : t("deleteBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
@@ -1164,11 +1232,45 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				marginTop: "6px",
 				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
 				paddingTop: "6px"
-			} }, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" }), " ", (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			} }, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" }), needsForce ? (0, react.createElement)("div", { style: { marginTop: "4px" } }, fill(t("suiteExternalMembers"), { list: [...external.entries()].map(([m, cs]) => `${m} ← ${cs.join(", ")}`).join("；") }), (0, react.createElement)("label", { style: {
+				display: "flex",
+				alignItems: "center",
+				gap: "6px",
+				marginTop: "4px",
+				cursor: "pointer"
+			} }, (0, react.createElement)("input", {
+				type: "checkbox",
+				checked: forceDelete,
+				onChange: (e) => setForceDelete(e.target.checked)
+			}), t("suiteForce"))) : null, (0, react.createElement)("div", { style: { marginTop: "6px" } }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
-				disabled: busy || installed.length === 0,
+				disabled: busy || installed.length === 0 || needsForce && !forceDelete,
 				onClick: runDelete
-			}, t("suiteDeleteConfirm"))) : null));
+			}, t("suiteDeleteConfirm")))) : null, openMember !== void 0 ? (0, react.createElement)("div", { style: {
+				marginTop: "6px",
+				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
+				paddingTop: "6px"
+			} }, (() => {
+				const pack = props.packs.find((p) => p.name === openMember);
+				if (pack === void 0) return (0, react.createElement)("p", { style: muted }, openMember);
+				return (0, react.createElement)(PackCard, {
+					pack,
+					status: void 0,
+					checked: false,
+					laneState: "idle",
+					checkOne: () => {},
+					t,
+					lang: props.lang,
+					resolveText,
+					onJump: props.onJump,
+					onSaved: props.onSaved,
+					installed: installedNames,
+					suites: [suite.name],
+					consumers: props.packs.filter((other) => other.name !== pack.name && other.consumes.includes(pack.name)).map((other) => other.name),
+					disabled: false,
+					onDone: () => props.onSaved()
+				});
+			})()) : null));
 		}
 		function ConfigView(props) {
 			const { payload, t } = props;
@@ -1287,10 +1389,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const [suites, setSuites] = (0, react.useState)(void 0);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [view, setView] = (0, react.useState)("packs");
-			/** Chip jumps: switch to the target tab, then scroll the anchored card
-			* into view once it has rendered (one frame is enough for React). */
-			const jumpTo = (0, react.useCallback)((target, anchor) => {
-				setView(target);
+			/** Chip jumps: the suites live inside the packs view now, so a legacy
+			* 'suites' target lands there too; then scroll the anchored card into view
+			* once it has rendered (one frame is enough for React). */
+			const jumpTo = (0, react.useCallback)((rawTarget, anchor) => {
+				setView(rawTarget === "suites" ? "packs" : rawTarget);
 				window.setTimeout(() => {
 					document.getElementById(anchor)?.scrollIntoView({
 						behavior: "smooth",
@@ -1334,12 +1437,6 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					panelId: `${NS$1}-packs-panel`
 				},
 				{
-					value: "suites",
-					label: t("viewSuites"),
-					id: `${NS$1}-suites`,
-					panelId: `${NS$1}-suites-panel`
-				},
-				{
 					value: "groups",
 					label: t("viewGroups"),
 					id: `${NS$1}-groups`,
@@ -1376,14 +1473,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}) : null, view === "packs" ? (0, react.createElement)(PacksView, {
 				payload,
 				suites: suiteMarkers,
-				t,
-				lang,
-				resolveText: props.resolveText,
-				onJump: jumpTo,
-				onSaved: refresh
-			}) : null, view === "suites" ? (0, react.createElement)(SuitesView, {
-				lane: suites,
-				payload,
+				suitesLane: suites,
 				t,
 				lang,
 				resolveText: props.resolveText,
