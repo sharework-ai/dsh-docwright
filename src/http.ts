@@ -83,8 +83,8 @@ function hostRejection(connection: ConnectionLike | undefined, request: Incoming
 export interface WriteChannels {
   /** Merge a Config patch through the host settings service (S3 Config channel). */
   readonly updateConfig: (patch: Record<string, unknown>) => Promise<void>
-  /** Set one pack param default in its manifest, re-validating at load strength, and hot-swap the pack map. */
-  readonly setPackParamDefault: (pack: string, param: string, value: unknown) => Promise<void>
+  /** Set one pack param default in its manifest, re-validating at load strength, and hot-swap the pack map. `expectedOrigin` (the UI's seen-vs-written echo) refuses the write when the pack's active root changed underneath the card. */
+  readonly setPackParamDefault: (pack: string, param: string, value: unknown, expectedOrigin?: { readonly kind: string; readonly root: string }) => Promise<void>
   /** Pack-lane management (src/pack-manage.ts): market version standing, update, delete. Optional — hosts mount it only when a packsDir is configured. */
   readonly packLane?: {
     readonly checkUpdates: (pack?: string | undefined) => Promise<unknown>
@@ -190,14 +190,28 @@ export function mountParamsRoutes(
     return { status: 200, payload: { ok: true } }
   })
   const disposeParam = post('/api/docwright/pack-param', async body => {
-    const { pack, param, value } = body as { pack?: unknown; param?: unknown; value?: unknown }
+    const { pack, param, value, origin } = body as { pack?: unknown; param?: unknown; value?: unknown; origin?: unknown }
     if (typeof pack !== 'string' || pack.length === 0 || typeof param !== 'string' || param.length === 0) {
       throw new CodedError('invalidParamBody', 'body must be {"pack", "param", "value"} with non-empty pack and param names; nothing was written')
     }
     if (value === undefined) {
       throw new CodedError('valueRequired', 'body.value is required (the new default; pass null to state that explicitly is not supported — defaults are edited, not removed, from the UI)')
     }
-    await deps.writes!.setPackParamDefault(pack, param, value)
+    // Optional seen-vs-written echo: the card renders the pack's active
+    // origin and sends it back; a mismatch means a same-name shadowed copy
+    // changed the resolution between render and click.
+    const expectedOrigin = (() => {
+      if (origin === undefined || origin === null) return undefined
+      if (typeof origin !== 'object') {
+        throw new CodedError('invalidParamBody', 'body.origin, when present, must be {"kind", "root"} echoing the card\'s rendered pack origin; nothing was written')
+      }
+      const o = origin as { kind?: unknown; root?: unknown }
+      if (typeof o.kind !== 'string' || typeof o.root !== 'string') {
+        throw new CodedError('invalidParamBody', 'body.origin, when present, must be {"kind", "root"} echoing the card\'s rendered pack origin; nothing was written')
+      }
+      return { kind: o.kind, root: o.root }
+    })()
+    await deps.writes!.setPackParamDefault(pack, param, value, expectedOrigin)
     return { status: 200, payload: { ok: true } }
   })
   // The pack lane mounts only when a packsDir is configured (a deployment

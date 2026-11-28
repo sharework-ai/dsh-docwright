@@ -171,3 +171,20 @@ describe('setPackParamDefault', () => {
     await rm(root, { recursive: true, force: true })
   })
 })
+
+describe('setPackParamDefault: seen-vs-written origin guard', () => {
+  it('refuses the write when the echoed origin does not match the pack\'s active root', async () => {
+    const { root, deps } = await writeDeps()
+    const before = await readFile(join(root, 'wp', 'manifest.json'), 'utf8')
+    const pack = deps.packs.get('wp')!
+    await expect(setPackParamDefault(deps, 'wp', 'limit', 9, { kind: 'packsDir', root: '/somewhere/else' }))
+      .rejects.toThrow(/now resolves from .*nothing was written/)
+    // Nothing landed on disk, and the in-memory default is unchanged.
+    expect(await readFile(join(root, 'wp', 'manifest.json'), 'utf8')).toBe(before)
+    expect(deps.packs.get('wp')!.manifest.params!.limit!.default).toBe(pack.manifest.params!.limit!.default)
+    // Echoing the ACTUAL origin passes and writes.
+    await setPackParamDefault(deps, 'wp', 'limit', 9, { kind: pack.origin.kind, root: pack.origin.root })
+    expect(deps.packs.get('wp')!.manifest.params!.limit!.default).toBe(9)
+    await rm(root, { recursive: true, force: true })
+  })
+})

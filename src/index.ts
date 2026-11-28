@@ -5,7 +5,7 @@ import { AUTHORING_SKILL_NAME, readAuthoringGuide, registerAuthoringSkill, type 
 import { INSTALL_SKILL_NAME, readInstallGuide, registerInstallSkill } from './install-skill.ts'
 import { Config, type Config as DocwrightConfig } from './config.ts'
 import { mountParamsRoutes, type ConnectionLike, type WebServerLike, type WriteChannels } from './http.ts'
-import { loadPackSet, type PackRootSpec } from './pack-loader.ts'
+import { loadPackSet, type PackRootSpec, type ShadowedCopy } from './pack-loader.ts'
 import type { Pack } from './pack.ts'
 import { applyDisabled, resolvePacksDir, workspacePackRoots } from './pack-sources.ts'
 import { buildParamsPayload } from './params-rpc.ts'
@@ -83,8 +83,13 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       .map(spec => ({ dir: spec.dir, origin: { kind: 'workspace' as const, root: spec.dir } })),
   ]
   /** One wiring point: the builtin-load switch applies to the initial load, every hot-reload, and the install lane. The legacy positional args (builtinRoot, { extra: [packsDir] }) are accepted and ignored — canonical roots resolve the same tiers plus extraPacksDir, shadow policy, and the disabled filter. */
+  // Same-name copies that lost a cross-root clash on the LAST successful
+  // load: the params payload renders them on the winning card so "which copy
+  // is live" always has an answer (docs/designs/pack-load-dirs.md P3).
+  let lastShadowed: readonly ShadowedCopy[] = []
   const loadPacksConfigured = (_root?: string, _dirs?: { extra?: readonly string[] | undefined }): Promise<ReadonlyMap<string, Pack>> =>
     loadPackSet(builtinRoot, { includeBuiltin: config.loadBuiltinPacks !== false, roots: canonicalRoots(), shadowPolicy }).then(async set => {
+      lastShadowed = set.shadowed
       // Disabled names expand via the local suites.json record (suite names
       // map to their member packs); disabled packs drop out of the map and an
       // enabled pack consuming a disabled one fails loud.
@@ -151,12 +156,12 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
     const packsDirConfigured = installDir
     const writes: WriteChannels = {
       updateConfig: patch => updateConfigViaEditor(editorOf(), patch),
-      setPackParamDefault: (pack, param, value) => setPackParamDefault({
+      setPackParamDefault: (pack, param, value, expectedOrigin) => setPackParamDefault({
         packs,
         builtinRoot,
         extraPacksDir: packsDirConfigured,
         loadPacks: loadPacksConfigured,
-      }, pack, param, value),
+      }, pack, param, value, expectedOrigin),
       // The pack lane exists only when a packsDir is configured — without one
       // there is nothing to manage and the routes stay unmounted.
       packLane: {
@@ -217,7 +222,7 @@ export async function registerTools(ctx: Context, config: DocwrightConfig, built
       },
     }
     host.effect(() => mountParamsRoutes(host.webServer, {
-      payload: () => buildParamsPayload(packs, Config, config),
+      payload: () => buildParamsPayload(packs, Config, config, lastShadowed),
       connection: () => (ctx as unknown as { get(name: string): unknown }).get('connection') as ConnectionLike | undefined,
       writes,
     }), 'docwright: params routes')

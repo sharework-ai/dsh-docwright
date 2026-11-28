@@ -184,6 +184,9 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
     throw new Error(`pack ${dir}: manifest.materialsRoot must be a workspace-relative directory path without ".." when present`)
   }
   if (m.title !== undefined) assertLocalizedText(m.title, `pack ${dir}: manifest.title`)
+  if (m.author !== undefined && (typeof m.author !== 'string' || m.author.length === 0)) {
+    throw new Error(`pack ${dir}: manifest.author must be a non-empty string when present`)
+  }
   if (m.suite !== undefined && (typeof m.suite !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(m.suite))) {
     throw new Error(`pack ${dir}: manifest.suite must be a suite code (lowercase kebab-case, up to 64 chars) when present`)
   }
@@ -250,6 +253,7 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
     ...(m.requiresTopic === undefined ? {} : { requiresTopic: m.requiresTopic }),
     ...(m.materialsRoot === undefined ? {} : { materialsRoot: m.materialsRoot }),
     ...(m.artifactPrefix === undefined ? {} : { artifactPrefix: m.artifactPrefix }),
+    ...(m.author === undefined ? {} : { author: m.author }),
     ...(params === undefined ? {} : { params }),
   }
 }

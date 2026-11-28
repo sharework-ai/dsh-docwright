@@ -69,10 +69,17 @@ export async function setPackParamDefault(deps: {
   builtinRoot: string
   extraPacksDir?: string | undefined
   loadPacks: (builtinRoot: string, dirs: { extra?: readonly string[] | undefined }) => Promise<ReadonlyMap<string, Pack>>
-}, packName: string, paramName: string, value: unknown): Promise<void> {
+}, packName: string, paramName: string, value: unknown, expectedOrigin?: { readonly kind: string; readonly root: string } | undefined): Promise<void> {
   const pack = deps.packs.get(packName)
   if (pack === undefined) {
     throw new CodedError('unknownPack', `unknown pack "${packName}" (available: ${[...deps.packs.keys()].sort().join(', ')}); nothing was written`, { params: { pack: packName, available: [...deps.packs.keys()].sort().join(', ') } })
+  }
+  // Seen-vs-written guard: the UI renders a card from the ACTIVE pack map and
+  // echoes its origin back; when a same-name shadowed copy changed the
+  // active root between render and click, the echo no longer matches and the
+  // write refuses instead of landing in a manifest the user was not shown.
+  if (expectedOrigin !== undefined && (pack.origin.kind !== expectedOrigin.kind || pack.origin.root !== expectedOrigin.root)) {
+    throw new CodedError('originMismatch', `pack "${packName}" now resolves from ${pack.origin.kind} (${pack.origin.root}), but the edit was addressed at ${expectedOrigin.kind} (${expectedOrigin.root}) — the views were reloaded in between; nothing was written`, { params: { pack: packName }, detail: `expected ${expectedOrigin.kind} ${expectedOrigin.root}, actual ${pack.origin.kind} ${pack.origin.root}` })
   }
   const spec = pack.manifest.params?.[paramName]
   if (spec === undefined || spec.default === undefined) {

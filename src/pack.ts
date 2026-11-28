@@ -164,6 +164,13 @@ export interface PackManifest {
    */
   readonly title?: LocalizedText | undefined
   /**
+   * Author display name (market metadata, optional): the settings page shows
+   * it beside the code so same-code packs from different publishers read
+     apart. The qualified identity org/name lives on the market only — org
+   * comes from the publishing account, never the manifest.
+   */
+  readonly author?: string | undefined
+  /**
    * The suite this pack belongs to (suite CODE = the suite's `name`), when the
    * pack is a suite member. The market sets/clears the stored flag when a
    * suite is published — the manifest value is the author's declaration.

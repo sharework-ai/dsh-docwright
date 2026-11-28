@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkPackUpdates, checkSuiteStatus, compareVersions, deletePack, deleteSuite, dirHash, installPack, installSuite, resolveManagedPackDir, resolveSuiteInstallClosure, updatePack, updateSuite } from '../src/pack-manage.ts'
+import { checkPackUpdates, checkSuiteStatus, compareVersions, deletePack, deleteSuite, dirHash, installPack, installSuite, resolveInstallClosure, resolveManagedPackDir, resolveSuiteInstallClosure, updatePack, updateSuite } from '../src/pack-manage.ts'
 import { loadPacks } from '../src/pack-loader.ts'
 import type { Pack } from '../src/pack.ts'
 
@@ -1030,5 +1030,64 @@ describe('suite lane failure branches', () => {
         return new Response(JSON.stringify({ packs: [] }), { headers: { 'content-type': 'application/json' } })
       }) as typeof fetch,
     }, 'cosmic')).rejects.toThrow(/could not reach the pack market/)
+  })
+})
+
+describe('market identity (org/author) and duplicate-name guard', () => {
+  it('pack-update rows carry the market org/author on both the per-pack and the catalog path', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    fx.deps.marketUrl = 'https://market.test'
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/api/packs/ext')) return new Response(JSON.stringify({ ok: true, pack: { name: 'ext', version: '9', org: 'sharework', author: 'peng_long' } }), { headers: { 'content-type': 'application/json' } })
+      if (url.endsWith('/api/index')) return new Response(JSON.stringify({ packs: [{ name: 'ext', version: '2', tarball: '/t.tgz', tarballSha256: 'sha256:x', contentHash: 'sha256:x', org: 'sharework', author: 'peng_long' }] }), { headers: { 'content-type': 'application/json' } })
+      throw new Error(`unexpected ${url}`)
+    }) as typeof fetch
+    try {
+      const rows = await checkPackUpdates(fx.deps, 'ext')
+      expect(rows[0]).toMatchObject({ name: 'ext', org: 'sharework', author: 'peng_long' })
+      const catalogRows = await checkPackUpdates(fx.deps)
+      expect(catalogRows[0]).toMatchObject({ name: 'ext', marketVersion: '2', updateAvailable: true, org: 'sharework', author: 'peng_long' })
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  it('refuses a market index that lists one pack name twice (ambiguous install target)', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    fx.deps.marketUrl = 'https://market.test'
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({ packs: [
+      { name: 'ext', version: '2', tarball: '/t.tgz', tarballSha256: 'sha256:x', contentHash: 'sha256:x' },
+      { name: 'ext', version: '3', tarball: '/t.tgz', tarballSha256: 'sha256:x', contentHash: 'sha256:x' },
+    ] }), { headers: { 'content-type': 'application/json' } })) as typeof fetch
+    try {
+      await expect(checkPackUpdates(fx.deps)).rejects.toThrow(/lists pack "ext" more than once/)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  it('resolveInstallClosure refuses duplicate index names too', () => {
+    const entry = { name: 'gw', version: '1', tarball: '/t', tarballSha256: 's', contentHash: 'c' }
+    expect(() => resolveInstallClosure({ packs: [entry, { ...entry, version: '2' }] }, 'gw', new Set())).toThrow(/more than once/)
+  })
+
+  it('checkSuiteStatus surfaces the suite org and degrades to empty on old markets', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    const market = await suiteMarketServer(
+      [],
+      [
+        { name: 'with-org', version: '1', org: 'sharework', members: ['ext'] } as never,
+        { name: 'legacy', version: '1', members: [] },
+      ],
+    )
+    const statuses = await checkSuiteStatus({ packs: fx.packs, packsDir: fx.packsDir, marketUrl: market.url })
+    expect(statuses.find(s => s.name === 'with-org')!.org).toBe('sharework')
+    expect(statuses.find(s => s.name === 'legacy')!.org).toBe('')
   })
 })

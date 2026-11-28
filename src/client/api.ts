@@ -44,12 +44,25 @@ export interface UiParamDeclaration {
 export interface UiPackEntry {
   name: string
   version: string
+  /** Author display name from the manifest (market metadata); absent when undeclared. */
+  author?: string
   description: LocalizedText
   scope: 'workspace' | 'topic'
   consumes: readonly string[]
   paramDriftPolicy?: string
   origin: { kind: 'builtin' | 'packsDir'; root: string }
   params: readonly UiParamDeclaration[]
+}
+
+/** A same-name pack that lost a cross-root clash (the winning card renders it). */
+export interface UiShadowedCopy {
+  name: string
+  origin: UiPackEntry['origin']
+  dir: string
+  version: string
+  activeOrigin: UiPackEntry['origin']
+  activeDir: string
+  activeVersion: string
 }
 
 export interface UiParamGroup {
@@ -74,6 +87,8 @@ export interface ParamsPayload {
   config: readonly UiConfigEntry[]
   /** Config's disabledPacks array — the enable/disable toggles read it. */
   disabledPacks?: readonly string[]
+  /** Same-name copies that lost a cross-root clash, keyed display on the winning card. */
+  shadowedPacks?: readonly UiShadowedCopy[]
 }
 
 async function parse<T>(response: Response): Promise<T> {
@@ -109,12 +124,12 @@ export async function saveConfigPatch(patch: Record<string, unknown>): Promise<v
   }))
 }
 
-/** Set one pack param default in its manifest (server re-validates at load strength). */
-export async function savePackParam(pack: string, param: string, value: unknown): Promise<void> {
+/** Set one pack param default in its manifest (server re-validates at load strength). `origin` echoes the card's rendered pack origin — a mismatch (a same-name copy changed the resolution in between) refuses the write. */
+export async function savePackParam(pack: string, param: string, value: unknown, origin?: { kind: string; root: string }): Promise<void> {
   await parse(await fetch('/api/docwright/pack-param', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ pack, param, value }),
+    body: JSON.stringify({ pack, param, value, ...(origin !== undefined ? { origin } : {}) }),
   }))
 }
 
@@ -126,6 +141,10 @@ export interface UiPackUpdate {
   onMarket: boolean
   marketVersion?: string
   updateAvailable: boolean
+  /** Publisher org — the qualified identity is org/name@version; absent on old markets. */
+  org?: string
+  /** Author display name from the market row; absent on old markets. */
+  author?: string
 }
 
 /** Version standing of the managed packs; `pack` scopes the check to one
@@ -180,6 +199,8 @@ export interface UiSuiteStatus {
   version: string
   description: LocalizedText
   tags: string[]
+  /** Publisher org — the qualified identity is org/suite-name; empty on old markets. */
+  org?: string
   members: readonly UiSuiteMember[]
   incomplete: boolean
   updateAvailable: boolean

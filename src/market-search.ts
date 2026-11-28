@@ -44,6 +44,8 @@ interface MarketSuiteRow {
   description?: unknown
   tags?: unknown
   category?: unknown
+  /** Publisher org — the qualified suite identity is org/name (newer markets). */
+  org?: unknown
   members?: unknown
 }
 
@@ -53,6 +55,8 @@ export type MarketSuiteCard = {
   version: string
   description: string
   tags: string[]
+  /** Publisher org — the qualified card identity is org/suite-name (empty on old markets). */
+  org: string
   members: string[]
   install: string
 }
@@ -64,6 +68,8 @@ export type MarketPackCard = {
   description: string
   tags: string[]
   author: string
+  /** Publisher org — the qualified card identity is org/name@version ([]-safe empty on old markets). */
+  org: string
   license: string
   languages: string[]
   consumes: string[]
@@ -122,6 +128,7 @@ export async function searchMarket(deps: {
     description: resolveLocalized(row.description as LocalizedText | undefined, 'en'),
     tags: tagsOf(row),
     author: asString(row.author),
+    org: asString(row.org),
     license: asString(row.license),
     languages: asStringArray(row.languages),
     consumes: asStringArray(row.consumes),
@@ -172,11 +179,28 @@ async function suiteCardsFor(deps: { readonly marketUrl: string; readonly fetchI
     version: asString(row.version),
     description: resolveLocalized(row.description as LocalizedText | undefined, 'en'),
     tags: tagsOf(row),
+    org: asString(row.org),
     members: asStringArray(row.members),
     install: suiteInstallHint.replace('<name>', asString(row.name)),
   })).filter(c => c.name.length > 0 && c.members.length > 0)
 }
 
+
+/** Index rows keyed by name. A name listed twice has no unambiguous install
+ * target — the collision fails loud instead of a Map silently keeping the
+ * later row (today's market PK makes duplicates impossible; this guards a
+ * market that may someday open code reuse across orgs). */
+function indexRowsByName(rows: MarketPackRow[]): Map<string, MarketPackRow> {
+  const byName = new Map<string, MarketPackRow>()
+  for (const row of rows) {
+    const name = String(row.name)
+    if (byName.has(name)) {
+      throw new Error(`the market index lists pack "${name}" more than once; the install target would be ambiguous; nothing was installed`)
+    }
+    byName.set(name, row)
+  }
+  return byName
+}
 
 /** The install plan for one pack: its consumes closure from the market index
  * (the doc_market_install confirmation table's substance). Throws when the
@@ -192,7 +216,7 @@ export async function fetchInstallPlan(marketUrl: string, requested: string): Pr
   } catch (error) {
     throw new Error(`could not reach the pack market at ${marketUrl} (${(error as Error).message}); nothing was asked — retry later`)
   }
-  const byName = new Map(rows.map(r => [String(r.name), r]))
+  const byName = indexRowsByName(rows)
   if (!byName.has(requested)) {
     throw new Error(`pack "${requested}" is not listed on the market at ${marketUrl}; nothing to install — publish it first or install it into the packsDir directly`)
   }
@@ -248,7 +272,7 @@ export async function fetchSuiteInstallPlan(marketUrl: string, suite: string): P
   } catch (error) {
     throw new Error(`could not reach the pack market at ${marketUrl} (${(error as Error).message}); nothing was asked — retry later`)
   }
-  const byName = new Map(rows.map(r => [String(r.name), r]))
+  const byName = indexRowsByName(rows)
   const members: Array<{ name: string; version: string; description: string; requested: boolean }> = []
   const seen = new Set<string>()
   const requestedSet = new Set(memberNames)

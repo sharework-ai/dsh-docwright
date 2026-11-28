@@ -442,6 +442,30 @@ describe('POST write routes', () => {
     await param.handler(req('POST', 'https://h', 'h', JSON.stringify({ pack: 'wp' })), missing.typed as never)
     expect(missing.res.statusCode).toBe(422)
   })
+  it('passes the origin echo through and refuses a malformed one', async () => {
+    const { webServer, routes } = fakeServer()
+    const got: Array<unknown> = []
+    mountParamsRoutes(webServer, {
+      payload: () => ({}),
+      writes: { updateConfig: () => Promise.resolve(), setPackParamDefault: (p, n, v, origin) => { got.push(origin); return Promise.resolve() } },
+    })
+    const param = routes.find(r => r.path === '/api/docwright/pack-param')!
+    const ok = fakeRes()
+    await param.handler(req('POST', 'https://h', 'h', JSON.stringify({ pack: 'wp', param: 'limit', value: 7, origin: { kind: 'packsDir', root: '/x' } })), ok.typed as never)
+    expect(ok.res.statusCode).toBe(200)
+    expect(got[0]).toEqual({ kind: 'packsDir', root: '/x' })
+    // No origin at all: the guard stays off (undefined reaches the channel).
+    const bare = fakeRes()
+    await param.handler(req('POST', 'https://h', 'h', JSON.stringify({ pack: 'wp', param: 'limit', value: 7 })), bare.typed as never)
+    expect(got[1]).toBeUndefined()
+    for (const bad of ['nope', { kind: 'packsDir' }, { root: '/x' }, 7]) {
+      const res = fakeRes()
+      await param.handler(req('POST', 'https://h', 'h', JSON.stringify({ pack: 'wp', param: 'limit', value: 7, origin: bad })), res.typed as never)
+      expect(res.res.statusCode).toBe(422)
+      expect(JSON.parse(res.res.body).code).toBe('invalidParamBody')
+    }
+    expect(got).toHaveLength(2)
+  })
   it('routes suite bodies to the suite lane: status read, update, delete', async () => {
     const { webServer, routes } = fakeServer()
     const calls: string[] = []
@@ -698,5 +722,20 @@ describe('registerTools wiring: lane gates and bad bodies', () => {
     await bareHandlers[bareHandlers.length - 4]!(req('POST', { pack: 'x' }), resBareInstall)
     expect(resBareInstall.statusCode).toBe(422)
     expect(JSON.parse(resBareInstall.body).code).toBe('installLaneMissing')
+  })
+})
+
+describe('pack identity and shadowed copies in the payload', () => {
+  it('passes the manifest author through and echoes the shadowed copies verbatim', async () => {
+    const packs = new Map([
+      ['authored', packOf({ name: 'authored', version: '1', author: 'peng_long', description: 'd', scope: 'topic', consumes: [], params: { limit: { type: 'number', default: 1, description: 'd' } } })],
+    ])
+    const catalog = buildParamsCatalog(packs)
+    expect(catalog.packs[0]).toMatchObject({ name: 'authored', author: 'peng_long' })
+    const shadowed = [{ name: 'authored', origin: { kind: 'packsDir' as const, root: '/x' }, dir: '/x/authored', version: '0.9', activeOrigin: { kind: 'builtin' as const, root: '/builtin' }, activeDir: '/builtin/authored', activeVersion: '1' }]
+    const payload = buildParamsPayload(packs, Config, { confirmPolicy: 'none' } as never, shadowed)
+    expect(payload.shadowedPacks).toEqual(shadowed)
+    // The default (no records) keeps the key present but empty.
+    expect(buildParamsPayload(packs, Config, { confirmPolicy: 'none' } as never).shadowedPacks).toEqual([])
   })
 })

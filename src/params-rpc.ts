@@ -1,6 +1,7 @@
 import type { Config as DocwrightConfig } from './config.ts'
 import { asLocalizedText } from './description.ts'
 import type { LocalizedText } from './description.ts'
+import type { ShadowedCopy } from './pack-loader.ts'
 import type { Pack, ParamSpec } from './pack.ts'
 import type { Json } from './receipt.ts'
 
@@ -96,6 +97,8 @@ export interface UiParamDeclaration {
 export interface UiPackEntry {
   readonly name: string
   readonly version: string
+  /** Author display name from the manifest (market metadata); absent when undeclared. */
+  readonly author?: string
   /** Author content passed through verbatim (LocalizedText); the browser resolves the locale. */
   readonly description: LocalizedText
   readonly scope: 'workspace' | 'topic'
@@ -113,6 +116,9 @@ export interface UiParamGroup {
   readonly sources: readonly string[]
   readonly declarations: readonly UiParamDeclaration[]
 }
+
+/** A same-name pack that lost a cross-root clash, projected for the UI (the loader's ShadowedCopy verbatim). */
+export type UiShadowedCopy = ShadowedCopy
 
 export interface ParamsCatalog {
   readonly packs: readonly UiPackEntry[]
@@ -161,6 +167,7 @@ export function buildParamsCatalog(packs: ReadonlyMap<string, Pack>): ParamsCata
     packEntries.push({
       name: pack.manifest.name,
       version: pack.manifest.version,
+      ...(pack.manifest.author === undefined ? {} : { author: pack.manifest.author }),
       description: pack.manifest.description,
       scope: pack.manifest.scope,
       consumes: [...pack.manifest.consumes],
@@ -216,13 +223,15 @@ function unionChoices(node: SchemaNode): readonly (number | string | boolean)[] 
 }
 
 /** The full GET payload: pack-param views + config provenance in one response. */
-export function buildParamsPayload(packs: ReadonlyMap<string, Pack>, configSchema: unknown, resolved: DocwrightConfig): {
+export function buildParamsPayload(packs: ReadonlyMap<string, Pack>, configSchema: unknown, resolved: DocwrightConfig, shadowed: readonly ShadowedCopy[] = []): {
   packs: readonly UiPackEntry[]
   groups: readonly UiParamGroup[]
   config: readonly UiConfigEntry[]
   disabledPacks: readonly string[]
+  /** Same-name copies that lost a cross-root clash (the winning card renders them; docs/designs/pack-load-dirs.md P3). */
+  shadowedPacks: readonly UiShadowedCopy[]
 } {
-  return { ...buildParamsCatalog(packs), config: buildConfigCatalog(configSchema as SchemaNode, resolved), disabledPacks: resolved.disabledPacks ?? [] }
+  return { ...buildParamsCatalog(packs), config: buildConfigCatalog(configSchema as SchemaNode, resolved), disabledPacks: resolved.disabledPacks ?? [], shadowedPacks: shadowed }
 }
 
 function sameJson(a: unknown, b: unknown): boolean {

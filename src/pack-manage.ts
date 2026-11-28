@@ -46,6 +46,36 @@ export interface PackUpdateStatus {
   /** Absent when the market has no pack under this name. */
   readonly marketVersion?: string
   readonly updateAvailable: boolean
+  /** Publisher org (the market's qualified identity is org/name@version); absent locally or on old markets. */
+  readonly org?: string
+  /** Author display name, from the market row; absent on old markets. */
+  readonly author?: string
+}
+
+/**
+ * Index rows keyed by manifest name. A market that lists the same name twice
+ * has no stable install/update target — the collision fails loud here
+ * instead of a Map silently keeping the later row (defense for a market that
+ * may someday open code reuse across orgs; today's market PK already
+ * prevents it).
+ */
+function indexByName(index: MarketIndex): Map<string, MarketIndexEntry> {
+  const byName = new Map<string, MarketIndexEntry>()
+  for (const entry of index.packs) {
+    if (byName.has(entry.name)) {
+      throw new CodedError('marketNameClash', `the market index lists pack "${entry.name}" more than once; the install/update target would be ambiguous; nothing was written`, { params: { pack: entry.name } })
+    }
+    byName.set(entry.name, entry)
+  }
+  return byName
+}
+
+/** Defensive read of the market's publisher identity fields (old markets omit them). */
+function marketIdentityOf(row: { org?: unknown; author?: unknown }): { org?: string; author?: string } {
+  return {
+    ...(typeof row.org === 'string' && row.org.length > 0 ? { org: row.org } : {}),
+    ...(typeof row.author === 'string' && row.author.length > 0 ? { author: row.author } : {}),
+  }
 }
 
 /** One market index row (format-2 /api/index — the fields install.mjs consumes). */
@@ -56,6 +86,10 @@ interface MarketIndexEntry {
   readonly tarballSha256: string
   readonly contentHash: string
   readonly consumes?: readonly unknown[]
+  /** Publisher display name (newer markets; read defensively at every boundary). */
+  readonly author?: unknown
+  /** Publisher org — the qualified identity is org/name@version (newer markets). */
+  readonly org?: unknown
 }
 
 function consumesOf(entry: MarketIndexEntry): readonly string[] {
@@ -285,7 +319,7 @@ export async function checkPackUpdates(deps: {
         return [{ name: onlyPack, localVersion: pack.manifest.version, onMarket: false, updateAvailable: false }]
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const body = await response.json() as { pack?: { version?: unknown } }
+      const body = await response.json() as { pack?: ({ version?: unknown } & { org?: unknown; author?: unknown }) }
       const marketVersion = typeof body.pack?.version === 'string' ? body.pack.version : undefined
       return [{
         name: onlyPack,
@@ -293,6 +327,7 @@ export async function checkPackUpdates(deps: {
         onMarket: marketVersion !== undefined,
         ...(marketVersion !== undefined ? { marketVersion } : {}),
         updateAvailable: marketVersion !== undefined && compareVersions(marketVersion, pack.manifest.version) > 0,
+        ...marketIdentityOf(body.pack ?? {}),
       }]
     } catch (error) {
       throw new CodedError('marketUnreachable', `could not check "${onlyPack}" against the pack market at ${deps.marketUrl} (${(error as Error).message}); showing local state only`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
@@ -306,7 +341,7 @@ export async function checkPackUpdates(deps: {
   } catch (error) {
     throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); showing local state only`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
   }
-  const byName = new Map(index.packs.map(e => [e.name, e]))
+  const byName = indexByName(index)
   const managedRows = managed.map(p => {
     const entry = byName.get(p.manifest.name)
     const marketVersion = entry?.version
@@ -316,6 +351,7 @@ export async function checkPackUpdates(deps: {
       onMarket: marketVersion !== undefined,
       ...(marketVersion === undefined ? {} : { marketVersion }),
       updateAvailable: marketVersion !== undefined && compareVersions(marketVersion, p.manifest.version) > 0,
+      ...(entry === undefined ? {} : marketIdentityOf(entry)),
     }
   })
   const workspaceRows = workspacePacks.map(p => {
@@ -327,6 +363,7 @@ export async function checkPackUpdates(deps: {
       onMarket: marketVersion !== undefined,
       ...(marketVersion === undefined ? {} : { marketVersion }),
       updateAvailable: marketVersion !== undefined && compareVersions(marketVersion, p.version) > 0,
+      ...(entry === undefined ? {} : marketIdentityOf(entry)),
     }
   })
   return [...managedRows, ...workspaceRows]
@@ -511,7 +548,7 @@ export interface InstallOutcome {
  * locally fails loud naming the requester.
  */
 export function resolveInstallClosure(index: MarketIndex, requested: string, installedLocally: ReadonlySet<string>): readonly MarketIndexEntry[] {
-  const byName = new Map(index.packs.map(e => [e.name, e]))
+  const byName = indexByName(index)
   const order: MarketIndexEntry[] = []
   const seen = new Set<string>()
   const visit = (name: string, requester: string | undefined): void => {
@@ -695,6 +732,8 @@ interface MarketSuiteRecord {
   readonly version?: unknown
   readonly description?: unknown
   readonly category?: unknown
+  /** Publisher org — the qualified suite identity is org/name (newer markets). */
+  readonly org?: unknown
   readonly members?: unknown
 }
 
@@ -704,6 +743,8 @@ export interface SuiteDetail {
   readonly description: unknown
   /** Domain tags; legacy single-category markets degrade to one element. */
   readonly tags: readonly string[]
+  /** Publisher org; empty on old markets (display-only fallback to the bare name). */
+  readonly org: string
   readonly members: readonly string[]
 }
 
@@ -713,6 +754,7 @@ function suiteRecordOf(record: MarketSuiteRecord): SuiteDetail {
     version: typeof record.version === 'string' ? record.version : '',
     description: record.description,
     tags: tagsOf(record),
+    org: typeof record.org === 'string' ? record.org : '',
     members: Array.isArray(record.members) ? record.members.filter((m): m is string => typeof m === 'string') : [],
   }
 }
@@ -755,7 +797,7 @@ function suiteAbsentError(suite: string, marketUrl: string): CodedError {
  * nor installed locally fails loud naming the suite.
  */
 export function resolveSuiteInstallClosure(index: MarketIndex, suite: SuiteDetail, installedLocally: ReadonlySet<string>): readonly MarketIndexEntry[] {
-  const byName = new Map(index.packs.map(e => [e.name, e]))
+  const byName = indexByName(index)
   const order: MarketIndexEntry[] = []
   const seen = new Set<string>()
   const visit = (name: string, requester: string | undefined): void => {
@@ -844,7 +886,7 @@ export async function updateSuite(deps: {
   } catch (error) {
     throw new CodedError('marketUnreachable', `could not reach the pack market at ${deps.marketUrl} (${(error as Error).message}); nothing was written`, { params: { url: deps.marketUrl }, detail: (error as Error).message })
   }
-  const byName = new Map(index.packs.map(e => [e.name, e]))
+  const byName = indexByName(index)
   const updated: { name: string; version: string }[] = []
   const unchanged: string[] = []
   const missing: string[] = []
@@ -934,6 +976,8 @@ export interface SuiteStatus {
   readonly version: string
   readonly description: unknown
   readonly tags: readonly string[]
+  /** Publisher org; empty on old markets — the UI falls back to the bare name. */
+  readonly org: string
   readonly members: readonly SuiteMemberStatus[]
   /** True when at least one member pack is not installed. */
   readonly incomplete: boolean
@@ -1009,6 +1053,7 @@ export async function checkSuiteStatus(deps: {
       version: suite.version,
       description: suite.description,
       tags: suite.tags,
+      org: suite.org,
       members,
       incomplete: members.some(m => m.localVersion === undefined),
       updateAvailable: members.some(m => m.updateAvailable),
@@ -1047,6 +1092,7 @@ function statusesFromRecord(record: readonly LocalSuiteEntry[], marketVersions: 
       version: entry.version,
       description: {},
       tags: [],
+      org: '',
       members,
       incomplete: false,
       updateAvailable: false,

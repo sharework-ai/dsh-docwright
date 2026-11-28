@@ -80,15 +80,16 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				body: JSON.stringify({ patch })
 			}));
 		}
-		/** Set one pack param default in its manifest (server re-validates at load strength). */
-		async function savePackParam(pack, param, value) {
+		/** Set one pack param default in its manifest (server re-validates at load strength). `origin` echoes the card's rendered pack origin — a mismatch (a same-name copy changed the resolution in between) refuses the write. */
+		async function savePackParam(pack, param, value, origin) {
 			await parse(await fetch("/api/docwright/pack-param", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({
 					pack,
 					param,
-					value
+					value,
+					...origin !== void 0 ? { origin } : {}
 				})
 			}));
 		}
@@ -236,6 +237,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			factorValue: "target {value}, tolerance x{down}-x{up}",
 			shadowedNote: "Also declared in {packs}. The source declaration governs; details in the Packs view.",
 			shadowedByNote: "managed by {pack}, not effective here",
+			shadowedCopiesPill: "{count} shadowed",
+			shadowedCopiesTitle: "Same-name copies from other roots that this copy shadows (the live one is the card above):",
+			shadowedCopyVersion: "v{version}",
 			updateCheckFailed: "Could not reach the pack market; showing local state only.",
 			upToDate: "up to date",
 			updateTo: "update to v{version}",
@@ -295,7 +299,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.updateFailed": "Pack \"{pack}\" update failed; the installed version is unchanged.",
 			"err.absentFromMarket": "Pack \"{pack}\" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.",
 			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it.",
-			"err.suiteLaneMissing": "The suite lane is not wired on this deployment; nothing was written."
+			"err.suiteLaneMissing": "The suite lane is not wired on this deployment; nothing was written.",
+			"err.originMismatch": "Pack \"{pack}\" now resolves from a different root than the card showed — the views were reloaded in between. Refresh and retry; nothing was written.",
+			"err.marketNameClash": "The market index lists pack \"{pack}\" more than once; the target would be ambiguous. Nothing was written — report this to the market operator."
 		};
 		const zh = {
 			nav: "Docwright 参数",
@@ -343,6 +349,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			factorValue: "目标 {value}（容差 ×{down}–×{up}）",
 			shadowedNote: "同名参数还声明于：{packs}（以生效源为准，详见包视图）。",
 			shadowedByNote: "由 {pack} 管理，此处声明不生效",
+			shadowedCopiesPill: "遮蔽 {count} 份同名",
+			shadowedCopiesTitle: "来自其他根目录、被本卡遮蔽的同名副本（生效的是上面这张卡）：",
+			shadowedCopyVersion: "v{version}",
 			updateCheckFailed: "无法连接 pack 市场，仅显示本地状态。",
 			upToDate: "已是最新",
 			updateTo: "可更新到 v{version}",
@@ -402,7 +411,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.updateFailed": "pack「{pack}」更新失败，已装版本未变。",
 			"err.absentFromMarket": "pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。",
 			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。",
-			"err.suiteLaneMissing": "该部署未接入套件通道，未做任何改动。"
+			"err.suiteLaneMissing": "该部署未接入套件通道，未做任何改动。",
+			"err.originMismatch": "pack「{pack}」当前生效的来源和卡片显示的不一致（期间列表被刷新过）。请刷新后重试；未写入任何内容。",
+			"err.marketNameClash": "市场索引中 pack「{pack}」出现了多次，安装目标不明确。未写入任何内容，请联系市场管理员处理。"
 		};
 		function translate(dict) {
 			return (key) => {
@@ -478,8 +489,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`;
 		/** Suite chips keep the market suite cards' translucent purple. */
 		const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`;
-		/** Anchor ids of the pack and suite cards (jump targets for the chips). */
-		const packAnchorId = (name) => `docwright-pack-${name}`;
+		/** Anchor ids of the pack and suite cards (jump targets for the chips). The
+		* pack anchor carries the ORIGIN ROOT: two same-code packs from different
+		* roots (cross-root shadowing) must never collide on one id — the code alone
+		* is not the full identity (org/name on the market, root/name locally). */
+		const packAnchorId = (origin, name) => `docwright-pack-${name}-${origin.root}`;
 		const suiteAnchorId = (name) => `docwright-suite-${name}`;
 		/** The author's description, inline beneath the parameter name — the primary
 		* explanation stays in view instead of hiding behind a hover. Locale
@@ -566,10 +580,13 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				d,
 				t,
 				lang: props.lang,
-				onSaved: props.onSaved
+				onSaved: props.onSaved,
+				origin: props.origin
 			});
 		}
-		/** The staged-edit control for a source declaration. */
+		/** The staged-edit control for a source declaration. `origin` (when known)
+		* echoes the card's rendered pack origin so the server can refuse a write
+		* whose target moved underneath the card (seen-vs-written guard). */
 		function EditSeat(props) {
 			const { d, t } = props;
 			const [editing, setEditing] = (0, react.useState)(false);
@@ -594,7 +611,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				setError(void 0);
 				try {
 					const value = d.type === "object" ? JSON.parse(draft) : d.type === "number" ? Number(draft) : draft;
-					await savePackParam(d.pack, d.name, value);
+					await savePackParam(d.pack, d.name, value, props.origin);
 					setEditing(false);
 					props.onSaved?.();
 				} catch (saveError) {
@@ -655,17 +672,27 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const { name, declarations, t } = props;
 			const governing = declarations.find((d) => d.role === "source") ?? declarations[0];
 			const shadowed = declarations.filter((d) => d !== governing);
+			const originOf = (pack) => props.rootOf(pack)?.origin;
 			return (0, react.createElement)("div", { className: card }, (0, react.createElement)("div", { className: rowHead }, (0, react.createElement)("span", { className: name }, name), (0, react.createElement)(FlagPills, {
 				d: governing,
 				t
 			})), (0, react.createElement)(DescriptionLine, {
 				text: governing.description,
 				resolveText: props.resolveText
-			}), (0, react.createElement)("div", { className: "flex items-center gap-2 mt-1" }, (0, react.createElement)("span", { className: muted }, `${t("sources")}:`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, governing.pack)), (0, react.createElement)(ValueRow, {
+			}), (0, react.createElement)("div", { className: "flex items-center gap-2 mt-1" }, (0, react.createElement)("span", { className: muted }, `${t("sources")}:`), declarations.filter((d) => d.role === "source").map((d) => {
+				const origin = originOf(d.pack);
+				return (0, react.createElement)("span", {
+					key: d.pack,
+					title: origin === void 0 ? d.pack : `${d.pack} · ${origin.kind} ${origin.root}`,
+					onClick: origin !== void 0 ? () => props.onJump("packs", packAnchorId(origin, d.pack)) : void 0,
+					className: origin !== void 0 ? `${chipOk} cursor-pointer` : chipOk
+				}, d.pack);
+			})), (0, react.createElement)(ValueRow, {
 				d: governing,
 				t,
 				lang: props.lang,
-				onSaved: props.onSaved
+				onSaved: props.onSaved,
+				origin: originOf(governing.pack)
 			}), (0, react.createElement)("div", { className: "mt-0.5" }, (0, react.createElement)(ConstraintLine, {
 				d: governing,
 				t
@@ -674,6 +701,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		/** Aggregated parameter view: one card per parameter name. */
 		function GroupsView(props) {
 			const { payload, t } = props;
+			const rootOf = (0, react.useCallback)((pack) => payload.packs.find((p) => p.name === pack), [payload.packs]);
 			if (payload.groups.length === 0) return (0, react.createElement)("p", { className: muted }, t("empty"));
 			return (0, react.createElement)("div", null, payload.groups.map((g) => (0, react.createElement)(ParamGroupCard, {
 				key: g.name,
@@ -682,7 +710,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
-				onSaved: props.onSaved
+				onSaved: props.onSaved,
+				rootOf,
+				onJump: props.onJump
 			})));
 		}
 		/** One declaration row inside a pack's card. Source rows carry the edit seat; shadowed rows strike their never-applied value through. */
@@ -698,7 +728,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				d,
 				t,
 				lang: props.lang,
-				onSaved: props.onSaved
+				onSaved: props.onSaved,
+				origin: props.origin
 			}), (0, react.createElement)("div", { className: "mt-0.5" }, (0, react.createElement)(ConstraintLine, {
 				d,
 				t
@@ -756,8 +787,22 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
 			const installedNames = (0, react.useMemo)(() => new Set(payload.packs.map((p) => p.name)), [payload.packs]);
 			const disabledNames = (0, react.useMemo)(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks]);
+			/** Active-card lookup by code (dependency chips and the groups view jump
+			* through it; the anchor carries the origin root so same-code copies never
+			* collide). */
+			const rootOf = (0, react.useCallback)((pack) => payload.packs.find((p) => p.name === pack), [payload.packs]);
+			/** Same-name copies that lost the cross-root clash, grouped by code. */
+			const shadowedByName = (0, react.useMemo)(() => {
+				const map = /* @__PURE__ */ new Map();
+				for (const copy of payload.shadowedPacks ?? []) {
+					const list = map.get(copy.name);
+					if (list === void 0) map.set(copy.name, [copy]);
+					else list.push(copy);
+				}
+				return map;
+			}, [payload.shadowedPacks]);
 			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { className: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { className: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
-				key: p.name,
+				key: `${p.name}-${p.origin.root}`,
 				pack: p,
 				status: byName.get(p.name),
 				checked: byName.has(p.name),
@@ -772,6 +817,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				suites: props.suites.get(p.name) ?? [],
 				consumers: payload.packs.filter((other) => other.name !== p.name && other.consumes.includes(p.name)).map((other) => other.name),
 				disabled: disabledNames.has(p.name),
+				shadowed: shadowedByName.get(p.name) ?? [],
+				rootOf,
 				onDone: (text) => {
 					setLaneDone(text);
 					props.onSaved();
@@ -784,18 +831,25 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		function PackCard(props) {
 			const { pack, t } = props;
 			const [paramsOpen, setParamsOpen] = (0, react.useState)(false);
+			const [shadowedOpen, setShadowedOpen] = (0, react.useState)(false);
+			const qualified = props.status?.org !== void 0 ? `${props.status.org}/${pack.name}@v${pack.version}` : `${pack.name}@v${pack.version}`;
 			return (0, react.createElement)("div", {
-				id: packAnchorId(pack.name),
+				id: packAnchorId(pack.origin, pack.name),
 				className: card
-			}, (0, react.createElement)("div", { className: packHead }, (0, react.createElement)("span", { className: name$1 }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null, props.disabled ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("disabledPill")) : null), (0, react.createElement)("div", { className: `${desc} mb-1` }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` }, pack.consumes.length > 0 ? (0, react.createElement)("span", { className: "inline-flex gap-1.5 items-center flex-wrap" }, (0, react.createElement)("span", {
+			}, (0, react.createElement)("div", { className: packHead }, (0, react.createElement)("span", {
+				className: name$1,
+				title: qualified
+			}, pack.name), pack.author !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, { title: qualified }, pack.author) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null, props.disabled ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("disabledPill")) : null), (0, react.createElement)("div", { className: `${desc} mb-1` }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` }, pack.consumes.length > 0 ? (0, react.createElement)("span", { className: "inline-flex gap-1.5 items-center flex-wrap" }, (0, react.createElement)("span", {
 				title: t("consumed"),
 				className: "inline-flex items-center"
 			}, icon(DEPENDS_ICON_PATH)), pack.consumes.map((dep) => {
-				const installed = props.installed.has(dep);
+				const depPack = props.rootOf(dep);
+				const installed = depPack !== void 0;
+				const origin = depPack?.origin;
 				return (0, react.createElement)("span", {
 					key: dep,
-					title: installed ? dep : `${dep}${t("missingDep")}`,
-					onClick: installed ? () => props.onJump("packs", packAnchorId(dep)) : void 0,
+					title: installed ? origin !== void 0 ? `${dep} · ${origin.kind} ${origin.root}` : dep : `${dep}${t("missingDep")}`,
+					onClick: installed && origin !== void 0 ? () => props.onJump("packs", packAnchorId(origin, dep)) : void 0,
 					className: installed ? `${chipOk} cursor-pointer` : chipMissing
 				}, dep);
 			})) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { className: "opacity-60" }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
@@ -824,8 +878,17 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
-				onSaved: props.onSaved
-			}))) : null);
+				onSaved: props.onSaved,
+				origin: pack.origin
+			}))) : null, props.shadowed.length > 0 ? (0, react.createElement)("div", { className: "mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5" }, (0, react.createElement)("div", { className: rowHead }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, { title: t("shadowedCopiesTitle") }, fill(t("shadowedCopiesPill"), { count: props.shadowed.length })), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				size: "sm",
+				variant: "ghost",
+				onClick: () => setShadowedOpen((v) => !v)
+			}, `${shadowedOpen ? "▾" : "▸"} ${t("shadowedCopiesTitle")}`)), shadowedOpen ? props.shadowed.map((copy, i) => (0, react.createElement)("div", {
+				key: `${copy.dir}-${i}`,
+				className: `${smallMuted} mt-0.5`,
+				title: copy.dir
+			}, `${copy.origin.kind} · ${copy.origin.root} · v${copy.version}`)) : null) : null);
 		}
 		/** One managed pack's lane actions: check-on-demand market standing plus
 		* two-step update/delete. 检查更新 is always visible and re-checkable; only a
@@ -903,15 +966,17 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			if (lane === void 0) return null;
 			if (lane.state === "unreachable") return (0, react.createElement)("p", { className: muted }, t("suitesUnreachable"));
 			if (lane.rows.length === 0) return (0, react.createElement)("p", { className: muted }, t("suitesEmpty"));
+			const rootOf = (0, react.useCallback)((pack) => props.payload.packs.find((p) => p.name === pack), [props.payload.packs]);
 			return (0, react.createElement)("div", null, lane.rows.map((s) => (0, react.createElement)(SuiteCard, {
-				key: s.name,
+				key: `${s.org ?? ""}-${s.name}`,
 				suite: s,
 				packs: props.payload.packs,
 				t,
 				lang: props.lang,
 				resolveText: props.resolveText,
 				onJump: props.onJump,
-				onSaved: props.onSaved
+				onSaved: props.onSaved,
+				rootOf
 			})));
 		}
 		function SuiteCard(props) {
@@ -942,15 +1007,16 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			return (0, react.createElement)("div", {
 				id: suiteAnchorId(suite.name),
 				className: `${card} flex gap-3.5`
-			}, (0, react.createElement)("div", { className: "w-[170px] shrink-0 font-semibold" }, (0, react.createElement)("div", null, suite.name, " ", (0, react.createElement)("span", { className: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { className: muted }, t("suiteFillHint")) : null), (0, react.createElement)("div", { className: "flex-[1_1_auto] min-w-0" }, (0, react.createElement)("div", { className: `${desc} mb-1` }, resolveText(suite.description)), (0, react.createElement)("div", { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` }, (0, react.createElement)("span", {
+			}, (0, react.createElement)("div", { className: "w-[170px] shrink-0 font-semibold" }, (0, react.createElement)("div", { title: suite.org !== void 0 && suite.org !== "" ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` }, suite.org !== void 0 && suite.org !== "" ? (0, react.createElement)("span", { className: `${muted} font-normal` }, `${suite.org}/`) : null, suite.name, " ", (0, react.createElement)("span", { className: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { className: muted }, t("suiteFillHint")) : null), (0, react.createElement)("div", { className: "flex-[1_1_auto] min-w-0" }, (0, react.createElement)("div", { className: `${desc} mb-1` }, resolveText(suite.description)), (0, react.createElement)("div", { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` }, (0, react.createElement)("span", {
 				title: t("colMembers"),
 				className: "inline-flex items-center"
 			}, icon(SUITE_ICON_PATH)), suite.members.map((m) => {
-				const installed = m.localVersion !== void 0;
+				const origin = props.rootOf(m.name)?.origin;
+				const installed = origin !== void 0;
 				return (0, react.createElement)("span", {
 					key: m.name,
-					title: m.name,
-					onClick: installed ? () => props.onJump("packs", packAnchorId(m.name)) : void 0,
+					title: installed && origin !== void 0 ? `${m.name} · ${origin.kind} ${origin.root}` : m.name,
+					onClick: installed && origin !== void 0 ? () => props.onJump("packs", packAnchorId(origin, m.name)) : void 0,
 					className: installed ? `${chipOk} cursor-pointer` : chipMissing
 				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}`);
 			})), (0, react.createElement)("div", { className: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
@@ -1157,7 +1223,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang,
 				resolveText: props.resolveText,
-				onSaved: refresh
+				onSaved: refresh,
+				onJump: jumpTo
 			}) : null, view === "packs" ? (0, react.createElement)(PacksView, {
 				payload,
 				suites: suiteMarkers,
@@ -1290,7 +1357,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		//#endregion
 		//#region src/client/generated-css.ts
 		/** GENERATED by scripts/build-client-css.mjs from src/client/styles.css — do not edit. */
-		const CLIENT_CSS_BUNDLE = "/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */\n@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:block))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-font-weight:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial}}}@layer theme{:root,:host{--spacing:.25rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--font-weight-semibold:600;--color-primary:#155dfc;--color-accent:#2b7fff}}@layer base;@layer components{.dw-root{font-family:var(--dsw-font-family,inherit);font-size:var(--dsh-content-font-size,14px);line-height:calc(24px + var(--dsh-content-font-delta,0px))}.dw-code{font-family:var(--dsh-font-family-code,ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)}}@layer utilities{.collapse{visibility:collapse}.invisible{visibility:hidden}.visible{visibility:visible}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.container{width:100%}@media (min-width:40rem){.container{max-width:40rem}}@media (min-width:48rem){.container{max-width:48rem}}@media (min-width:64rem){.container{max-width:64rem}}@media (min-width:80rem){.container{max-width:80rem}}@media (min-width:96rem){.container{max-width:96rem}}.m-0{margin:0}.-mx-4{margin-inline:calc(var(--spacing) * -4)}.-my-3{margin-block:calc(var(--spacing) * -3)}.mt-0{margin-top:0}.mt-0\\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-1\\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mb-1{margin-bottom:var(--spacing)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-2\\.5{margin-bottom:calc(var(--spacing) * 2.5)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.block{display:block}.contents{display:contents}.flex{display:flex}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.table{display:table}.h-\\[calc\\(100vh-150px\\)\\]{height:calc(100vh - 150px)}.min-h-\\[480px\\]{min-height:480px}.w-40{width:calc(var(--spacing) * 40)}.w-\\[170px\\]{width:170px}.w-full{width:100%}.max-w-\\[480px\\]{max-width:480px}.min-w-0{min-width:0}.flex-1{flex:1}.flex-\\[1_1_auto\\]{flex:auto}.flex-none{flex:none}.shrink-0{flex-shrink:0}.grow{flex-grow:1}.transform{transform:var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, )}.cursor-pointer{cursor:pointer}.resize{resize:both}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-baseline{align-items:baseline}.items-center{align-items:center}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-2\\.5{gap:calc(var(--spacing) * 2.5)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-3\\.5{gap:calc(var(--spacing) * 3.5)}.overflow-hidden{overflow:hidden}.rounded{border-radius:.25rem}.rounded-\\[var\\(--dsw-radius-xl\\,20px\\)\\]{border-radius:var(--dsw-radius-xl,20px)}.rounded-full{border-radius:2147483647px}.border{border-style:var(--tw-border-style);border-width:1px}.border-\\[0\\.5px\\]{border-style:var(--tw-border-style);border-width:.5px}.border-t-\\[0\\.5px\\]{border-top-style:var(--tw-border-style);border-top-width:.5px}.border-\\[rgba\\(127\\,127\\,127\\,0\\.30\\)\\]{border-color:#7f7f7f4d}.border-\\[rgba\\(147\\,51\\,234\\,0\\.38\\)\\]{border-color:#9333ea61}.border-\\[rgba\\(197\\,48\\,48\\,0\\.38\\)\\]{border-color:#c5303061}.border-\\[var\\(--dsw-alias-border-l4\\,transparent\\)\\]{border-color:var(--dsw-alias-border-l4,transparent)}.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:#155dfc12}@supports (color:color-mix(in lab, red, red)){.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:color-mix(in srgb,var(--color-primary) 7%,transparent)}}.bg-\\[rgba\\(127\\,127\\,127\\,0\\.12\\)\\]{background-color:#7f7f7f1f}.bg-\\[rgba\\(147\\,51\\,234\\,0\\.12\\)\\]{background-color:#9333ea1f}.bg-\\[rgba\\(197\\,48\\,48\\,0\\.10\\)\\]{background-color:#c530301a}.bg-\\[var\\(--dsw-alias-bg-layer-1\\,\\#fff\\)\\]{background-color:var(--dsw-alias-bg-layer-1,#fff)}.bg-\\[var\\(--dsw-alias-bg-layer-2\\,transparent\\)\\]{background-color:var(--dsw-alias-bg-layer-2,transparent)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-4{padding-inline:calc(var(--spacing) * 4)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-2\\.5{padding-block:calc(var(--spacing) * 2.5)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-px{padding-block:1px}.pt-1{padding-top:var(--spacing)}.pt-1\\.5{padding-top:calc(var(--spacing) * 1.5)}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\\[0\\.82rem\\]{font-size:.82rem}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.break-words{overflow-wrap:break-word}.whitespace-nowrap{white-space:nowrap}.whitespace-pre-wrap{white-space:pre-wrap}.text-\\[var\\(--color-accent\\,\\#2b7fff\\)\\]{color:var(--color-accent,#2b7fff)}.text-\\[var\\(--dsw-alias-label-secondary\\,inherit\\)\\]{color:var(--dsw-alias-label-secondary,inherit)}.text-\\[var\\(--dsw-alias-state-error-primary\\,\\#dc2626\\)\\]{color:var(--dsw-alias-state-error-primary,#dc2626)}.lowercase{text-transform:lowercase}.ordinal{--tw-ordinal:ordinal;font-variant-numeric:var(--tw-ordinal, ) var(--tw-slashed-zero, ) var(--tw-numeric-figure, ) var(--tw-numeric-spacing, ) var(--tw-numeric-fraction, )}.line-through{text-decoration-line:line-through}.no-underline{text-decoration-line:none}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.filter{filter:var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, )}}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-font-weight{syntax:\"*\";inherits:false}@property --tw-ordinal{syntax:\"*\";inherits:false}@property --tw-slashed-zero{syntax:\"*\";inherits:false}@property --tw-numeric-figure{syntax:\"*\";inherits:false}@property --tw-numeric-spacing{syntax:\"*\";inherits:false}@property --tw-numeric-fraction{syntax:\"*\";inherits:false}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}";
+		const CLIENT_CSS_BUNDLE = "/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */\n@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:block))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-font-weight:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial}}}@layer theme{:root,:host{--spacing:.25rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--font-weight-normal:400;--font-weight-semibold:600;--color-primary:#155dfc;--color-accent:#2b7fff}}@layer base;@layer components{.dw-root{font-family:var(--dsw-font-family,inherit);font-size:var(--dsh-content-font-size,14px);line-height:calc(24px + var(--dsh-content-font-delta,0px))}.dw-code{font-family:var(--dsh-font-family-code,ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)}}@layer utilities{.collapse{visibility:collapse}.invisible{visibility:hidden}.visible{visibility:visible}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.container{width:100%}@media (min-width:40rem){.container{max-width:40rem}}@media (min-width:48rem){.container{max-width:48rem}}@media (min-width:64rem){.container{max-width:64rem}}@media (min-width:80rem){.container{max-width:80rem}}@media (min-width:96rem){.container{max-width:96rem}}.m-0{margin:0}.-mx-4{margin-inline:calc(var(--spacing) * -4)}.-my-3{margin-block:calc(var(--spacing) * -3)}.mt-0{margin-top:0}.mt-0\\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-1\\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mb-1{margin-bottom:var(--spacing)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-2\\.5{margin-bottom:calc(var(--spacing) * 2.5)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.block{display:block}.contents{display:contents}.flex{display:flex}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.table{display:table}.h-\\[calc\\(100vh-150px\\)\\]{height:calc(100vh - 150px)}.min-h-\\[480px\\]{min-height:480px}.w-40{width:calc(var(--spacing) * 40)}.w-\\[170px\\]{width:170px}.w-full{width:100%}.max-w-\\[480px\\]{max-width:480px}.min-w-0{min-width:0}.flex-1{flex:1}.flex-\\[1_1_auto\\]{flex:auto}.flex-none{flex:none}.shrink-0{flex-shrink:0}.grow{flex-grow:1}.transform{transform:var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, )}.cursor-pointer{cursor:pointer}.resize{resize:both}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-baseline{align-items:baseline}.items-center{align-items:center}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-2\\.5{gap:calc(var(--spacing) * 2.5)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-3\\.5{gap:calc(var(--spacing) * 3.5)}.overflow-hidden{overflow:hidden}.rounded{border-radius:.25rem}.rounded-\\[var\\(--dsw-radius-xl\\,20px\\)\\]{border-radius:var(--dsw-radius-xl,20px)}.rounded-full{border-radius:2147483647px}.border{border-style:var(--tw-border-style);border-width:1px}.border-\\[0\\.5px\\]{border-style:var(--tw-border-style);border-width:.5px}.border-t-\\[0\\.5px\\]{border-top-style:var(--tw-border-style);border-top-width:.5px}.border-\\[rgba\\(127\\,127\\,127\\,0\\.30\\)\\]{border-color:#7f7f7f4d}.border-\\[rgba\\(147\\,51\\,234\\,0\\.38\\)\\]{border-color:#9333ea61}.border-\\[rgba\\(197\\,48\\,48\\,0\\.38\\)\\]{border-color:#c5303061}.border-\\[var\\(--dsw-alias-border-l4\\,transparent\\)\\]{border-color:var(--dsw-alias-border-l4,transparent)}.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:#155dfc12}@supports (color:color-mix(in lab, red, red)){.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:color-mix(in srgb,var(--color-primary) 7%,transparent)}}.bg-\\[rgba\\(127\\,127\\,127\\,0\\.12\\)\\]{background-color:#7f7f7f1f}.bg-\\[rgba\\(147\\,51\\,234\\,0\\.12\\)\\]{background-color:#9333ea1f}.bg-\\[rgba\\(197\\,48\\,48\\,0\\.10\\)\\]{background-color:#c530301a}.bg-\\[var\\(--dsw-alias-bg-layer-1\\)\\]{background-color:var(--dsw-alias-bg-layer-1)}.bg-\\[var\\(--dsw-alias-bg-layer-1\\,\\#fff\\)\\]{background-color:var(--dsw-alias-bg-layer-1,#fff)}.bg-\\[var\\(--dsw-alias-bg-layer-2\\,transparent\\)\\]{background-color:var(--dsw-alias-bg-layer-2,transparent)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-4{padding-inline:calc(var(--spacing) * 4)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-2\\.5{padding-block:calc(var(--spacing) * 2.5)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-px{padding-block:1px}.pt-1{padding-top:var(--spacing)}.pt-1\\.5{padding-top:calc(var(--spacing) * 1.5)}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\\[0\\.82rem\\]{font-size:.82rem}.font-normal{--tw-font-weight:var(--font-weight-normal);font-weight:var(--font-weight-normal)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.break-words{overflow-wrap:break-word}.whitespace-nowrap{white-space:nowrap}.whitespace-pre-wrap{white-space:pre-wrap}.text-\\[var\\(--color-accent\\,\\#2b7fff\\)\\]{color:var(--color-accent,#2b7fff)}.text-\\[var\\(--dsw-alias-label-secondary\\,inherit\\)\\]{color:var(--dsw-alias-label-secondary,inherit)}.text-\\[var\\(--dsw-alias-state-error-primary\\,\\#dc2626\\)\\]{color:var(--dsw-alias-state-error-primary,#dc2626)}.lowercase{text-transform:lowercase}.ordinal{--tw-ordinal:ordinal;font-variant-numeric:var(--tw-ordinal, ) var(--tw-slashed-zero, ) var(--tw-numeric-figure, ) var(--tw-numeric-spacing, ) var(--tw-numeric-fraction, )}.line-through{text-decoration-line:line-through}.no-underline{text-decoration-line:none}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.filter{filter:var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, )}}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-font-weight{syntax:\"*\";inherits:false}@property --tw-ordinal{syntax:\"*\";inherits:false}@property --tw-slashed-zero{syntax:\"*\";inherits:false}@property --tw-numeric-figure{syntax:\"*\";inherits:false}@property --tw-numeric-spacing{syntax:\"*\";inherits:false}@property --tw-numeric-fraction{syntax:\"*\";inherits:false}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}";
 		//#endregion
 		//#region src/client/index.tsx
 		/**

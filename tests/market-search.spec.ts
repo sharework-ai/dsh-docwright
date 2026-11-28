@@ -223,3 +223,37 @@ describe('searchMarket: suite lane failure degradation', () => {
     }
   })
 })
+
+describe('market identity (org) and duplicate-name guard', () => {
+  it('projects the publisher org onto pack and suite cards (empty on old markets)', async () => {
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input)
+      if (url.includes('/api/packs?')) {
+        return new Response(JSON.stringify({ packs: [{ name: 'cosmic-plan', version: '1', description: { en: 'd' }, author: 'a', org: 'sharework' }] }), { headers: { 'content-type': 'application/json' } })
+      }
+      if (url.endsWith('/api/suites')) {
+        return new Response(JSON.stringify({ suites: [{ name: 'cosmic', version: '1', description: { en: 's' }, org: 'sharework', members: ['cosmic-plan'] }] }), { headers: { 'content-type': 'application/json' } })
+      }
+      throw new Error(`unexpected ${url}`)
+    }) as typeof fetch
+    try {
+      const result = await searchMarket({ marketUrl: 'https://market.test' }, 'cosmic')
+      expect(result.packs[0]).toMatchObject({ name: 'cosmic-plan', org: 'sharework' })
+      expect(result.suites[0]).toMatchObject({ name: 'cosmic', org: 'sharework' })
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  it('fails the install plan loud when the index lists one pack name twice', async () => {
+    const { fetchInstallPlan } = await import('../src/market-search.ts')
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({ packs: [{ name: 'gw', version: '1' }, { name: 'gw', version: '2' }] }), { headers: { 'content-type': 'application/json' } })) as typeof fetch
+    try {
+      await expect(fetchInstallPlan('https://market.test', 'gw')).rejects.toThrow(/lists pack "gw" more than once/)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+})

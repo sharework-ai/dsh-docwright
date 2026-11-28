@@ -48,6 +48,10 @@ export const en = {
   factorValue: 'target {value}, tolerance x{down}-x{up}',
   shadowedNote: 'Also declared in {packs}. The source declaration governs; details in the Packs view.',
   shadowedByNote: 'managed by {pack}, not effective here',
+  // Same-name copies (cross-root shadowing, docs/designs/pack-load-dirs.md P3).
+  shadowedCopiesPill: '{count} shadowed',
+  shadowedCopiesTitle: 'Same-name copies from other roots that this copy shadows (the live one is the card above):',
+  shadowedCopyVersion: 'v{version}',
   // Pack lane (packsDir management): version standing + update/delete actions.
   updateCheckFailed: 'Could not reach the pack market; showing local state only.',
   upToDate: 'up to date',
@@ -112,6 +116,8 @@ export const en = {
   'err.absentFromMarket': 'Pack "{pack}" is not listed on the market at {url}, so there is nothing to update from; nothing was written. Publish it there first, or install it into the packsDir directly.',
   'err.packInUse': 'Pack "{pack}" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it.',
   'err.suiteLaneMissing': 'The suite lane is not wired on this deployment; nothing was written.',
+  'err.originMismatch': 'Pack "{pack}" now resolves from a different root than the card showed — the views were reloaded in between. Refresh and retry; nothing was written.',
+  'err.marketNameClash': 'The market index lists pack "{pack}" more than once; the target would be ambiguous. Nothing was written — report this to the market operator.',
 }
 
 export const zh: Record<string, string> = {
@@ -160,6 +166,10 @@ export const zh: Record<string, string> = {
   factorValue: '目标 {value}（容差 ×{down}–×{up}）',
   shadowedNote: '同名参数还声明于：{packs}（以生效源为准，详见包视图）。',
   shadowedByNote: '由 {pack} 管理，此处声明不生效',
+  // 同名遮蔽副本（跨根同名，docs/designs/pack-load-dirs.md P3）。
+  shadowedCopiesPill: '遮蔽 {count} 份同名',
+  shadowedCopiesTitle: '来自其他根目录、被本卡遮蔽的同名副本（生效的是上面这张卡）：',
+  shadowedCopyVersion: 'v{version}',
   // pack 管理（packsDir）：版本对比 + 更新/删除操作。
   updateCheckFailed: '无法连接 pack 市场，仅显示本地状态。',
   upToDate: '已是最新',
@@ -223,6 +233,8 @@ export const zh: Record<string, string> = {
   'err.absentFromMarket': 'pack「{pack}」不在市场 {url} 的收录中，没有可更新的来源，未写入任何内容。先在市场投稿该 pack，或直接把 pack 放进 packsDir。',
   'err.packInUse': 'pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。',
   'err.suiteLaneMissing': '该部署未接入套件通道，未做任何改动。',
+  'err.originMismatch': 'pack「{pack}」当前生效的来源和卡片显示的不一致（期间列表被刷新过）。请刷新后重试；未写入任何内容。',
+  'err.marketNameClash': '市场索引中 pack「{pack}」出现了多次，安装目标不明确。未写入任何内容，请联系市场管理员处理。',
 }
 
 export function translate(dict: Record<string, unknown>): Translate {

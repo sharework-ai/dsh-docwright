@@ -28,7 +28,7 @@ import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-cli
 import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSuiteStatus, saveConfigPatch, savePackParam, setPackDisabled, updateManagedPack, updateSuite } from './api.ts'
 import { DEPENDS_ICON_PATH, icon, SUITE_ICON_PATH } from './icons.ts'
 import type { ApiError } from './api.ts'
-import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration, UiSuiteStatus } from './api.ts'
+import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration, UiShadowedCopy, UiSuiteStatus } from './api.ts'
 import { en, fill, renderError, translate, zh } from './locales.ts'
 import type { Translate } from './locales.ts'
 import { resolveLocalized } from '../description.ts'
@@ -65,8 +65,11 @@ const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.
 const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`
 //#endregion
 
-/** Anchor ids of the pack and suite cards (jump targets for the chips). */
-const packAnchorId = (name: string): string => `docwright-pack-${name}`
+/** Anchor ids of the pack and suite cards (jump targets for the chips). The
+ * pack anchor carries the ORIGIN ROOT: two same-code packs from different
+ * roots (cross-root shadowing) must never collide on one id — the code alone
+ * is not the full identity (org/name on the market, root/name locally). */
+const packAnchorId = (origin: { root: string }, name: string): string => `docwright-pack-${name}-${origin.root}`
 const suiteAnchorId = (name: string): string => `docwright-suite-${name}`
 
 /** The author's description, inline beneath the parameter name — the primary
@@ -155,18 +158,20 @@ function validateDraft(d: UiParamDeclaration, text: string): string | undefined 
  * struck-through and muted — it NEVER takes effect on the chain (the
  * receipt base outranks it) — with an explicit note naming the manager.
  */
-function ValueRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; onSaved?: (() => void) | undefined }) {
+function ValueRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; onSaved?: (() => void) | undefined; origin?: { kind: string; root: string } | undefined }) {
   const { d, t } = props
   if (d.role === 'shadowed') {
     return h('div', { className: rowHead },
       h('span', { className: `${code} ${muted} line-through` }, displayDefault(d, t)),
       h(Pill, {}, fill(t('shadowedByNote'), { pack: d.shadowedBy ?? '' })))
   }
-  return h(EditSeat, { d, t, lang: props.lang, onSaved: props.onSaved })
+  return h(EditSeat, { d, t, lang: props.lang, onSaved: props.onSaved, origin: props.origin })
 }
 
-/** The staged-edit control for a source declaration. */
-function EditSeat(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; onSaved?: (() => void) | undefined }) {
+/** The staged-edit control for a source declaration. `origin` (when known)
+ * echoes the card's rendered pack origin so the server can refuse a write
+ * whose target moved underneath the card (seen-vs-written guard). */
+function EditSeat(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; onSaved?: (() => void) | undefined; origin?: { kind: string; root: string } | undefined }) {
   const { d, t } = props
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -187,7 +192,7 @@ function EditSeat(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en
     setError(undefined)
     try {
       const value = d.type === 'object' ? JSON.parse(draft) : d.type === 'number' ? Number(draft) : draft
-      await savePackParam(d.pack, d.name, value)
+      await savePackParam(d.pack, d.name, value, props.origin)
       setEditing(false)
       props.onSaved?.()
     } catch (saveError) {
@@ -225,10 +230,11 @@ function EditSeat(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en
  * rendering them per-card repeated the same text N times and showed
  * misleading never-applied numbers.
  */
-function ParamGroupCard(props: { name: string; declarations: readonly UiParamDeclaration[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function ParamGroupCard(props: { name: string; declarations: readonly UiParamDeclaration[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void; rootOf: (pack: string) => UiPackEntry | undefined; onJump: (view: 'packs' | 'suites', anchor: string) => void }) {
   const { name, declarations, t } = props
   const governing = declarations.find(d => d.role === 'source') ?? declarations[0]!
   const shadowed = declarations.filter(d => d !== governing)
+  const originOf = (pack: string) => props.rootOf(pack)?.origin
   return h('div', { className: card },
     h('div', { className: rowHead },
       h('span', { className: name }, name),
@@ -236,8 +242,16 @@ function ParamGroupCard(props: { name: string; declarations: readonly UiParamDec
     h(DescriptionLine, { text: governing.description, resolveText: props.resolveText }),
     h('div', { className: 'flex items-center gap-2 mt-1' },
       h('span', { className: muted }, `${t('sources')}:`),
-      h(Pill, {}, governing.pack)),
-    h(ValueRow, { d: governing, t, lang: props.lang, onSaved: props.onSaved }),
+      declarations.filter(d => d.role === 'source').map(d => {
+        const origin = originOf(d.pack)
+        return h('span', {
+          key: d.pack,
+          title: origin === undefined ? d.pack : `${d.pack} · ${origin.kind} ${origin.root}`,
+          onClick: origin !== undefined ? () => props.onJump('packs', packAnchorId(origin, d.pack)) : undefined,
+          className: origin !== undefined ? `${chipOk} cursor-pointer` : chipOk,
+        }, d.pack)
+      })),
+    h(ValueRow, { d: governing, t, lang: props.lang, onSaved: props.onSaved, origin: originOf(governing.pack) }),
     h('div', { className: 'mt-0.5' },
       h(ConstraintLine, { d: governing, t })),
     shadowed.length > 0
@@ -247,14 +261,15 @@ function ParamGroupCard(props: { name: string; declarations: readonly UiParamDec
 }
 
 /** Aggregated parameter view: one card per parameter name. */
-function GroupsView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function GroupsView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void; onJump: (view: 'packs' | 'suites', anchor: string) => void }) {
   const { payload, t } = props
+  const rootOf = useCallback((pack: string) => payload.packs.find(p => p.name === pack), [payload.packs])
   if (payload.groups.length === 0) return h('p', { className: muted }, t('empty'))
-  return h('div', null, payload.groups.map(g => h(ParamGroupCard, { key: g.name, name: g.name, declarations: g.declarations, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
+  return h('div', null, payload.groups.map(g => h(ParamGroupCard, { key: g.name, name: g.name, declarations: g.declarations, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved, rootOf, onJump: props.onJump })))
 }
 
 /** One declaration row inside a pack's card. Source rows carry the edit seat; shadowed rows strike their never-applied value through. */
-function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
+function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void; origin?: { kind: string; root: string } | undefined }) {
   const { d, t } = props
   return h('div', { className: `${NS}-row ${row}` },
     h('div', { className: 'flex flex-col flex-1 min-w-0' },
@@ -262,7 +277,7 @@ function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 
         h('span', { className: name }, d.name),
         h(FlagPills, { d, t })),
       h(DescriptionLine, { text: d.description, resolveText: props.resolveText }),
-      h(ValueRow, { d, t, lang: props.lang, onSaved: props.onSaved }),
+      h(ValueRow, { d, t, lang: props.lang, onSaved: props.onSaved, origin: props.origin }),
       h('div', { className: 'mt-0.5' },
         h(ConstraintLine, { d, t }))))
 }
@@ -315,13 +330,29 @@ function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, 
   const byName = useMemo(() => new Map(lane.rows.map(u => [u.name, u])), [lane.rows])
   const installedNames = useMemo(() => new Set(payload.packs.map(p => p.name)), [payload.packs])
   const disabledNames = useMemo(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks])
+  /** Active-card lookup by code (dependency chips and the groups view jump
+   * through it; the anchor carries the origin root so same-code copies never
+   * collide). */
+  const rootOf = useCallback((pack: string) => payload.packs.find(p => p.name === pack), [payload.packs])
+  /** Same-name copies that lost the cross-root clash, grouped by code. */
+  const shadowedByName = useMemo(() => {
+    const map = new Map<string, UiShadowedCopy[]>()
+    for (const copy of payload.shadowedPacks ?? []) {
+      const list = map.get(copy.name)
+      if (list === undefined) map.set(copy.name, [copy])
+      else list.push(copy)
+    }
+    return map
+  }, [payload.shadowedPacks])
   return h('div', null,
     lane.state === 'unreachable' ? h('p', { className: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { className: muted }, laneDone) : null,
-    payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
+    payload.packs.map((p: UiPackEntry) => h(PackCard, { key: `${p.name}-${p.origin.root}`, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
       resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(p.name) ?? [],
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
       disabled: disabledNames.has(p.name),
+      shadowed: shadowedByName.get(p.name) ?? [],
+      rootOf,
       onDone: text => { setLaneDone(text); props.onSaved(); checkOne(p.name) } })))
 }
 
@@ -347,13 +378,22 @@ function PackCard(props: {
   consumers: readonly string[]
   /** True when the config's disabledPacks array lists this pack (docs/designs/pack-load-dirs.md). */
   disabled: boolean
+  /** Same-name copies this card's copy shadows (cross-root clash losers). */
+  shadowed: readonly UiShadowedCopy[]
+  /** Active-card lookup by code (dependency chips jump through it). */
+  rootOf: (pack: string) => UiPackEntry | undefined
   onDone: (doneText: string) => void
 }) {
   const { pack, t } = props
   const [paramsOpen, setParamsOpen] = useState(false)
-  return h('div', { id: packAnchorId(pack.name), className: card },
+  const [shadowedOpen, setShadowedOpen] = useState(false)
+  // Qualified identity: org/name@version when a check has reported the
+  // market's org, root-local name@version otherwise.
+  const qualified = props.status?.org !== undefined ? `${props.status.org}/${pack.name}@v${pack.version}` : `${pack.name}@v${pack.version}`
+  return h('div', { id: packAnchorId(pack.origin, pack.name), className: card },
     h('div', { className: packHead },
-      h('span', { className: name }, pack.name),
+      h('span', { className: name, title: qualified }, pack.name),
+      pack.author !== undefined ? h(Pill, { title: qualified }, pack.author) : null,
       h(Pill, {}, `v${pack.version}`),
       h(Pill, {}, pack.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
       pack.origin.kind === 'builtin' ? h(Pill, {}, t('originBuiltin')) : null,
@@ -367,13 +407,15 @@ function PackCard(props: {
             h('span', { title: t('consumed'), className: 'inline-flex items-center' },
               icon(DEPENDS_ICON_PATH)),
             pack.consumes.map(dep => {
-              const installed = props.installed.has(dep)
+              const depPack = props.rootOf(dep)
+              const installed = depPack !== undefined
+              const origin = depPack?.origin
               return h('span', {
                 key: dep,
-                title: installed ? dep : `${dep}${t('missingDep')}`,
+                title: installed ? (origin !== undefined ? `${dep} · ${origin.kind} ${origin.root}` : dep) : `${dep}${t('missingDep')}`,
                 // An installed dependency jumps to its pack card; a missing
                 // one cannot go anywhere, it just reads red.
-                onClick: installed ? () => props.onJump('packs', packAnchorId(dep)) : undefined,
+                onClick: installed && origin !== undefined ? () => props.onJump('packs', packAnchorId(origin, dep)) : undefined,
                 className: installed ? `${chipOk} cursor-pointer` : chipMissing,
               }, dep)
             }))
@@ -404,7 +446,18 @@ function PackCard(props: {
       ? h('div', { className: 'mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5' },
         pack.params.length === 0
           ? h('p', { className: muted }, t('empty'))
-          : pack.params.map(d => h(PackDeclRow, { key: d.name, d, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
+          : pack.params.map(d => h(PackDeclRow, { key: d.name, d, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved, origin: pack.origin })))
+      : null,
+    props.shadowed.length > 0
+      ? h('div', { className: 'mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5' },
+        h('div', { className: rowHead },
+          h(Pill, { title: t('shadowedCopiesTitle') }, fill(t('shadowedCopiesPill'), { count: props.shadowed.length })),
+          h(Button, { size: 'sm', variant: 'ghost', onClick: () => setShadowedOpen(v => !v) },
+            `${shadowedOpen ? '▾' : '▸'} ${t('shadowedCopiesTitle')}`)),
+        shadowedOpen
+          ? props.shadowed.map((copy, i) => h('div', { key: `${copy.dir}-${i}`, className: `${smallMuted} mt-0.5`, title: copy.dir },
+            `${copy.origin.kind} · ${copy.origin.root} · v${copy.version}`))
+          : null)
       : null)
 }
 
@@ -514,11 +567,12 @@ function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayloa
   if (lane === undefined) return null
   if (lane.state === 'unreachable') return h('p', { className: muted }, t('suitesUnreachable'))
   if (lane.rows.length === 0) return h('p', { className: muted }, t('suitesEmpty'))
-  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved })))
+  const rootOf = useCallback((pack: string) => props.payload.packs.find(p => p.name === pack), [props.payload.packs])
+  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: `${s.org ?? ''}-${s.name}`, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, rootOf })))
 }
 
 
-function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
+function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void; rootOf: (pack: string) => UiPackEntry | undefined }) {
   const { suite, t, resolveText } = props
   const [armedDelete, setArmedDelete] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -543,7 +597,9 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
   const rendered = rendered_error(error, props.lang)
   return h('div', { id: suiteAnchorId(suite.name), className: `${card} flex gap-3.5` },
     h('div', { className: 'w-[170px] shrink-0 font-semibold' },
-      h('div', null, suite.name, ' ', h('span', { className: muted }, `v${suite.version}`)),
+      h('div', { title: suite.org !== undefined && suite.org !== '' ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` },
+        suite.org !== undefined && suite.org !== '' ? h('span', { className: `${muted} font-normal` }, `${suite.org}/`) : null,
+        suite.name, ' ', h('span', { className: muted }, `v${suite.version}`)),
       suite.incomplete ? h('div', { className: muted }, t('suiteFillHint')) : null),
     h('div', { className: 'flex-[1_1_auto] min-w-0' },
       h('div', { className: `${desc} mb-1` }, resolveText(suite.description)),
@@ -551,12 +607,14 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
         h('span', { title: t('colMembers'), className: 'inline-flex items-center' },
           icon(SUITE_ICON_PATH)),
         suite.members.map(m => {
-          const installed = m.localVersion !== undefined
+          const memberPack = props.rootOf(m.name)
+          const origin = memberPack?.origin
+          const installed = origin !== undefined
           return h('span', {
             key: m.name,
-            title: m.name,
+            title: installed && origin !== undefined ? `${m.name} · ${origin.kind} ${origin.root}` : m.name,
             // An installed member jumps to its pack card; a missing one reads red in place.
-            onClick: installed ? () => props.onJump('packs', packAnchorId(m.name)) : undefined,
+            onClick: installed && origin !== undefined ? () => props.onJump('packs', packAnchorId(origin, m.name)) : undefined,
             className: installed ? `${chipOk} cursor-pointer` : chipMissing,
           }, m.localVersion === undefined ? m.name : `${m.name}@${m.localVersion}`)
         })),
@@ -718,7 +776,7 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
     h('p', { className: `${muted} m-0 mb-2` }, t('intro')),
     h('div', { className: 'mt-2 mb-3' },
       h(SegmentedTabs, { items: [...tabs], value: view, onChange: v => setView(v as 'groups' | 'packs' | 'suites' | 'config'), label: t('title') })),
-    view === 'groups' ? h(GroupsView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
+    view === 'groups' ? h(GroupsView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh, onJump: jumpTo }) : null,
     view === 'packs' ? h(PacksView, { payload, suites: suiteMarkers, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,
     view === 'suites' ? h(SuitesView, { lane: suites, payload, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,
     view === 'config' ? h(ConfigView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null)
