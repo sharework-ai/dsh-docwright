@@ -78,11 +78,13 @@
     "@deepseek-ai/dsh-tools": "link:../deepseek-harness/packages/core/tools",
     "@deepseek-ai/dsh-util-values": "link:../deepseek-harness/packages/util/values",
     "@deepseek-ai/schemastery": "link:../deepseek-harness/vendor/schemastery",
+    "@tailwindcss/cli": "^4.3.5",
     "@types/node": "^24.0.0",
     "@types/react": "^18.3.31",
     "@vitest/coverage-v8": "^3.2.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tailwindcss": "^4.3.5",
     "tsdown": "^0.12.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.0",
@@ -90,13 +92,13 @@
   },
   "scripts": {
     "build": "tsc -b tsconfig.json && tsdown && pnpm run build:client && node scripts/write-build-stamp.mjs",
-    "typecheck": "tsc -b tsconfig.json && tsc -p tsconfig.client.json",
+    "typecheck": "node scripts/build-client-css.mjs && tsc -b tsconfig.json && tsc -p tsconfig.client.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "spike:convergence": "node --import tsx/esm spike/convergence.ts",
     "smoke:host": "node --import tsx/esm scripts/host-smoke.ts",
     "pack:check": "node --import tsx/esm scripts/pack-check.ts",
-    "build:client": "tsdown -c tsdown.client.ts && node scripts/normalize-client-banner.mjs"
+    "build:client": "node scripts/build-client-css.mjs && tsdown -c tsdown.client.ts && node scripts/normalize-client-banner.mjs"
   },
   "icon": "assets/images/logo.svg",
   "devEngines": {

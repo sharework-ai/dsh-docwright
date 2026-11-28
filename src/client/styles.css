@@ -1,0 +1,47 @@
+/* docwright plugin client styles — Tailwind v4 source.
+   Compiled to client/client.css at build time (scripts/build-client-css.mjs);
+   tsdown inlines the compiled text as __CLIENT_CSS__ and index.tsx injects it
+   once per mount as <style data-plugin-css="docwright/client.css">.
+
+   Palette: the pack market's (@theme mirrors dsh-docwright-market
+   web/src/app.css), so the plugin surfaces and the market site read as one
+   product. Accent colors come from here; NEUTRAL surfaces, text and borders
+   stay on the host's --dsw-alias-* tokens (arbitrary values at the call
+   sites) so light/dark follows the shell.
+
+   NO preflight/base layer: the host owns the document styles — importing
+   Tailwind's reset here would restyle the whole app.
+*/
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "./";
+/* The generated constant embeds the previous compile's CSS text — scanning
+   it would feed the output back in as input. */
+@source not "./generated-css.ts";
+
+@theme {
+  --color-primary: #155dfc;        /* blue-600 — action & confirmation (market primary) */
+  --color-primary-hover: #1447e6;  /* blue-700 */
+  --color-accent: #2b7fff;         /* blue-500 */
+  --color-accent-strong: #51a2ff;  /* blue-400 */
+  --color-warning: #fe9a37;        /* amber-500 — pending-review */
+  --color-warning-ink: #e1712b;    /* amber-600 */
+  --color-danger: #dc2626;
+}
+
+@layer components {
+  /* The section root follows the host conversation body's family and size
+     (the user's font-size preference applies); hierarchy comes from weight,
+     never from ad-hoc sizes. */
+  .dw-root {
+    font-family: var(--dsw-font-family, inherit);
+    font-size: var(--dsh-content-font-size, 14px);
+    line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  }
+
+  /* Host code face — identifiers and values only (param names, enums, JSON). */
+  .dw-code {
+    font-family: var(--dsh-font-family-code, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  }
+}

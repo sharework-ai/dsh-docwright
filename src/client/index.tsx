@@ -35,6 +35,26 @@ const NS = 'docwright-params'
 /** The bundle's package name — the key `plugins.bundle.config` is contracted to. */
 const PACKAGE_NAME = '@sharework-ai/dsh-docwright'
 
+/** Compiled Tailwind CSS — generated-css.ts is emitted by
+ * scripts/build-client-css.mjs from src/client/styles.css (run by
+ * build:client and typecheck; never hand-edited). */
+import { CLIENT_CSS_BUNDLE } from './generated-css.ts'
+
+/** The style-tag identity — one sheet per page, idempotent across remounts. */
+const CSS_TAG_ID = 'docwright/client.css'
+
+/** Inject the plugin's stylesheet once (dsh-market's data-plugin-css
+ * pattern). Utilities are global class names but carry no host reset — the
+ * sheet defines exactly the utilities this bundle uses. */
+function injectStyles(): void {
+  if (typeof document === 'undefined') return
+  if (document.querySelector(`style[data-plugin-css="${CSS_TAG_ID}"]`) !== null) return
+  const tag = document.createElement('style')
+  tag.setAttribute('data-plugin-css', CSS_TAG_ID)
+  tag.textContent = CLIENT_CSS_BUNDLE
+  document.head.appendChild(tag)
+}
+
 /** The settings.section id; `settings.section.icon` must register the same id. */
 const SECTION_ID = 'docwright'
 
@@ -78,6 +98,7 @@ export function apply(ctx: ClientContext): void {
     return
   }
   try {
+    injectStyles()
     mountSection(ctx)
   } catch (error) {
     console.error('[docwright] surfaces failed to mount; the rest of the app is unaffected.', error)

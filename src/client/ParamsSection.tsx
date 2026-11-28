@@ -13,13 +13,15 @@
  * change in ANY view re-fetches the whole block, so the Packs and Suites
  * tabs can never disagree.
  *
- * Typography follows the host conversation body, not ad-hoc sizes: one
- * family and size for all running text (`--dsw-font-family` +
- * `--dsh-content-font-size`, 24px+delta line height, so the user's font-size
- * preference applies here too); hierarchy comes from weight and the host's
- * label grays (`--dsw-alias-label-secondary`), never from font size. Only
- * identifiers and values (param names, enum members, JSON) sit in the host
- * code face (`--dsh-font-family-code`).
+ * Styling: Tailwind utilities compiled from styles.css (injected once as
+ * client/client.css — see index.tsx). Accent colors come from the pack
+ * market's palette (@theme there); neutral surfaces, text and borders stay
+ * on the host's --dsw-alias-* tokens via arbitrary values, so light/dark
+ * follows the shell. Typography follows the host conversation body, not
+ * ad-hoc sizes: one family and size for all running text (the .dw-root
+ * component class); hierarchy comes from weight and the host's label grays,
+ * never from font size. Only identifiers and values (param names, enum
+ * members, JSON) sit in the host code face (.dw-code).
  */
 import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Input, Pill, SegmentedTabs, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -34,96 +36,53 @@ import type { LocalizedText } from '../description.ts'
 
 const NS = 'docwright-params'
 
-import type { CSSProperties } from 'react'
-
-/** The conversation body's family and size — the one measure for all running
- * text in this section. */
-const baseText: CSSProperties = {
-  fontFamily: 'var(--dsw-font-family, inherit)',
-  fontSize: 'var(--dsh-content-font-size, 14px)',
-  lineHeight: 'calc(24px + var(--dsh-content-font-delta, 0px))',
-}
-/** Host code face for identifiers and values only (names, enums, JSON). */
-const codeFont = 'var(--dsh-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)'
-/** The host's first muted gray (real theme token; the old --dsw-alias-text-*
- * names never existed upstream and always fell through to full-strength). */
-const secondary = 'var(--dsw-alias-label-secondary, inherit)'
-const row: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0',
-}
-const rowHead: CSSProperties = {
-  display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap', minWidth: 0,
-}
-const nameStyle: CSSProperties = {
-  fontWeight: 600, fontFamily: codeFont,
-}
-const desc: CSSProperties = {
-  color: secondary, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-}
-const valueStyle: CSSProperties = {
-  fontFamily: codeFont,
-}
-const muted: CSSProperties = {
-  color: secondary,
-}
-const smallMuted: CSSProperties = { ...muted, fontSize: '0.82rem' }
-
+//#region class vocabulary
+/** The host's first muted gray (real theme token). */
+const muted = 'text-[var(--dsw-alias-label-secondary,inherit)]'
+const smallMuted = `${muted} text-[0.82rem]`
+/** Host state red (the market's danger is the same #dc2626 family). */
+const errorText = 'text-[var(--dsw-alias-state-error-primary,#dc2626)]'
+/** Host code face, via the styles.css component class. */
+const code = 'dw-code'
+/** Host code face + semibold: names and identifiers. */
+const name = `${code} font-semibold`
+const row = 'flex items-center gap-2 py-1.5'
+const rowHead = 'flex flex-wrap items-baseline gap-2 min-w-0'
+const desc = `${muted} whitespace-pre-wrap break-words`
+/** The shared card shell: hairline border, host radius, second-layer fill. */
+const card = 'border-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] rounded-[var(--dsw-radius-xl,20px)] bg-[var(--dsw-alias-bg-layer-2,transparent)] px-4 py-3 mb-3 overflow-hidden'
+/** The pack card's full-width header band: a quiet wash in the market's
+ * primary blue that separates "which pack am I looking at" from the rows. */
+const packHead = `${rowHead} -mx-4 -my-3 mb-2.5 px-4 py-2.5 bg-[color-mix(in_srgb,var(--color-primary)_7%,transparent)]`
+const actions = 'flex items-center gap-2 mt-2'
 /** Gray rounded chip: the shared container for a dependency or a member
  * pack. Translucent gray reads on both themes and, being a plain background,
- * never intercepts clicks. `missing` renders the red variant. */
-function chipStyle(missing = false): CSSProperties {
-  return {
-    background: missing ? 'rgba(197, 48, 48, 0.10)' : 'rgba(127, 127, 127, 0.12)',
-    border: `1px solid ${missing ? 'rgba(197, 48, 48, 0.38)' : 'rgba(127, 127, 127, 0.30)'}`,
-    color: missing ? 'var(--dsw-alias-state-error-primary, crimson)' : undefined,
-    borderRadius: '999px',
-    padding: '1px 8px',
-    fontSize: '0.82rem',
-    whiteSpace: 'nowrap',
-  }
-}
+ * never intercepts clicks. Missing renders the red variant. */
+const chip = 'inline-flex rounded-full px-2 py-px text-[0.82rem] whitespace-nowrap border'
+const chipOk = `${chip} bg-[rgba(127,127,127,0.12)] border-[rgba(127,127,127,0.30)]`
+const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`
+/** Suite chips keep the market suite cards' translucent purple. */
+const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`
+//#endregion
 
 /** Anchor ids of the pack and suite cards (jump targets for the chips). */
 const packAnchorId = (name: string): string => `docwright-pack-${name}`
 const suiteAnchorId = (name: string): string => `docwright-suite-${name}`
-const group: CSSProperties = {
-  border: '0.5px solid var(--dsw-alias-border-l4, transparent)',
-  borderRadius: 'var(--dsw-radius-xl, 20px)',
-  background: 'var(--dsw-alias-bg-layer-2, transparent)',
-  padding: '12px 16px', marginBottom: '12px',
-}
-const card: CSSProperties = { ...group, overflow: 'hidden' }
-/** The pack card's full-width header band: a quiet blue wash that separates
- * "which pack am I looking at" from the parameter rows below it. */
-const packHead: CSSProperties = {
-  display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap', minWidth: 0,
-  margin: '-12px -16px 10px', padding: '10px 16px',
-  background: 'color-mix(in srgb, var(--dsw-static-blue-500, rgb(59, 130, 246)) 7%, transparent)',
-}
-const sourceLine: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px',
-}
-const inputStyle: CSSProperties = {
-  width: '160px',
-}
-const actions: CSSProperties = {
-  display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px',
-}
 
 /** The author's description, inline beneath the parameter name — the primary
  * explanation stays in view instead of hiding behind a hover. Locale
  * resolution: the host's resolveText when available, its semantics locally
  * otherwise (src/description.ts). */
 function DescriptionLine(props: { text: LocalizedText | undefined; resolveText: (value: unknown) => string }) {
-  return h('div', { className: `${NS}-desc`, style: { ...desc, marginTop: '2px' } }, props.resolveText(props.text ?? ''))
+  return h('div', { className: `${NS}-desc ${desc} mt-0.5` }, props.resolveText(props.text ?? ''))
 }
 
 /** One failing write/load as text + optional raw detail line. */
 function ErrorLine(props: { error: Error; lang: 'zh' | 'en'; muted?: boolean }) {
   const rendered = renderError(props.error as { message: string; code?: string; params?: Readonly<Record<string, string | number>>; detail?: string }, props.lang)
-  return h('span', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } },
+  return h('span', { className: `${errorText} whitespace-pre-wrap` },
     rendered.text,
-    rendered.detail !== undefined ? h('span', { style: { ...muted, whiteSpace: 'pre-wrap' } }, `\n${rendered.detail}`) : null)
+    rendered.detail !== undefined ? h('span', { className: `${muted} whitespace-pre-wrap` }, `\n${rendered.detail}`) : null)
 }
 
 /**
@@ -151,7 +110,7 @@ function FlagPills(props: { d: UiParamDeclaration; t: Translate }) {
   const flags: string[] = []
   if (d.extractable) flags.push(t('extractable'))
   if (d.overridable) flags.push(t('overridable'))
-  return flags.length === 0 ? null : h('div', { style: { display: 'flex', gap: '4px', flexWrap: 'wrap' } satisfies CSSProperties },
+  return flags.length === 0 ? null : h('div', { className: 'flex gap-1 flex-wrap' },
     flags.map(f => h(Pill, { key: f }, f)))
 }
 
@@ -164,7 +123,7 @@ function ConstraintLine(props: { d: UiParamDeclaration; t: Translate }) {
   if (d.enumValues !== undefined) bits.push(`${t('choices')}: ${d.enumValues.join(' / ')}`)
   if (d.min !== undefined) bits.push(`${t('min')} ${d.min}`)
   if (d.max !== undefined) bits.push(`${t('max')} ${d.max}`)
-  return bits.length === 0 ? null : h('div', { style: muted }, bits.join(' · '))
+  return bits.length === 0 ? null : h('div', { className: muted }, bits.join(' · '))
 }
 
 /** Validate one proposed default against the declaration (client-side mirror of the server gate). */
@@ -199,8 +158,8 @@ function validateDraft(d: UiParamDeclaration, text: string): string | undefined 
 function ValueRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; onSaved?: (() => void) | undefined }) {
   const { d, t } = props
   if (d.role === 'shadowed') {
-    return h('div', { style: rowHead },
-      h('span', { style: { ...valueStyle, color: secondary, textDecoration: 'line-through' } satisfies CSSProperties }, displayDefault(d, t)),
+    return h('div', { className: rowHead },
+      h('span', { className: `${code} ${muted} line-through` }, displayDefault(d, t)),
       h(Pill, {}, fill(t('shadowedByNote'), { pack: d.shadowedBy ?? '' })))
   }
   return h(EditSeat, { d, t, lang: props.lang, onSaved: props.onSaved })
@@ -237,20 +196,20 @@ function EditSeat(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en
       setBusy(false)
     }
   }
-  const valueLine = h('div', { style: rowHead },
-    h('span', { style: valueStyle }, displayDefault(d, t)),
+  const valueLine = h('div', { className: rowHead },
+    h('span', { className: code }, displayDefault(d, t)),
     editing ? null : h(Button, { size: 'sm', variant: 'ghost', onClick: start }, t('edit')))
   if (!editing) return valueLine
   return h('div', null,
     d.enumValues !== undefined
-      ? h('select', { value: String(d.default), onChange: (e: { target: { value: string } }) => setDraft(e.target.value), style: inputStyle },
+      ? h('select', { value: String(d.default), onChange: (e: { target: { value: string } }) => setDraft(e.target.value), className: 'w-40' },
           d.enumValues.map(v => h('option', { key: String(v), value: String(v) }, String(v))))
       : d.type === 'object'
         ? h('textarea', { value: draft, onChange: (e: { target: { value: string } }) => setDraft(e.target.value), rows: 4,
-            style: { ...inputStyle, width: '100%', maxWidth: '480px', fontFamily: codeFont } satisfies CSSProperties })
+            className: `w-full max-w-[480px] ${code}` })
         : h(Input, { value: draft, type: d.type === 'number' ? 'number' : 'text', step: 'any',
-            onChange: (e: { target: { value: string } }) => setDraft(e.target.value), style: inputStyle }),
-    h('div', { style: actions },
+            onChange: (e: { target: { value: string } }) => setDraft(e.target.value), style: { width: '160px' } }),
+    h('div', { className: actions },
       h(Button, { size: 'sm', disabled: busy, onClick: () => void save() }, busy ? t('saving') : t('save')),
       h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setEditing(false) }, t('cancel')),
       error !== undefined ? h(ErrorLine, { error, lang: props.lang }) : null))
@@ -270,19 +229,19 @@ function ParamGroupCard(props: { name: string; declarations: readonly UiParamDec
   const { name, declarations, t } = props
   const governing = declarations.find(d => d.role === 'source') ?? declarations[0]!
   const shadowed = declarations.filter(d => d !== governing)
-  return h('div', { style: group },
-    h('div', { style: rowHead },
-      h('span', { style: nameStyle }, name),
+  return h('div', { className: card },
+    h('div', { className: rowHead },
+      h('span', { className: name }, name),
       h(FlagPills, { d: governing, t })),
     h(DescriptionLine, { text: governing.description, resolveText: props.resolveText }),
-    h('div', { style: sourceLine },
-      h('span', { style: muted }, `${t('sources')}:`),
+    h('div', { className: 'flex items-center gap-2 mt-1' },
+      h('span', { className: muted }, `${t('sources')}:`),
       h(Pill, {}, governing.pack)),
     h(ValueRow, { d: governing, t, lang: props.lang, onSaved: props.onSaved }),
-    h('div', { style: { marginTop: '2px' } },
+    h('div', { className: 'mt-0.5' },
       h(ConstraintLine, { d: governing, t })),
     shadowed.length > 0
-      ? h('div', { style: { ...muted, marginTop: '4px' } satisfies CSSProperties },
+      ? h('div', { className: `${muted} mt-1` },
           fill(t('shadowedNote'), { packs: shadowed.map(d => d.pack).join(', ') }))
       : null)
 }
@@ -290,21 +249,21 @@ function ParamGroupCard(props: { name: string; declarations: readonly UiParamDec
 /** Aggregated parameter view: one card per parameter name. */
 function GroupsView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { payload, t } = props
-  if (payload.groups.length === 0) return h('p', { style: muted }, t('empty'))
+  if (payload.groups.length === 0) return h('p', { className: muted }, t('empty'))
   return h('div', null, payload.groups.map(g => h(ParamGroupCard, { key: g.name, name: g.name, declarations: g.declarations, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
 }
 
 /** One declaration row inside a pack's card. Source rows carry the edit seat; shadowed rows strike their never-applied value through. */
 function PackDeclRow(props: { d: UiParamDeclaration; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onSaved: () => void }) {
   const { d, t } = props
-  return h('div', { className: `${NS}-row`, style: row },
-    h('div', { style: { display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 } satisfies CSSProperties },
-      h('div', { style: rowHead },
-        h('span', { style: nameStyle }, d.name),
+  return h('div', { className: `${NS}-row ${row}` },
+    h('div', { className: 'flex flex-col flex-1 min-w-0' },
+      h('div', { className: rowHead },
+        h('span', { className: name }, d.name),
         h(FlagPills, { d, t })),
       h(DescriptionLine, { text: d.description, resolveText: props.resolveText }),
       h(ValueRow, { d, t, lang: props.lang, onSaved: props.onSaved }),
-      h('div', { style: { marginTop: '2px' } },
+      h('div', { className: 'mt-0.5' },
         h(ConstraintLine, { d, t }))))
 }
 
@@ -357,8 +316,8 @@ function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, 
   const installedNames = useMemo(() => new Set(payload.packs.map(p => p.name)), [payload.packs])
   const disabledNames = useMemo(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks])
   return h('div', null,
-    lane.state === 'unreachable' ? h('p', { style: muted }, t('updateCheckFailed')) : null,
-    laneDone !== undefined ? h('p', { style: muted }, laneDone) : null,
+    lane.state === 'unreachable' ? h('p', { className: muted }, t('updateCheckFailed')) : null,
+    laneDone !== undefined ? h('p', { className: muted }, laneDone) : null,
     payload.packs.map((p: UiPackEntry) => h(PackCard, { key: p.name, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
       resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(p.name) ?? [],
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
@@ -392,20 +351,20 @@ function PackCard(props: {
 }) {
   const { pack, t } = props
   const [paramsOpen, setParamsOpen] = useState(false)
-  return h('div', { id: packAnchorId(pack.name), style: card },
-    h('div', { style: packHead },
-      h('span', { style: nameStyle }, pack.name),
+  return h('div', { id: packAnchorId(pack.name), className: card },
+    h('div', { className: packHead },
+      h('span', { className: name }, pack.name),
       h(Pill, {}, `v${pack.version}`),
       h(Pill, {}, pack.scope === 'workspace' ? t('scopeWorkspace') : t('scopeTopic')),
       pack.origin.kind === 'builtin' ? h(Pill, {}, t('originBuiltin')) : null,
       pack.paramDriftPolicy !== undefined ? h(Pill, {}, `${t('driftPolicy')}: ${pack.paramDriftPolicy}`) : null,
       props.disabled ? h(Pill, {}, t('disabledPill')) : null),
-    h('div', { style: { ...desc, marginBottom: '4px' } satisfies CSSProperties }, props.resolveText(pack.description)),
+    h('div', { className: `${desc} mb-1` }, props.resolveText(pack.description)),
     pack.consumes.length > 0 || props.suites.length > 0
-      ? h('div', { style: { ...muted, marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } satisfies CSSProperties },
+      ? h('div', { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` },
         pack.consumes.length > 0
-          ? h('span', { style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
-            h('span', { title: t('consumed'), style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
+          ? h('span', { className: 'inline-flex gap-1.5 items-center flex-wrap' },
+            h('span', { title: t('consumed'), className: 'inline-flex items-center' },
               icon(DEPENDS_ICON_PATH)),
             pack.consumes.map(dep => {
               const installed = props.installed.has(dep)
@@ -415,38 +374,24 @@ function PackCard(props: {
                 // An installed dependency jumps to its pack card; a missing
                 // one cannot go anywhere, it just reads red.
                 onClick: installed ? () => props.onJump('packs', packAnchorId(dep)) : undefined,
-                style: { ...chipStyle(!installed), ...(installed ? { cursor: 'pointer' } satisfies CSSProperties : {}) },
+                className: installed ? `${chipOk} cursor-pointer` : chipMissing,
               }, dep)
             }))
           : null,
         pack.consumes.length > 0 && props.suites.length > 0
-          ? h('span', { style: { opacity: 0.6 } satisfies CSSProperties }, '·')
+          ? h('span', { className: 'opacity-60' }, '·')
           : null,
         props.suites.map(suite => h('span', {
           key: suite,
           title: t('suiteManagedTip'),
           onClick: () => props.onJump('suites', suiteAnchorId(suite)),
-          style: {
-            display: 'inline-flex',
-            gap: '4px',
-            alignItems: 'center',
-            cursor: 'pointer',
-            // Translucent purple reads correctly on both light and dark
-            // themes (same pairing as the market's suite cards) and, being a
-            // plain background, never intercepts clicks.
-            background: 'rgba(147, 51, 234, 0.12)',
-            border: '1px solid rgba(147, 51, 234, 0.38)',
-            borderRadius: '999px',
-            padding: '1px 8px',
-            fontSize: '0.82rem',
-            whiteSpace: 'nowrap',
-          } satisfies CSSProperties,
+          className: suiteChip,
         },
-          h('span', { style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
+          h('span', { className: 'inline-flex items-center' },
             icon(SUITE_ICON_PATH, 12)),
           suite)))
       : null,
-    h('div', { style: { marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } satisfies CSSProperties },
+    h('div', { className: 'mt-1 flex gap-2 items-center flex-wrap' },
       h(Button, { size: 'sm', variant: 'ghost', onClick: () => setParamsOpen(v => !v) },
         `${paramsOpen ? '▾' : '▸'} ${t('paramsToggle')}`),
       // Suite members are managed through their suite (the Suites tab owns
@@ -456,9 +401,9 @@ function PackCard(props: {
           consumers: props.consumers, disabled: props.disabled, onDone: props.onDone })
         : null),
     paramsOpen
-      ? h('div', { style: { marginTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l4, transparent)', paddingTop: '6px' } satisfies CSSProperties },
+      ? h('div', { className: 'mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5' },
         pack.params.length === 0
-          ? h('p', { style: muted }, t('empty'))
+          ? h('p', { className: muted }, t('empty'))
           : pack.params.map(d => h(PackDeclRow, { key: d.name, d, t, lang: props.lang, resolveText: props.resolveText, onSaved: props.onSaved })))
       : null)
 }
@@ -518,8 +463,8 @@ function PackLaneActions(props: {
     : updateAvailable ? (armed === 'update' ? t('confirmUpdate') : t('updateBtn'))
     : t('checkForUpdates')
   const rendered = rendered_error(error, props.lang)
-  return h('span', { style: { display: 'inline-flex', gap: '8px', alignItems: 'center' } satisfies CSSProperties },
-    standing !== null ? h('span', { style: { ...muted, fontSize: '0.82rem' } satisfies CSSProperties }, standing) : null,
+  return h('span', { className: 'inline-flex gap-2 items-center' },
+    standing !== null ? h('span', { className: smallMuted }, standing) : null,
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy || (props.checked && props.laneState === 'checking'),
       onClick: () => (updateAvailable ? (armed === 'update' ? run('update') : setArmed('update')) : props.check(props.pack.name)) },
       checkLabel),
@@ -534,10 +479,10 @@ function PackLaneActions(props: {
       props.disabled
         ? (armed === 'enable' ? t('confirmEnable') : t('enableBtn'))
         : (armed === 'disable' ? (props.consumers.length > 0 ? fill(t('confirmDisableBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDisable')) : t('disableBtn'))),
-    busy ? h('span', { style: muted }, t('saving')) : null,
-    rendered !== undefined ? h('span', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } satisfies CSSProperties },
+    busy ? h('span', { className: muted }, t('saving')) : null,
+    rendered !== undefined ? h('span', { className: `${errorText} whitespace-pre-wrap` },
       rendered.text,
-      rendered.detail !== undefined ? h('span', { style: { ...muted, whiteSpace: 'pre-wrap' } }, `\n${rendered.detail}`) : null) : null)
+      rendered.detail !== undefined ? h('span', { className: `${muted} whitespace-pre-wrap` }, `\n${rendered.detail}`) : null) : null)
 }
 
 /** renderError under its real name (a local alias keeps the call sites short). */
@@ -561,18 +506,14 @@ type SuitesLane = { state: 'ok' | 'unreachable'; rows: readonly UiSuiteStatus[] 
  * render one explanatory line — never an error wall. Every action goes
  * through the section-level refresh, so the Packs tab re-renders in sync. */
 
-/** Suites tab: ONE table (same font as the rest of the page — no monospace
- * member rows). Columns: suite, members (local → market), status, actions.
- * The delete confirm is a single expanded line per suite: what goes, what
- * stays (only when something is kept, with the force switch next to it). */
 /** Suites tab: one card per suite, same two-column shape as the pack cards —
  * suite identity on the left, info (description, member packs, actions) on
  * the right. No table, no header row; the page font throughout. */
 function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
   const { lane, t } = props
   if (lane === undefined) return null
-  if (lane.state === 'unreachable') return h('p', { style: muted }, t('suitesUnreachable'))
-  if (lane.rows.length === 0) return h('p', { style: muted }, t('suitesEmpty'))
+  if (lane.state === 'unreachable') return h('p', { className: muted }, t('suitesUnreachable'))
+  if (lane.rows.length === 0) return h('p', { className: muted }, t('suitesEmpty'))
   return h('div', null, lane.rows.map(s => h(SuiteCard, { key: s.name, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved })))
 }
 
@@ -600,15 +541,14 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
     }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
   }
   const rendered = rendered_error(error, props.lang)
-  const nameCol: CSSProperties = { width: '170px', flex: 'none', fontWeight: 600 }
-  return h('div', { id: suiteAnchorId(suite.name), style: { ...card, display: 'flex', gap: '14px' } satisfies CSSProperties },
-    h('div', { style: nameCol },
-      h('div', null, suite.name, ' ', h('span', { style: muted }, `v${suite.version}`)),
-      suite.incomplete ? h('div', { style: muted }, t('suiteFillHint')) : null),
-    h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
-      h('div', { style: { ...desc, marginBottom: '4px' } }, resolveText(suite.description)),
-      h('div', { style: { ...muted, marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } satisfies CSSProperties },
-        h('span', { title: t('colMembers'), style: { display: 'inline-flex', alignItems: 'center' } satisfies CSSProperties },
+  return h('div', { id: suiteAnchorId(suite.name), className: `${card} flex gap-3.5` },
+    h('div', { className: 'w-[170px] shrink-0 font-semibold' },
+      h('div', null, suite.name, ' ', h('span', { className: muted }, `v${suite.version}`)),
+      suite.incomplete ? h('div', { className: muted }, t('suiteFillHint')) : null),
+    h('div', { className: 'flex-[1_1_auto] min-w-0' },
+      h('div', { className: `${desc} mb-1` }, resolveText(suite.description)),
+      h('div', { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` },
+        h('span', { title: t('colMembers'), className: 'inline-flex items-center' },
           icon(SUITE_ICON_PATH)),
         suite.members.map(m => {
           const installed = m.localVersion !== undefined
@@ -617,18 +557,18 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
             title: m.name,
             // An installed member jumps to its pack card; a missing one reads red in place.
             onClick: installed ? () => props.onJump('packs', packAnchorId(m.name)) : undefined,
-            style: { ...chipStyle(m.localVersion === undefined), ...(installed ? { cursor: 'pointer' } satisfies CSSProperties : {}) },
+            className: installed ? `${chipOk} cursor-pointer` : chipMissing,
           }, m.localVersion === undefined ? m.name : `${m.name}@${m.localVersion}`)
         })),
-      h('div', { style: actions },
+      h('div', { className: actions },
         h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
         h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
           armedDelete ? t('cancel') : t('deleteBtn')),        h(Button, { size: 'sm', variant: 'ghost', title: t('zipBtn'), onClick: () => downloadZipFile(`/api/docwright/suite-zip?suite=${encodeURIComponent(suite.name)}`, `${suite.name}.zip`) }, t('zipBtn')),
-        busy ? h('span', { style: smallMuted }, t('saving')) : null,
-        done !== undefined && !busy ? h('span', { style: smallMuted }, done) : null,
+        busy ? h('span', { className: smallMuted }, t('saving')) : null,
+        done !== undefined && !busy ? h('span', { className: smallMuted }, done) : null,
         rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null),
       armedDelete
-        ? h('div', { style: { ...smallMuted, marginTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l4, transparent)', paddingTop: '6px' } satisfies CSSProperties },
+        ? h('div', { className: `${smallMuted} mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5` },
           fill(t('suiteDeleteSummary'), { packs: installed.map(m => m.name).join('、') || '—' }),
           ' ',
           h(Button, { size: 'sm', disabled: busy || installed.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')))
@@ -667,19 +607,19 @@ function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 
           label: e.key,
         })
       : e.choices !== undefined
-        ? h('select', { value: draftOf(e) || String(e.value ?? ''), onChange: (ev: { target: { value: string } }) => setDrafts(prev => ({ ...prev, [e.key]: ev.target.value })), style: inputStyle },
+        ? h('select', { value: draftOf(e) || String(e.value ?? ''), onChange: (ev: { target: { value: string } }) => setDrafts(prev => ({ ...prev, [e.key]: ev.target.value })), className: 'w-40' },
             e.choices.map(c => h('option', { key: String(c), value: String(c) }, String(c))))
         : h(Input, { value: draftOf(e), type: e.type === 'number' ? 'number' : 'text', step: 'any', 'aria-invalid': invalid,
-            onChange: (ev: { target: { value: string } }) => setDrafts(prev => ({ ...prev, [e.key]: ev.target.value })), style: inputStyle })
-    return h('div', { key: e.key, className: `${NS}-row`, style: row },
-      h('div', { style: { display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 } satisfies CSSProperties },
-        h('div', { style: rowHead },
-          h('span', { style: nameStyle }, e.key),
+            onChange: (ev: { target: { value: string } }) => setDrafts(prev => ({ ...prev, [e.key]: ev.target.value })), style: { width: '160px' } })
+    return h('div', { key: e.key, className: `${NS}-row ${row}` },
+      h('div', { className: 'flex flex-col flex-1 min-w-0' },
+        h('div', { className: rowHead },
+          h('span', { className: name }, e.key),
           h(Pill, {}, e.origin === 'configured' ? t('configured') : e.value === undefined ? t('unset') : t('inherited'))),
         e.description !== undefined ? h(DescriptionLine, { text: e.description, resolveText: props.resolveText }) : null,
         control,
         e.origin === 'default' && e.default !== undefined && String(e.default) !== String(e.value ?? '')
-          ? h('div', { style: muted }, `${t('inherited')}: ${String(e.default)}`)
+          ? h('div', { className: muted }, `${t('inherited')}: ${String(e.default)}`)
           : null,
         ))
   }
@@ -713,16 +653,16 @@ function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 
   }
   const [showAdvanced, setShowAdvanced] = useState(false)
   return h('div', null,
-    h('p', { style: muted }, t('configHint')),
+    h('p', { className: muted }, t('configHint')),
     toplevel.map(e => renderRow(e)),
     advanced.length > 0
-      ? h('div', { style: { marginTop: '8px' } },
+      ? h('div', { className: 'mt-2' },
           h(Button, { size: 'sm', variant: 'ghost', onClick: () => setShowAdvanced(v => !v) }, `${showAdvanced ? '▾' : '▸'} ${t('advanced')}`),
           showAdvanced ? advanced.map(e => renderRow(e)) : null)
       : null,
-    h('div', { style: actions },
+    h('div', { className: actions },
       h(Button, { size: 'sm', disabled: !dirty || busy, onClick: () => void saveAll() }, busy ? t('saving') : t('saveConfig')),
-      done && !dirty ? h('span', { style: muted }, t('saved')) : null,
+      done && !dirty ? h('span', { className: muted }, t('saved')) : null,
       error !== undefined ? h(ErrorLine, { error, lang: props.lang }) : null))
 }
 
@@ -758,13 +698,13 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
   useEffect(() => { refresh() }, [refresh])
   const suiteMarkers = useMemo(() => suitesByPack(suites?.rows ?? []), [suites])
   if (error !== undefined) {
-    return h('div', { style: baseText },
-      h('p', { style: { color: 'var(--dsw-alias-state-error-primary, crimson)', whiteSpace: 'pre-wrap' } },
+    return h('div', { className: 'dw-root' },
+      h('p', { className: `${errorText} whitespace-pre-wrap` },
         renderError(error as ApiError, lang).text),
-      h('p', { style: muted }, error.message),
+      h('p', { className: muted }, error.message),
       h(Button, { size: 'sm', onClick: refresh }, t('retry')))
   }
-  if (payload === undefined) return h('p', { style: { ...baseText, ...muted } }, t('loading'))
+  if (payload === undefined) return h('p', { className: `dw-root ${muted}` }, t('loading'))
   // Packs first: the installed-pack overview is the landing view; suites,
   // params groups and the plugin form follow (docs/designs/pack-suites.md).
   const tabs = [
@@ -773,10 +713,10 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
     { value: 'groups', label: t('viewGroups'), id: `${NS}-groups`, panelId: `${NS}-groups-panel` },
     { value: 'config', label: t('viewConfig'), id: `${NS}-config`, panelId: `${NS}-config-panel` },
   ] as const
-  return h('div', { className: `${NS}-section`, style: baseText },
-    h('h3', { style: { margin: '0 0 4px', ...baseText, fontWeight: 600 } }, t('title')),
-    h('p', { style: { ...muted, margin: '0 0 8px' } }, t('intro')),
-    h('div', { style: { margin: '8px 0 12px' } },
+  return h('div', { className: `${NS}-section dw-root` },
+    h('h3', { className: 'm-0 mb-1 font-semibold' }, t('title')),
+    h('p', { className: `${muted} m-0 mb-2` }, t('intro')),
+    h('div', { className: 'mt-2 mb-3' },
       h(SegmentedTabs, { items: [...tabs], value: view, onChange: v => setView(v as 'groups' | 'packs' | 'suites' | 'config'), label: t('title') })),
     view === 'groups' ? h(GroupsView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null,
     view === 'packs' ? h(PacksView, { payload, suites: suiteMarkers, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,

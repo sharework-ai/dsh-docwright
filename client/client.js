@@ -441,131 +441,57 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* change in ANY view re-fetches the whole block, so the Packs and Suites
 		* tabs can never disagree.
 		*
-		* Typography follows the host conversation body, not ad-hoc sizes: one
-		* family and size for all running text (`--dsw-font-family` +
-		* `--dsh-content-font-size`, 24px+delta line height, so the user's font-size
-		* preference applies here too); hierarchy comes from weight and the host's
-		* label grays (`--dsw-alias-label-secondary`), never from font size. Only
-		* identifiers and values (param names, enum members, JSON) sit in the host
-		* code face (`--dsh-font-family-code`).
+		* Styling: Tailwind utilities compiled from styles.css (injected once as
+		* client/client.css — see index.tsx). Accent colors come from the pack
+		* market's palette (@theme there); neutral surfaces, text and borders stay
+		* on the host's --dsw-alias-* tokens via arbitrary values, so light/dark
+		* follows the shell. Typography follows the host conversation body, not
+		* ad-hoc sizes: one family and size for all running text (the .dw-root
+		* component class); hierarchy comes from weight and the host's label grays,
+		* never from font size. Only identifiers and values (param names, enum
+		* members, JSON) sit in the host code face (.dw-code).
 		*/
 		const NS$1 = "docwright-params";
-		/** The conversation body's family and size — the one measure for all running
-		* text in this section. */
-		const baseText = {
-			fontFamily: "var(--dsw-font-family, inherit)",
-			fontSize: "var(--dsh-content-font-size, 14px)",
-			lineHeight: "calc(24px + var(--dsh-content-font-delta, 0px))"
-		};
-		/** Host code face for identifiers and values only (names, enums, JSON). */
-		const codeFont = "var(--dsh-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)";
-		/** The host's first muted gray (real theme token; the old --dsw-alias-text-*
-		* names never existed upstream and always fell through to full-strength). */
-		const secondary$1 = "var(--dsw-alias-label-secondary, inherit)";
-		const row = {
-			display: "flex",
-			alignItems: "center",
-			gap: "8px",
-			padding: "6px 0"
-		};
-		const rowHead = {
-			display: "flex",
-			alignItems: "baseline",
-			gap: "8px",
-			flexWrap: "wrap",
-			minWidth: 0
-		};
-		const nameStyle = {
-			fontWeight: 600,
-			fontFamily: codeFont
-		};
-		const desc = {
-			color: secondary$1,
-			whiteSpace: "pre-wrap",
-			wordBreak: "break-word"
-		};
-		const valueStyle = { fontFamily: codeFont };
-		const muted = { color: secondary$1 };
-		const smallMuted = {
-			...muted,
-			fontSize: "0.82rem"
-		};
+		/** The host's first muted gray (real theme token). */
+		const muted = "text-[var(--dsw-alias-label-secondary,inherit)]";
+		const smallMuted = `${muted} text-[0.82rem]`;
+		/** Host state red (the market's danger is the same #dc2626 family). */
+		const errorText = "text-[var(--dsw-alias-state-error-primary,#dc2626)]";
+		/** Host code face, via the styles.css component class. */
+		const code = "dw-code";
+		/** Host code face + semibold: names and identifiers. */
+		const name$1 = `${code} font-semibold`;
+		const row = "flex items-center gap-2 py-1.5";
+		const rowHead = "flex flex-wrap items-baseline gap-2 min-w-0";
+		const desc = `${muted} whitespace-pre-wrap break-words`;
+		/** The shared card shell: hairline border, host radius, second-layer fill. */
+		const card = "border-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] rounded-[var(--dsw-radius-xl,20px)] bg-[var(--dsw-alias-bg-layer-2,transparent)] px-4 py-3 mb-3 overflow-hidden";
+		/** The pack card's full-width header band: a quiet wash in the market's
+		* primary blue that separates "which pack am I looking at" from the rows. */
+		const packHead = `${rowHead} -mx-4 -my-3 mb-2.5 px-4 py-2.5 bg-[color-mix(in_srgb,var(--color-primary)_7%,transparent)]`;
+		const actions = "flex items-center gap-2 mt-2";
 		/** Gray rounded chip: the shared container for a dependency or a member
 		* pack. Translucent gray reads on both themes and, being a plain background,
-		* never intercepts clicks. `missing` renders the red variant. */
-		function chipStyle(missing = false) {
-			return {
-				background: missing ? "rgba(197, 48, 48, 0.10)" : "rgba(127, 127, 127, 0.12)",
-				border: `1px solid ${missing ? "rgba(197, 48, 48, 0.38)" : "rgba(127, 127, 127, 0.30)"}`,
-				color: missing ? "var(--dsw-alias-state-error-primary, crimson)" : void 0,
-				borderRadius: "999px",
-				padding: "1px 8px",
-				fontSize: "0.82rem",
-				whiteSpace: "nowrap"
-			};
-		}
+		* never intercepts clicks. Missing renders the red variant. */
+		const chip = "inline-flex rounded-full px-2 py-px text-[0.82rem] whitespace-nowrap border";
+		const chipOk = `${chip} bg-[rgba(127,127,127,0.12)] border-[rgba(127,127,127,0.30)]`;
+		const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`;
+		/** Suite chips keep the market suite cards' translucent purple. */
+		const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`;
 		/** Anchor ids of the pack and suite cards (jump targets for the chips). */
 		const packAnchorId = (name) => `docwright-pack-${name}`;
 		const suiteAnchorId = (name) => `docwright-suite-${name}`;
-		const group = {
-			border: "0.5px solid var(--dsw-alias-border-l4, transparent)",
-			borderRadius: "var(--dsw-radius-xl, 20px)",
-			background: "var(--dsw-alias-bg-layer-2, transparent)",
-			padding: "12px 16px",
-			marginBottom: "12px"
-		};
-		const card = {
-			...group,
-			overflow: "hidden"
-		};
-		/** The pack card's full-width header band: a quiet blue wash that separates
-		* "which pack am I looking at" from the parameter rows below it. */
-		const packHead = {
-			display: "flex",
-			alignItems: "baseline",
-			gap: "8px",
-			flexWrap: "wrap",
-			minWidth: 0,
-			margin: "-12px -16px 10px",
-			padding: "10px 16px",
-			background: "color-mix(in srgb, var(--dsw-static-blue-500, rgb(59, 130, 246)) 7%, transparent)"
-		};
-		const sourceLine = {
-			display: "flex",
-			alignItems: "center",
-			gap: "8px",
-			marginTop: "4px"
-		};
-		const inputStyle = { width: "160px" };
-		const actions = {
-			display: "flex",
-			gap: "8px",
-			alignItems: "center",
-			marginTop: "8px"
-		};
 		/** The author's description, inline beneath the parameter name — the primary
 		* explanation stays in view instead of hiding behind a hover. Locale
 		* resolution: the host's resolveText when available, its semantics locally
 		* otherwise (src/description.ts). */
 		function DescriptionLine(props) {
-			return (0, react.createElement)("div", {
-				className: `${NS$1}-desc`,
-				style: {
-					...desc,
-					marginTop: "2px"
-				}
-			}, props.resolveText(props.text ?? ""));
+			return (0, react.createElement)("div", { className: `${NS$1}-desc ${desc} mt-0.5` }, props.resolveText(props.text ?? ""));
 		}
 		/** One failing write/load as text + optional raw detail line. */
 		function ErrorLine(props) {
 			const rendered = renderError(props.error, props.lang);
-			return (0, react.createElement)("span", { style: {
-				color: "var(--dsw-alias-state-error-primary, crimson)",
-				whiteSpace: "pre-wrap"
-			} }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { style: {
-				...muted,
-				whiteSpace: "pre-wrap"
-			} }, `\n${rendered.detail}`) : null);
+			return (0, react.createElement)("span", { className: `${errorText} whitespace-pre-wrap` }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { className: `${muted} whitespace-pre-wrap` }, `\n${rendered.detail}`) : null);
 		}
 		/**
 		* Human projection of a declared default: value-band objects read as
@@ -595,11 +521,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const flags = [];
 			if (d.extractable) flags.push(t("extractable"));
 			if (d.overridable) flags.push(t("overridable"));
-			return flags.length === 0 ? null : (0, react.createElement)("div", { style: {
-				display: "flex",
-				gap: "4px",
-				flexWrap: "wrap"
-			} }, flags.map((f) => (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, { key: f }, f)));
+			return flags.length === 0 ? null : (0, react.createElement)("div", { className: "flex gap-1 flex-wrap" }, flags.map((f) => (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, { key: f }, f)));
 		}
 		/** Constraint summary under the value: declared range and choices. Object
 		* bands carry no note — the human projection ("target 60, band 30-90")
@@ -610,7 +532,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			if (d.enumValues !== void 0) bits.push(`${t("choices")}: ${d.enumValues.join(" / ")}`);
 			if (d.min !== void 0) bits.push(`${t("min")} ${d.min}`);
 			if (d.max !== void 0) bits.push(`${t("max")} ${d.max}`);
-			return bits.length === 0 ? null : (0, react.createElement)("div", { style: muted }, bits.join(" · "));
+			return bits.length === 0 ? null : (0, react.createElement)("div", { className: muted }, bits.join(" · "));
 		}
 		/** Validate one proposed default against the declaration (client-side mirror of the server gate). */
 		function validateDraft(d, text) {
@@ -639,11 +561,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		*/
 		function ValueRow(props) {
 			const { d, t } = props;
-			if (d.role === "shadowed") return (0, react.createElement)("div", { style: rowHead }, (0, react.createElement)("span", { style: {
-				...valueStyle,
-				color: secondary$1,
-				textDecoration: "line-through"
-			} }, displayDefault(d, t)), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, fill(t("shadowedByNote"), { pack: d.shadowedBy ?? "" })));
+			if (d.role === "shadowed") return (0, react.createElement)("div", { className: rowHead }, (0, react.createElement)("span", { className: `${code} ${muted} line-through` }, displayDefault(d, t)), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, fill(t("shadowedByNote"), { pack: d.shadowedBy ?? "" })));
 			return (0, react.createElement)(EditSeat, {
 				d,
 				t,
@@ -685,7 +603,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					setBusy(false);
 				}
 			};
-			const valueLine = (0, react.createElement)("div", { style: rowHead }, (0, react.createElement)("span", { style: valueStyle }, displayDefault(d, t)), editing ? null : (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			const valueLine = (0, react.createElement)("div", { className: rowHead }, (0, react.createElement)("span", { className: code }, displayDefault(d, t)), editing ? null : (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				onClick: start
@@ -694,7 +612,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			return (0, react.createElement)("div", null, d.enumValues !== void 0 ? (0, react.createElement)("select", {
 				value: String(d.default),
 				onChange: (e) => setDraft(e.target.value),
-				style: inputStyle
+				className: "w-40"
 			}, d.enumValues.map((v) => (0, react.createElement)("option", {
 				key: String(v),
 				value: String(v)
@@ -702,19 +620,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				value: draft,
 				onChange: (e) => setDraft(e.target.value),
 				rows: 4,
-				style: {
-					...inputStyle,
-					width: "100%",
-					maxWidth: "480px",
-					fontFamily: codeFont
-				}
+				className: `w-full max-w-[480px] ${code}`
 			}) : (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Input, {
 				value: draft,
 				type: d.type === "number" ? "number" : "text",
 				step: "any",
 				onChange: (e) => setDraft(e.target.value),
-				style: inputStyle
-			}), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				style: { width: "160px" }
+			}), (0, react.createElement)("div", { className: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				disabled: busy,
 				onClick: () => void save()
@@ -742,29 +655,26 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const { name, declarations, t } = props;
 			const governing = declarations.find((d) => d.role === "source") ?? declarations[0];
 			const shadowed = declarations.filter((d) => d !== governing);
-			return (0, react.createElement)("div", { style: group }, (0, react.createElement)("div", { style: rowHead }, (0, react.createElement)("span", { style: nameStyle }, name), (0, react.createElement)(FlagPills, {
+			return (0, react.createElement)("div", { className: card }, (0, react.createElement)("div", { className: rowHead }, (0, react.createElement)("span", { className: name }, name), (0, react.createElement)(FlagPills, {
 				d: governing,
 				t
 			})), (0, react.createElement)(DescriptionLine, {
 				text: governing.description,
 				resolveText: props.resolveText
-			}), (0, react.createElement)("div", { style: sourceLine }, (0, react.createElement)("span", { style: muted }, `${t("sources")}:`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, governing.pack)), (0, react.createElement)(ValueRow, {
+			}), (0, react.createElement)("div", { className: "flex items-center gap-2 mt-1" }, (0, react.createElement)("span", { className: muted }, `${t("sources")}:`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, governing.pack)), (0, react.createElement)(ValueRow, {
 				d: governing,
 				t,
 				lang: props.lang,
 				onSaved: props.onSaved
-			}), (0, react.createElement)("div", { style: { marginTop: "2px" } }, (0, react.createElement)(ConstraintLine, {
+			}), (0, react.createElement)("div", { className: "mt-0.5" }, (0, react.createElement)(ConstraintLine, {
 				d: governing,
 				t
-			})), shadowed.length > 0 ? (0, react.createElement)("div", { style: {
-				...muted,
-				marginTop: "4px"
-			} }, fill(t("shadowedNote"), { packs: shadowed.map((d) => d.pack).join(", ") })) : null);
+			})), shadowed.length > 0 ? (0, react.createElement)("div", { className: `${muted} mt-1` }, fill(t("shadowedNote"), { packs: shadowed.map((d) => d.pack).join(", ") })) : null);
 		}
 		/** Aggregated parameter view: one card per parameter name. */
 		function GroupsView(props) {
 			const { payload, t } = props;
-			if (payload.groups.length === 0) return (0, react.createElement)("p", { style: muted }, t("empty"));
+			if (payload.groups.length === 0) return (0, react.createElement)("p", { className: muted }, t("empty"));
 			return (0, react.createElement)("div", null, payload.groups.map((g) => (0, react.createElement)(ParamGroupCard, {
 				key: g.name,
 				name: g.name,
@@ -778,15 +688,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		/** One declaration row inside a pack's card. Source rows carry the edit seat; shadowed rows strike their never-applied value through. */
 		function PackDeclRow(props) {
 			const { d, t } = props;
-			return (0, react.createElement)("div", {
-				className: `${NS$1}-row`,
-				style: row
-			}, (0, react.createElement)("div", { style: {
-				display: "flex",
-				flexDirection: "column",
-				flex: 1,
-				minWidth: 0
-			} }, (0, react.createElement)("div", { style: rowHead }, (0, react.createElement)("span", { style: nameStyle }, d.name), (0, react.createElement)(FlagPills, {
+			return (0, react.createElement)("div", { className: `${NS$1}-row ${row}` }, (0, react.createElement)("div", { className: "flex flex-col flex-1 min-w-0" }, (0, react.createElement)("div", { className: rowHead }, (0, react.createElement)("span", { className: name$1 }, d.name), (0, react.createElement)(FlagPills, {
 				d,
 				t
 			})), (0, react.createElement)(DescriptionLine, {
@@ -797,7 +699,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				t,
 				lang: props.lang,
 				onSaved: props.onSaved
-			}), (0, react.createElement)("div", { style: { marginTop: "2px" } }, (0, react.createElement)(ConstraintLine, {
+			}), (0, react.createElement)("div", { className: "mt-0.5" }, (0, react.createElement)(ConstraintLine, {
 				d,
 				t
 			}))));
@@ -854,7 +756,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const byName = (0, react.useMemo)(() => new Map(lane.rows.map((u) => [u.name, u])), [lane.rows]);
 			const installedNames = (0, react.useMemo)(() => new Set(payload.packs.map((p) => p.name)), [payload.packs]);
 			const disabledNames = (0, react.useMemo)(() => new Set(payload.disabledPacks ?? []), [payload.disabledPacks]);
-			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { style: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { style: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
+			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { className: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { className: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
 				key: p.name,
 				pack: p,
 				status: byName.get(p.name),
@@ -884,65 +786,24 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const [paramsOpen, setParamsOpen] = (0, react.useState)(false);
 			return (0, react.createElement)("div", {
 				id: packAnchorId(pack.name),
-				style: card
-			}, (0, react.createElement)("div", { style: packHead }, (0, react.createElement)("span", { style: nameStyle }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null, props.disabled ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("disabledPill")) : null), (0, react.createElement)("div", { style: {
-				...desc,
-				marginBottom: "4px"
-			} }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { style: {
-				...muted,
-				marginTop: "4px",
-				display: "flex",
-				gap: "6px",
-				flexWrap: "wrap",
-				alignItems: "center"
-			} }, pack.consumes.length > 0 ? (0, react.createElement)("span", { style: {
-				display: "inline-flex",
-				gap: "6px",
-				alignItems: "center",
-				flexWrap: "wrap"
-			} }, (0, react.createElement)("span", {
+				className: card
+			}, (0, react.createElement)("div", { className: packHead }, (0, react.createElement)("span", { className: name$1 }, pack.name), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `v${pack.version}`), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, pack.scope === "workspace" ? t("scopeWorkspace") : t("scopeTopic")), pack.origin.kind === "builtin" ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("originBuiltin")) : null, pack.paramDriftPolicy !== void 0 ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, `${t("driftPolicy")}: ${pack.paramDriftPolicy}`) : null, props.disabled ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, t("disabledPill")) : null), (0, react.createElement)("div", { className: `${desc} mb-1` }, props.resolveText(pack.description)), pack.consumes.length > 0 || props.suites.length > 0 ? (0, react.createElement)("div", { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` }, pack.consumes.length > 0 ? (0, react.createElement)("span", { className: "inline-flex gap-1.5 items-center flex-wrap" }, (0, react.createElement)("span", {
 				title: t("consumed"),
-				style: {
-					display: "inline-flex",
-					alignItems: "center"
-				}
+				className: "inline-flex items-center"
 			}, icon(DEPENDS_ICON_PATH)), pack.consumes.map((dep) => {
 				const installed = props.installed.has(dep);
 				return (0, react.createElement)("span", {
 					key: dep,
 					title: installed ? dep : `${dep}${t("missingDep")}`,
 					onClick: installed ? () => props.onJump("packs", packAnchorId(dep)) : void 0,
-					style: {
-						...chipStyle(!installed),
-						...installed ? { cursor: "pointer" } : {}
-					}
+					className: installed ? `${chipOk} cursor-pointer` : chipMissing
 				}, dep);
-			})) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { style: { opacity: .6 } }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
+			})) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { className: "opacity-60" }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
 				key: suite,
 				title: t("suiteManagedTip"),
 				onClick: () => props.onJump("suites", suiteAnchorId(suite)),
-				style: {
-					display: "inline-flex",
-					gap: "4px",
-					alignItems: "center",
-					cursor: "pointer",
-					background: "rgba(147, 51, 234, 0.12)",
-					border: "1px solid rgba(147, 51, 234, 0.38)",
-					borderRadius: "999px",
-					padding: "1px 8px",
-					fontSize: "0.82rem",
-					whiteSpace: "nowrap"
-				}
-			}, (0, react.createElement)("span", { style: {
-				display: "inline-flex",
-				alignItems: "center"
-			} }, icon(SUITE_ICON_PATH, 12)), suite))) : null, (0, react.createElement)("div", { style: {
-				marginTop: "4px",
-				display: "flex",
-				gap: "8px",
-				alignItems: "center",
-				flexWrap: "wrap"
-			} }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				className: suiteChip
+			}, (0, react.createElement)("span", { className: "inline-flex items-center" }, icon(SUITE_ICON_PATH, 12)), suite))) : null, (0, react.createElement)("div", { className: "mt-1 flex gap-2 items-center flex-wrap" }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				onClick: () => setParamsOpen((v) => !v)
@@ -957,11 +818,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				consumers: props.consumers,
 				disabled: props.disabled,
 				onDone: props.onDone
-			}) : null), paramsOpen ? (0, react.createElement)("div", { style: {
-				marginTop: "6px",
-				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
-				paddingTop: "6px"
-			} }, pack.params.length === 0 ? (0, react.createElement)("p", { style: muted }, t("empty")) : pack.params.map((d) => (0, react.createElement)(PackDeclRow, {
+			}) : null), paramsOpen ? (0, react.createElement)("div", { className: "mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5" }, pack.params.length === 0 ? (0, react.createElement)("p", { className: muted }, t("empty")) : pack.params.map((d) => (0, react.createElement)(PackDeclRow, {
 				key: d.name,
 				d,
 				t,
@@ -997,14 +854,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const updateAvailable = props.checked && props.laneState === "ready" && props.status !== void 0 && props.status.onMarket && props.status.updateAvailable;
 			const checkLabel = props.checked && props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
 			const rendered = rendered_error(error, props.lang);
-			return (0, react.createElement)("span", { style: {
-				display: "inline-flex",
-				gap: "8px",
-				alignItems: "center"
-			} }, standing !== null ? (0, react.createElement)("span", { style: {
-				...muted,
-				fontSize: "0.82rem"
-			} }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			return (0, react.createElement)("span", { className: "inline-flex gap-2 items-center" }, standing !== null ? (0, react.createElement)("span", { className: smallMuted }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy || props.checked && props.laneState === "checking",
@@ -1027,13 +877,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					const kind = props.disabled ? "enable" : "disable";
 					armed === kind ? run(kind) : setArmed(kind);
 				}
-			}, props.disabled ? armed === "enable" ? t("confirmEnable") : t("enableBtn") : armed === "disable" ? props.consumers.length > 0 ? fill(t("confirmDisableBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDisable") : t("disableBtn")), busy ? (0, react.createElement)("span", { style: muted }, t("saving")) : null, rendered !== void 0 ? (0, react.createElement)("span", { style: {
-				color: "var(--dsw-alias-state-error-primary, crimson)",
-				whiteSpace: "pre-wrap"
-			} }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { style: {
-				...muted,
-				whiteSpace: "pre-wrap"
-			} }, `\n${rendered.detail}`) : null) : null);
+			}, props.disabled ? armed === "enable" ? t("confirmEnable") : t("enableBtn") : armed === "disable" ? props.consumers.length > 0 ? fill(t("confirmDisableBreaks"), { packs: props.consumers.join(", ") }) : t("confirmDisable") : t("disableBtn")), busy ? (0, react.createElement)("span", { className: muted }, t("saving")) : null, rendered !== void 0 ? (0, react.createElement)("span", { className: `${errorText} whitespace-pre-wrap` }, rendered.text, rendered.detail !== void 0 ? (0, react.createElement)("span", { className: `${muted} whitespace-pre-wrap` }, `\n${rendered.detail}`) : null) : null);
 		}
 		/** renderError under its real name (a local alias keeps the call sites short). */
 		function rendered_error(error, lang) {
@@ -1051,18 +895,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* has no suites or does not support them) and an unreachable market each
 		* render one explanatory line — never an error wall. Every action goes
 		* through the section-level refresh, so the Packs tab re-renders in sync. */
-		/** Suites tab: ONE table (same font as the rest of the page — no monospace
-		* member rows). Columns: suite, members (local → market), status, actions.
-		* The delete confirm is a single expanded line per suite: what goes, what
-		* stays (only when something is kept, with the force switch next to it). */
 		/** Suites tab: one card per suite, same two-column shape as the pack cards —
 		* suite identity on the left, info (description, member packs, actions) on
 		* the right. No table, no header row; the page font throughout. */
 		function SuitesView(props) {
 			const { lane, t } = props;
 			if (lane === void 0) return null;
-			if (lane.state === "unreachable") return (0, react.createElement)("p", { style: muted }, t("suitesUnreachable"));
-			if (lane.rows.length === 0) return (0, react.createElement)("p", { style: muted }, t("suitesEmpty"));
+			if (lane.state === "unreachable") return (0, react.createElement)("p", { className: muted }, t("suitesUnreachable"));
+			if (lane.rows.length === 0) return (0, react.createElement)("p", { className: muted }, t("suitesEmpty"));
 			return (0, react.createElement)("div", null, lane.rows.map((s) => (0, react.createElement)(SuiteCard, {
 				key: s.name,
 				suite: s,
@@ -1099,49 +939,21 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
 			};
 			const rendered = rendered_error(error, props.lang);
-			const nameCol = {
-				width: "170px",
-				flex: "none",
-				fontWeight: 600
-			};
 			return (0, react.createElement)("div", {
 				id: suiteAnchorId(suite.name),
-				style: {
-					...card,
-					display: "flex",
-					gap: "14px"
-				}
-			}, (0, react.createElement)("div", { style: nameCol }, (0, react.createElement)("div", null, suite.name, " ", (0, react.createElement)("span", { style: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { style: muted }, t("suiteFillHint")) : null), (0, react.createElement)("div", { style: {
-				flex: "1 1 auto",
-				minWidth: 0
-			} }, (0, react.createElement)("div", { style: {
-				...desc,
-				marginBottom: "4px"
-			} }, resolveText(suite.description)), (0, react.createElement)("div", { style: {
-				...muted,
-				marginTop: "4px",
-				display: "flex",
-				gap: "6px",
-				flexWrap: "wrap",
-				alignItems: "center"
-			} }, (0, react.createElement)("span", {
+				className: `${card} flex gap-3.5`
+			}, (0, react.createElement)("div", { className: "w-[170px] shrink-0 font-semibold" }, (0, react.createElement)("div", null, suite.name, " ", (0, react.createElement)("span", { className: muted }, `v${suite.version}`)), suite.incomplete ? (0, react.createElement)("div", { className: muted }, t("suiteFillHint")) : null), (0, react.createElement)("div", { className: "flex-[1_1_auto] min-w-0" }, (0, react.createElement)("div", { className: `${desc} mb-1` }, resolveText(suite.description)), (0, react.createElement)("div", { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` }, (0, react.createElement)("span", {
 				title: t("colMembers"),
-				style: {
-					display: "inline-flex",
-					alignItems: "center"
-				}
+				className: "inline-flex items-center"
 			}, icon(SUITE_ICON_PATH)), suite.members.map((m) => {
 				const installed = m.localVersion !== void 0;
 				return (0, react.createElement)("span", {
 					key: m.name,
 					title: m.name,
 					onClick: installed ? () => props.onJump("packs", packAnchorId(m.name)) : void 0,
-					style: {
-						...chipStyle(m.localVersion === void 0),
-						...installed ? { cursor: "pointer" } : {}
-					}
+					className: installed ? `${chipOk} cursor-pointer` : chipMissing
 				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}`);
-			})), (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			})), (0, react.createElement)("div", { className: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
@@ -1156,15 +968,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				variant: "ghost",
 				title: t("zipBtn"),
 				onClick: () => downloadZipFile(`/api/docwright/suite-zip?suite=${encodeURIComponent(suite.name)}`, `${suite.name}.zip`)
-			}, t("zipBtn")), busy ? (0, react.createElement)("span", { style: smallMuted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { style: smallMuted }, done) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
+			}, t("zipBtn")), busy ? (0, react.createElement)("span", { className: smallMuted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { className: smallMuted }, done) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
 				error,
 				lang: props.lang
-			}) : null), armedDelete ? (0, react.createElement)("div", { style: {
-				...smallMuted,
-				marginTop: "6px",
-				borderTop: "0.5px solid var(--dsw-alias-border-l4, transparent)",
-				paddingTop: "6px"
-			} }, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" }), " ", (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			}) : null), armedDelete ? (0, react.createElement)("div", { className: `${smallMuted} mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5` }, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" }), " ", (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				disabled: busy || installed.length === 0,
 				onClick: runDelete
@@ -1208,7 +1015,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 						...prev,
 						[e.key]: ev.target.value
 					})),
-					style: inputStyle
+					className: "w-40"
 				}, e.choices.map((c) => (0, react.createElement)("option", {
 					key: String(c),
 					value: String(c)
@@ -1221,21 +1028,15 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 						...prev,
 						[e.key]: ev.target.value
 					})),
-					style: inputStyle
+					style: { width: "160px" }
 				});
 				return (0, react.createElement)("div", {
 					key: e.key,
-					className: `${NS$1}-row`,
-					style: row
-				}, (0, react.createElement)("div", { style: {
-					display: "flex",
-					flexDirection: "column",
-					flex: 1,
-					minWidth: 0
-				} }, (0, react.createElement)("div", { style: rowHead }, (0, react.createElement)("span", { style: nameStyle }, e.key), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, e.origin === "configured" ? t("configured") : e.value === void 0 ? t("unset") : t("inherited"))), e.description !== void 0 ? (0, react.createElement)(DescriptionLine, {
+					className: `${NS$1}-row ${row}`
+				}, (0, react.createElement)("div", { className: "flex flex-col flex-1 min-w-0" }, (0, react.createElement)("div", { className: rowHead }, (0, react.createElement)("span", { className: name$1 }, e.key), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Pill, {}, e.origin === "configured" ? t("configured") : e.value === void 0 ? t("unset") : t("inherited"))), e.description !== void 0 ? (0, react.createElement)(DescriptionLine, {
 					text: e.description,
 					resolveText: props.resolveText
-				}) : null, control, e.origin === "default" && e.default !== void 0 && String(e.default) !== String(e.value ?? "") ? (0, react.createElement)("div", { style: muted }, `${t("inherited")}: ${String(e.default)}`) : null));
+				}) : null, control, e.origin === "default" && e.default !== void 0 && String(e.default) !== String(e.value ?? "") ? (0, react.createElement)("div", { className: muted }, `${t("inherited")}: ${String(e.default)}`) : null));
 			};
 			const saveAll = async () => {
 				const patch = {};
@@ -1266,15 +1067,15 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				}
 			};
 			const [showAdvanced, setShowAdvanced] = (0, react.useState)(false);
-			return (0, react.createElement)("div", null, (0, react.createElement)("p", { style: muted }, t("configHint")), toplevel.map((e) => renderRow(e)), advanced.length > 0 ? (0, react.createElement)("div", { style: { marginTop: "8px" } }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			return (0, react.createElement)("div", null, (0, react.createElement)("p", { className: muted }, t("configHint")), toplevel.map((e) => renderRow(e)), advanced.length > 0 ? (0, react.createElement)("div", { className: "mt-2" }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				onClick: () => setShowAdvanced((v) => !v)
-			}, `${showAdvanced ? "▾" : "▸"} ${t("advanced")}`), showAdvanced ? advanced.map((e) => renderRow(e)) : null) : null, (0, react.createElement)("div", { style: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			}, `${showAdvanced ? "▾" : "▸"} ${t("advanced")}`), showAdvanced ? advanced.map((e) => renderRow(e)) : null) : null, (0, react.createElement)("div", { className: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				disabled: !dirty || busy,
 				onClick: () => void saveAll()
-			}, busy ? t("saving") : t("saveConfig")), done && !dirty ? (0, react.createElement)("span", { style: muted }, t("saved")) : null, error !== void 0 ? (0, react.createElement)(ErrorLine, {
+			}, busy ? t("saving") : t("saveConfig")), done && !dirty ? (0, react.createElement)("span", { className: muted }, t("saved")) : null, error !== void 0 ? (0, react.createElement)(ErrorLine, {
 				error,
 				lang: props.lang
 			}) : null));
@@ -1315,17 +1116,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				refresh();
 			}, [refresh]);
 			const suiteMarkers = (0, react.useMemo)(() => suitesByPack(suites?.rows ?? []), [suites]);
-			if (error !== void 0) return (0, react.createElement)("div", { style: baseText }, (0, react.createElement)("p", { style: {
-				color: "var(--dsw-alias-state-error-primary, crimson)",
-				whiteSpace: "pre-wrap"
-			} }, renderError(error, lang).text), (0, react.createElement)("p", { style: muted }, error.message), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			if (error !== void 0) return (0, react.createElement)("div", { className: "dw-root" }, (0, react.createElement)("p", { className: `${errorText} whitespace-pre-wrap` }, renderError(error, lang).text), (0, react.createElement)("p", { className: muted }, error.message), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				onClick: refresh
 			}, t("retry")));
-			if (payload === void 0) return (0, react.createElement)("p", { style: {
-				...baseText,
-				...muted
-			} }, t("loading"));
+			if (payload === void 0) return (0, react.createElement)("p", { className: `dw-root ${muted}` }, t("loading"));
 			const tabs = [
 				{
 					value: "packs",
@@ -1352,17 +1147,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					panelId: `${NS$1}-config-panel`
 				}
 			];
-			return (0, react.createElement)("div", {
-				className: `${NS$1}-section`,
-				style: baseText
-			}, (0, react.createElement)("h3", { style: {
-				margin: "0 0 4px",
-				...baseText,
-				fontWeight: 600
-			} }, t("title")), (0, react.createElement)("p", { style: {
-				...muted,
-				margin: "0 0 8px"
-			} }, t("intro")), (0, react.createElement)("div", { style: { margin: "8px 0 12px" } }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.SegmentedTabs, {
+			return (0, react.createElement)("div", { className: `${NS$1}-section dw-root` }, (0, react.createElement)("h3", { className: "m-0 mb-1 font-semibold" }, t("title")), (0, react.createElement)("p", { className: `${muted} m-0 mb-2` }, t("intro")), (0, react.createElement)("div", { className: "mt-2 mb-3" }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.SegmentedTabs, {
 				items: [...tabs],
 				value: view,
 				onChange: (v) => setView(v),
@@ -1413,47 +1198,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* default. That keeps the published default PRODUCTION (npm users get the
 		* production market with zero configuration) while a dev instance points
 		* marketUrl at its own market — the one environment knob, no build-time
-		* flavors. No CSS modules — styles are inline host theme tokens (same
-		* discipline as ParamsSection).
+		* flavors. Styling is Tailwind (styles.css; the market's accent palette with
+		* host theme tokens for neutrals — same discipline as ParamsSection).
 		*/
 		/** The published default (production market). */
 		const MARKET_URL = "https://dm.shrwk.com/";
-		const fontFamily = "var(--dsw-font-family, inherit)";
-		const secondary = "var(--dsw-alias-label-secondary, inherit)";
-		const rootStyle = {
-			fontFamily,
-			display: "flex",
-			flexDirection: "column",
-			gap: "8px",
-			minHeight: "480px",
-			height: "calc(100vh - 150px)"
-		};
-		const barStyle = {
-			display: "flex",
-			alignItems: "baseline",
-			gap: "10px",
-			flex: "none"
-		};
-		const titleStyle = {
-			fontWeight: 600,
-			fontSize: "14px"
-		};
-		const linkStyle = {
-			color: secondary,
-			fontSize: "12px",
-			textDecoration: "none"
-		};
-		const frameStyle = {
-			flex: "1 1 auto",
-			width: "100%",
-			border: "0.5px solid var(--dsw-alias-border-l4, transparent)",
-			borderRadius: "var(--dsw-radius-xl, 20px)",
-			background: "var(--dsw-alias-bg-layer-1, #fff)"
-		};
-		function normalizeMarketUrl(value) {
-			if (typeof value !== "string" || !/^https:\/\//.test(value)) return void 0;
-			return value.endsWith("/") ? value : `${value}/`;
-		}
+		const secondary = "text-[var(--dsw-alias-label-secondary,inherit)]";
 		function isMarketMessage(event, marketOrigin, frame) {
 			if (event.origin !== marketOrigin) return false;
 			if (frame === null || event.source !== frame.contentWindow) return false;
@@ -1520,25 +1270,27 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				window.addEventListener("message", onMessage);
 				return () => window.removeEventListener("message", onMessage);
 			}, [marketOrigin, t]);
-			return (0, react.createElement)("div", { style: rootStyle }, (0, react.createElement)("div", { style: barStyle }, (0, react.createElement)("span", { style: titleStyle }, t("marketTitle")), (0, react.createElement)("span", { style: {
-				...linkStyle,
-				textDecoration: "none"
-			} }, url.replace(/\/$/, "")), bridgeStatus !== null && (0, react.createElement)(react.Fragment, null, (0, react.createElement)("span", { style: {
-				...linkStyle,
-				color: "var(--dsw-static-blue-500, rgb(59 130 246))"
-			} }, bridgeStatus)), (0, react.createElement)("a", {
+			return (0, react.createElement)("div", { className: "dw-root flex flex-col gap-2 min-h-[480px] h-[calc(100vh-150px)]" }, (0, react.createElement)("div", { className: "flex items-baseline gap-2.5 flex-none" }, (0, react.createElement)("span", { className: "font-semibold text-sm" }, t("marketTitle")), (0, react.createElement)("span", { className: `${secondary} text-xs` }, url.replace(/\/$/, "")), bridgeStatus !== null && (0, react.createElement)(react.Fragment, null, (0, react.createElement)("span", { className: `text-xs text-[var(--color-accent,#2b7fff)]` }, bridgeStatus)), (0, react.createElement)("a", {
 				href: url,
 				target: "_blank",
 				rel: "noreferrer",
-				style: linkStyle
+				className: `${secondary} text-xs no-underline`
 			}, t("openExternal"))), (0, react.createElement)("iframe", {
 				key: url,
 				src: url,
 				title: t("marketTitle"),
-				style: frameStyle,
+				className: "flex-1 w-full border-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] rounded-[var(--dsw-radius-xl,20px)] bg-[var(--dsw-alias-bg-layer-1,#fff)]",
 				ref: frameRef
 			}));
 		}
+		function normalizeMarketUrl(value) {
+			if (typeof value !== "string" || !/^https:\/\//.test(value)) return void 0;
+			return value.endsWith("/") ? value : `${value}/`;
+		}
+		//#endregion
+		//#region src/client/generated-css.ts
+		/** GENERATED by scripts/build-client-css.mjs from src/client/styles.css — do not edit. */
+		const CLIENT_CSS_BUNDLE = "/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */\n@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:block))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-font-weight:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial}}}@layer theme{:root,:host{--spacing:.25rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--font-weight-semibold:600;--color-primary:#155dfc;--color-accent:#2b7fff}}@layer base;@layer components{.dw-root{font-family:var(--dsw-font-family,inherit);font-size:var(--dsh-content-font-size,14px);line-height:calc(24px + var(--dsh-content-font-delta,0px))}.dw-code{font-family:var(--dsh-font-family-code,ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)}}@layer utilities{.collapse{visibility:collapse}.invisible{visibility:hidden}.visible{visibility:visible}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.container{width:100%}@media (min-width:40rem){.container{max-width:40rem}}@media (min-width:48rem){.container{max-width:48rem}}@media (min-width:64rem){.container{max-width:64rem}}@media (min-width:80rem){.container{max-width:80rem}}@media (min-width:96rem){.container{max-width:96rem}}.m-0{margin:0}.-mx-4{margin-inline:calc(var(--spacing) * -4)}.-my-3{margin-block:calc(var(--spacing) * -3)}.mt-0{margin-top:0}.mt-0\\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-1\\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mb-1{margin-bottom:var(--spacing)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-2\\.5{margin-bottom:calc(var(--spacing) * 2.5)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.block{display:block}.contents{display:contents}.flex{display:flex}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.table{display:table}.h-\\[calc\\(100vh-150px\\)\\]{height:calc(100vh - 150px)}.min-h-\\[480px\\]{min-height:480px}.w-40{width:calc(var(--spacing) * 40)}.w-\\[170px\\]{width:170px}.w-full{width:100%}.max-w-\\[480px\\]{max-width:480px}.min-w-0{min-width:0}.flex-1{flex:1}.flex-\\[1_1_auto\\]{flex:auto}.flex-none{flex:none}.shrink-0{flex-shrink:0}.grow{flex-grow:1}.transform{transform:var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, )}.cursor-pointer{cursor:pointer}.resize{resize:both}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-baseline{align-items:baseline}.items-center{align-items:center}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-2\\.5{gap:calc(var(--spacing) * 2.5)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-3\\.5{gap:calc(var(--spacing) * 3.5)}.overflow-hidden{overflow:hidden}.rounded{border-radius:.25rem}.rounded-\\[var\\(--dsw-radius-xl\\,20px\\)\\]{border-radius:var(--dsw-radius-xl,20px)}.rounded-full{border-radius:2147483647px}.border{border-style:var(--tw-border-style);border-width:1px}.border-\\[0\\.5px\\]{border-style:var(--tw-border-style);border-width:.5px}.border-t-\\[0\\.5px\\]{border-top-style:var(--tw-border-style);border-top-width:.5px}.border-\\[rgba\\(127\\,127\\,127\\,0\\.30\\)\\]{border-color:#7f7f7f4d}.border-\\[rgba\\(147\\,51\\,234\\,0\\.38\\)\\]{border-color:#9333ea61}.border-\\[rgba\\(197\\,48\\,48\\,0\\.38\\)\\]{border-color:#c5303061}.border-\\[var\\(--dsw-alias-border-l4\\,transparent\\)\\]{border-color:var(--dsw-alias-border-l4,transparent)}.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:#155dfc12}@supports (color:color-mix(in lab, red, red)){.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:color-mix(in srgb,var(--color-primary) 7%,transparent)}}.bg-\\[rgba\\(127\\,127\\,127\\,0\\.12\\)\\]{background-color:#7f7f7f1f}.bg-\\[rgba\\(147\\,51\\,234\\,0\\.12\\)\\]{background-color:#9333ea1f}.bg-\\[rgba\\(197\\,48\\,48\\,0\\.10\\)\\]{background-color:#c530301a}.bg-\\[var\\(--dsw-alias-bg-layer-1\\,\\#fff\\)\\]{background-color:var(--dsw-alias-bg-layer-1,#fff)}.bg-\\[var\\(--dsw-alias-bg-layer-2\\,transparent\\)\\]{background-color:var(--dsw-alias-bg-layer-2,transparent)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-4{padding-inline:calc(var(--spacing) * 4)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-2\\.5{padding-block:calc(var(--spacing) * 2.5)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-px{padding-block:1px}.pt-1{padding-top:var(--spacing)}.pt-1\\.5{padding-top:calc(var(--spacing) * 1.5)}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\\[0\\.82rem\\]{font-size:.82rem}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.break-words{overflow-wrap:break-word}.whitespace-nowrap{white-space:nowrap}.whitespace-pre-wrap{white-space:pre-wrap}.text-\\[var\\(--color-accent\\,\\#2b7fff\\)\\]{color:var(--color-accent,#2b7fff)}.text-\\[var\\(--dsw-alias-label-secondary\\,inherit\\)\\]{color:var(--dsw-alias-label-secondary,inherit)}.text-\\[var\\(--dsw-alias-state-error-primary\\,\\#dc2626\\)\\]{color:var(--dsw-alias-state-error-primary,#dc2626)}.lowercase{text-transform:lowercase}.ordinal{--tw-ordinal:ordinal;font-variant-numeric:var(--tw-ordinal, ) var(--tw-slashed-zero, ) var(--tw-numeric-figure, ) var(--tw-numeric-spacing, ) var(--tw-numeric-fraction, )}.line-through{text-decoration-line:line-through}.no-underline{text-decoration-line:none}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.filter{filter:var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, )}}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-font-weight{syntax:\"*\";inherits:false}@property --tw-ordinal{syntax:\"*\";inherits:false}@property --tw-slashed-zero{syntax:\"*\";inherits:false}@property --tw-numeric-figure{syntax:\"*\";inherits:false}@property --tw-numeric-spacing{syntax:\"*\";inherits:false}@property --tw-numeric-fraction{syntax:\"*\";inherits:false}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}";
 		//#endregion
 		//#region src/client/index.tsx
 		/**
@@ -1566,9 +1318,25 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* whole app down, so each mounting is wrapped separately and a failure costs
 		* that one surface for the session, never the shell.
 		*/
+		/** Compiled Tailwind CSS — generated-css.ts is emitted by
+		* scripts/build-client-css.mjs from src/client/styles.css (run by
+		* build:client and typecheck; never hand-edited). */
 		const NS = "docwright-params";
 		/** The bundle's package name — the key `plugins.bundle.config` is contracted to. */
 		const PACKAGE_NAME = "@sharework-ai/dsh-docwright";
+		/** The style-tag identity — one sheet per page, idempotent across remounts. */
+		const CSS_TAG_ID = "docwright/client.css";
+		/** Inject the plugin's stylesheet once (dsh-market's data-plugin-css
+		* pattern). Utilities are global class names but carry no host reset — the
+		* sheet defines exactly the utilities this bundle uses. */
+		function injectStyles() {
+			if (typeof document === "undefined") return;
+			if (document.querySelector(`style[data-plugin-css="${CSS_TAG_ID}"]`) !== null) return;
+			const tag = document.createElement("style");
+			tag.setAttribute("data-plugin-css", CSS_TAG_ID);
+			tag.textContent = CLIENT_CSS_BUNDLE;
+			document.head.appendChild(tag);
+		}
 		/** The settings.section id; `settings.section.icon` must register the same id. */
 		const SECTION_ID = "docwright";
 		/** The plugins.tab id. */
@@ -1593,6 +1361,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				return;
 			}
 			try {
+				injectStyles();
 				mountSection(ctx);
 			} catch (error) {
 				console.error("[docwright] surfaces failed to mount; the rest of the app is unaffected.", error);

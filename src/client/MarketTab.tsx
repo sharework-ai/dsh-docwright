@@ -12,11 +12,11 @@
  * default. That keeps the published default PRODUCTION (npm users get the
  * production market with zero configuration) while a dev instance points
  * marketUrl at its own market — the one environment knob, no build-time
- * flavors. No CSS modules — styles are inline host theme tokens (same
- * discipline as ParamsSection).
+ * flavors. Styling is Tailwind (styles.css; the market's accent palette with
+ * host theme tokens for neutrals — same discipline as ParamsSection).
  */
 import { createElement as h, Fragment, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { fetchParams, installMarketPack, installMarketSuite, ApiError } from './api.ts'
 import type { UiInstallOutcome } from './api.ts'
 import { translate, zh, en } from './locales.ts'
@@ -24,48 +24,7 @@ import { translate, zh, en } from './locales.ts'
 /** The published default (production market). */
 export const MARKET_URL = 'https://dm.shrwk.com/'
 
-const fontFamily = 'var(--dsw-font-family, inherit)'
-const secondary = 'var(--dsw-alias-label-secondary, inherit)'
-
-const rootStyle: CSSProperties = {
-  fontFamily,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '8px',
-  minHeight: '480px',
-  height: 'calc(100vh - 150px)',
-}
-
-const barStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: '10px',
-  flex: 'none',
-}
-
-const titleStyle: CSSProperties = {
-  fontWeight: 600,
-  fontSize: '14px',
-}
-
-const linkStyle: CSSProperties = {
-  color: secondary,
-  fontSize: '12px',
-  textDecoration: 'none',
-}
-
-const frameStyle: CSSProperties = {
-  flex: '1 1 auto',
-  width: '100%',
-  border: '0.5px solid var(--dsw-alias-border-l4, transparent)',
-  borderRadius: 'var(--dsw-radius-xl, 20px)',
-  background: 'var(--dsw-alias-bg-layer-1, #fff)',
-}
-
-function normalizeMarketUrl(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !/^https:\/\//.test(value)) return undefined
-  return value.endsWith('/') ? value : `${value}/`
-}
+const secondary = 'text-[var(--dsw-alias-label-secondary,inherit)]'
 
 //#region install bridge
 /**
@@ -142,14 +101,20 @@ export function MarketTab(props: { lang: 'zh' | 'en' }): ReactNode {
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [marketOrigin, t])
-  return h('div', { style: rootStyle },
-    h('div', { style: barStyle },
-      h('span', { style: titleStyle }, t('marketTitle')),
+  return h('div', { className: 'dw-root flex flex-col gap-2 min-h-[480px] h-[calc(100vh-150px)]' },
+    h('div', { className: 'flex items-baseline gap-2.5 flex-none' },
+      h('span', { className: 'font-semibold text-sm' }, t('marketTitle')),
       // The effective market is deployment state — showing the resolved URL
       // answers "which market am I looking at" without guessing.
-      h('span', { style: { ...linkStyle, textDecoration: 'none' } satisfies CSSProperties }, url.replace(/\/$/, '')),
+      h('span', { className: `${secondary} text-xs` }, url.replace(/\/$/, '')),
       bridgeStatus !== null && h(Fragment, null,
-        h('span', { style: { ...linkStyle, color: 'var(--dsw-static-blue-500, rgb(59 130 246))' } satisfies CSSProperties }, bridgeStatus)),
-      h('a', { href: url, target: '_blank', rel: 'noreferrer', style: linkStyle }, t('openExternal'))),
-    h('iframe', { key: url, src: url, title: t('marketTitle'), style: frameStyle, ref: frameRef }))
+        h('span', { className: `text-xs text-[var(--color-accent,#2b7fff)]` }, bridgeStatus)),
+      h('a', { href: url, target: '_blank', rel: 'noreferrer', className: `${secondary} text-xs no-underline` }, t('openExternal'))),
+    h('iframe', { key: url, src: url, title: t('marketTitle'),
+      className: 'flex-1 w-full border-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] rounded-[var(--dsw-radius-xl,20px)] bg-[var(--dsw-alias-bg-layer-1,#fff)]', ref: frameRef }))
+}
+
+function normalizeMarketUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !/^https:\/\//.test(value)) return undefined
+  return value.endsWith('/') ? value : `${value}/`
 }

@@ -7,3 +7,5 @@ coverage/
 *.receipt.json
 dist/
 .gstack/
+client/client.css
+src/client/generated-css.ts
