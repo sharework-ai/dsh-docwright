@@ -76,6 +76,7 @@ Per-function fan-out accounting — deterministic, no LLM. Pass `plan` (workspac
   config:
     packsDir: ""            # where market-installed packs land; same-name packs override built-ins
     marketSearch: true      # doc_market_search tool + market-lookup hints when no installed pack fits
+    sidebarEntry: true      # Docwright packs row in the sidebar's global panel list (default on; false removes the row and its panel)
     loadBuiltinPacks: true  # load the package's own packs/ dir; false = market-only (a source checkout's packs/ does not shadow packsDir)
     marketUrl: ""           # pack market the params UI checks updates and the Plugins-page tab serve (default: https://dm.shrwk.com)
     workspaceRoot: ""       # fallback root when no session workspace (default: cwd)

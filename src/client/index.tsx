@@ -12,6 +12,11 @@
  *   own Discover tab; dsh-market's tab takes -1 to sit before it.
  * - `plugins.bundle.config`: the configuration card on the bundle's own
  *   Plugins page, keyed by this package's name.
+ * - `sidebar.panellist` (+ `main`): the Docwright packs row in the host
+ *   sidebar's global panel list, rendered as a full main panel
+ *   (dsh-market's sidebar recipe). Shown by default; the plugin Config's
+ *   `sidebarEntry` switch (settings page, Config tab) turns the row and
+ *   its panel off, live via `docwright:config-changed`.
  *
  * The 0.1.7-era `settings.plugins.tab` seat is intentionally NOT registered:
  * the top-level section supersedes it (one settings home, like dsh-market,
@@ -29,6 +34,8 @@ import { resolveLocalized } from '../description.ts'
 import type { LocalizedText } from '../description.ts'
 import { ParamsSection } from './ParamsSection.tsx'
 import { MarketTab } from './MarketTab.tsx'
+import { CONFIG_CHANGED_EVENT, SIDEBAR_PANEL_ID, SIDEBAR_PANEL_ORDER, sidebarEntryVisible } from './sidebar-entry.ts'
+import { fetchParams } from './api.ts'
 
 const NS = 'docwright-params'
 
@@ -198,6 +205,88 @@ function mountSection(ctx: ClientContext): void {
     })
   } catch (error) {
     console.error('[docwright] bundle config card failed to register.', error)
+  }
+
+  // Surface 4: the sidebar's global panel row (dsh-market's recipe, #846).
+  // Two facts decide whether the row exists, and they arrive independently:
+  // the host declaring `sidebar.panellist` (this inject is the detection —
+  // hosts without it never run this body), and the deployment's Config
+  // `sidebarEntry` switch, read from the params payload. Shown is the
+  // default: the row registers immediately and the first config read (plus
+  // every `docwright:config-changed` event from the settings page) takes it
+  // down when the switch is off. A `main` panel with the same key is what
+  // makes the row open a page — the only one-click destination the host's
+  // public contracts allow.
+  try {
+    let layout: { panelInfo: { getSnapshot(): { activePanelId?: string | null } }; selectPanel(id: string | null): void } | undefined
+    try {
+      ;(ctx as unknown as { inject(services: string[], callback: (scoped: { layout: typeof layout }) => void): void })
+        .inject(['layout'], (scoped) => { layout = scoped.layout })
+    } catch {
+      // Hosts without a layout service keep the row; only the unselect-on-hide
+      // nicety degrades (see takeDown).
+    }
+    let offSurfaces: (() => void) | undefined
+    let rowUp = false
+    let slotSeen = false
+    let wanted = true
+    const panelLabel = () => (lang === 'zh' ? 'Docwright 市场' : 'Docwright packs')
+    const bringUp = (): void => {
+      if (rowUp || offSurfaces !== undefined) return
+      rowUp = true
+      const offPanel = ctx.slots.register({
+        name: 'main',
+        key: SIDEBAR_PANEL_ID,
+        locale: NS,
+        inject: () => ({ lang }),
+      }, () => h(MarketTab, { lang }))
+      const offRow = ctx.slots.register({
+        name: 'sidebar.panellist',
+        id: SIDEBAR_PANEL_ID,
+        order: SIDEBAR_PANEL_ORDER,
+        label: panelLabel,
+        locale: NS,
+      }, (owner: { size?: number } = {}) => h(DocwrightMark, { size: owner.size ?? 16 }))
+      offSurfaces = () => {
+        // Leave the page before its panel goes: a selection pointing at a
+        // key that no longer exists would strand the main column on nothing.
+        if (layout?.panelInfo.getSnapshot().activePanelId === SIDEBAR_PANEL_ID) layout.selectPanel(null)
+        if (typeof offRow === 'function') (offRow as () => void)()
+        if (typeof offPanel === 'function') (offPanel as () => void)()
+      }
+    }
+    const takeDown = (): void => {
+      rowUp = false
+      offSurfaces?.()
+      offSurfaces = undefined
+    }
+    const apply = (): void => {
+      if (!slotSeen) return
+      if (wanted) bringUp()
+      else takeDown()
+    }
+    const readConfig = (): void => {
+      void fetchParams().then(payload => {
+        wanted = sidebarEntryVisible(payload.config)
+        apply()
+      }).catch(() => {})
+    }
+    // Detection is the slot: only a host declaring `sidebar.panellist` ever
+    // runs the registration. The row is the default, so it comes up with the
+    // slot; the config read (and every settings-page save, announced as
+    // `docwright:config-changed`) is what can take it down.
+    ctx.slots.inject('sidebar.panellist', () => {
+      slotSeen = true
+      apply()
+      readConfig()
+    })
+    window.addEventListener(CONFIG_CHANGED_EVENT, readConfig)
+    ctx.effect(() => () => {
+      window.removeEventListener(CONFIG_CHANGED_EVENT, readConfig)
+      takeDown()
+    }, 'docwright: sidebar panel row')
+  } catch (error) {
+    console.error('[docwright] sidebar panel row failed to register.', error)
   }
 }
 

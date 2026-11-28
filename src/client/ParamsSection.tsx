@@ -30,6 +30,7 @@ import { deleteManagedPack, deleteSuite, fetchPackUpdates, fetchParams, fetchSui
 import { DEPENDS_ICON_PATH, icon, SUITE_ICON_PATH } from './icons.ts'
 import type { ApiError } from './api.ts'
 import type { ParamsPayload, UiConfigEntry, UiPackEntry, UiPackUpdate, UiParamDeclaration, UiShadowedCopy, UiSuiteStatus } from './api.ts'
+import { CONFIG_CHANGED_EVENT } from './sidebar-entry.ts'
 import { en, fill, renderError, translate, zh } from './locales.ts'
 import type { Translate } from './locales.ts'
 import { resolveLocalized } from '../description.ts'
@@ -754,6 +755,9 @@ function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 
     setError(undefined)
     try {
       await saveConfigPatch(patch)
+    // The surfaces outside this section read Config too (the sidebar row's
+    // `sidebarEntry` switch): announce the patch so they re-read live.
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(CONFIG_CHANGED_EVENT))
       setDone(true)
       setDrafts({})
       setSwitches({})
