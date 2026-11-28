@@ -59,25 +59,20 @@ const packHead = `${rowHead} -mx-4 -my-3 mb-2.5 px-4 py-2.5 bg-[color-mix(in_srg
 // suite is the grouping container and should read as the stronger section.
 const suiteHead = `${rowHead} -mx-4 -my-3 mb-2.5 px-4 py-2.5 bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)]`
 const actions = 'flex items-center gap-2 mt-2'
-/** Gray rounded chip: the shared container for a dependency or a member
- * pack. Translucent gray reads on both themes and, being a plain background,
- * never intercepts clicks. Missing renders the red variant. */
-// Dependency and suite-member references are plain link text, not pills:
-// a rounded chip on names reads as a static badge (or, in gray, as a
-// disabled control), while these entries ARE links — theme-blue link face,
-// hover underline, code font for the identifier.
+// Pack DEPENDENCY references are plain link text: a rounded chip on them
+// reads as a static badge (or, in gray, as a disabled control), while a
+// dependency IS a link — theme-blue link face, hover underline.
 const linkText = `${code} text-[var(--color-primary,#155dfc)] cursor-pointer hover:underline`
-// Interactive chip: the theme's primary blue in a quiet tint — gray read as
-// "disabled, not clickable", which is wrong for dependency and member chips
-// that open their target in place. Hover deepens the tint (an affordance the
-// red/amber variants deliberately keep off — they are states, not links).
 const chipOk = linkText
 const chipMissing = errorText
-/** Suite chips keep the market suite cards' translucent purple. */
-/** The external-reference mark: a suite member consumed by packs OUTSIDE its
- * suite (delete-time impact; the consumer list is named in the delete
- * confirm, never on the row). */
-const chipExternal = `${code} text-[rgba(212,140,34,1)] cursor-pointer hover:underline`
+// Suite MEMBER rows stay rounded chips: they are the suite's inventory (a
+// list of things), not inline references — the pill groups them visually
+// inside the member band. Theme-blue tint marks the clickable ones, amber
+// the externally-referenced, red the missing.
+const chip = 'inline-flex rounded-full px-2 py-px text-[0.82rem] whitespace-nowrap border'
+const memberChip = `${chip} cursor-pointer bg-[rgba(21,93,252,0.08)] border-[rgba(21,93,252,0.35)] text-[var(--color-primary,#155dfc)] hover:bg-[rgba(21,93,252,0.16)]`
+const memberChipExternal = `${chip} cursor-pointer bg-[rgba(212,140,34,0.12)] border-[rgba(212,140,34,0.55)]`
+const memberChipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`
 //#endregion
 
 /** Anchor ids of the pack and suite cards (jump targets for the chips). The
@@ -662,7 +657,7 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
             // An installed member expands its full pack card in place; a
             // missing one reads red and cannot go anywhere.
             onClick: installedNames.has(m.name) ? () => setOpenMember(isOpen ? undefined : m.name) : undefined,
-            className: installedNames.has(m.name) === false ? chipMissing : referenced ? chipExternal : `${chipOk} cursor-pointer${isOpen ? ' font-semibold' : ''}`,
+            className: installedNames.has(m.name) === false ? memberChipMissing : referenced ? memberChipExternal : `${memberChip}${isOpen ? ' font-semibold' : ''}`,
           }, m.localVersion === undefined ? m.name : `${m.name}@${m.localVersion}${referenced ? ' ↗' : ''}`)
         })),
       h('div', { className: actions },
