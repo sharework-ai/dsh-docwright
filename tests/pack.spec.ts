@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -53,6 +53,26 @@ describe('pack loader', () => {
     await mkdir(dir, { recursive: true })
     await writeFile(join(dir, 'manifest.json'), JSON.stringify({ name: 'no-desc', version: '1', languages: ['zh-CN'] }), 'utf8')
     await expect(loadPacks(root, {})).rejects.toThrow(/manifest\.description/)
+  })
+
+  it('validates compatibleFrom when present and loads it through', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'docwright-compat-root-'))
+    const bad = join(root, 'bad-compat')
+    await mkdir(bad, { recursive: true })
+    await writeFile(join(bad, 'manifest.json'), JSON.stringify({ name: 'bad-compat', version: '1', languages: ['zh-CN'], description: 'd', consumes: [], compatibleFrom: 2 }), 'utf8')
+    await expect(loadPacks(root, {})).rejects.toThrow(/manifest\.compatibleFrom must be a non-empty version string/)
+    await rm(bad, { recursive: true, force: true })
+    // A complete minimal pack (same shape the manage-spec fixture builds).
+    const good = join(root, 'good-compat')
+    for (const sub of ['rules', 'prompts', 'templates', 'samples']) await mkdir(join(good, sub), { recursive: true })
+    await writeFile(join(good, 'manifest.json'), JSON.stringify({ name: 'good-compat', version: '1', languages: ['zh-CN'], description: 'd', consumes: [], compatibleFrom: '1.1' }), 'utf8')
+    await writeFile(join(good, 'rules', 'zh-CN.json'), '[]', 'utf8')
+    await writeFile(join(good, 'schema.json'), '{"type":"object"}', 'utf8')
+    await writeFile(join(good, 'prompts', 'zh-CN.md'), 'T {{materials}}', 'utf8')
+    await writeFile(join(good, 'templates', 'zh-CN.hbs'), 't', 'utf8')
+    await writeFile(join(good, 'samples', 'golden.json'), '{}', 'utf8')
+    const packs = await loadPacks(root, {})
+    expect(packs.get('good-compat')?.manifest.compatibleFrom).toBe('1.1')
   })
 
   it('fails loud when a topic-scope pack declares topicNoPattern without topicNo (derivation pair)', async () => {

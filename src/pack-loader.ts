@@ -139,6 +139,9 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
   const m = raw as Partial<PackManifest>
   if (typeof m.name !== 'string' || m.name.length === 0) throw new Error(`pack ${dir}: manifest.name must be a non-empty string`)
   if (typeof m.version !== 'string' || m.version.length === 0) throw new Error(`pack ${dir}: manifest.version must be a non-empty string`)
+  if (m.compatibleFrom !== undefined && (typeof m.compatibleFrom !== 'string' || m.compatibleFrom.length === 0)) {
+    throw new Error(`pack ${dir}: manifest.compatibleFrom must be a non-empty version string when present (the lowest consumer version this manifest stays backward-compatible with)`)
+  }
   try {
     assertLocalizedText(m.description, `pack ${dir}: manifest.description`)
   } catch (error) {
@@ -242,6 +245,7 @@ export function assertManifest(raw: unknown, dir: string): PackManifest {
   return {
     name: m.name,
     version: m.version,
+    ...(m.compatibleFrom === undefined ? {} : { compatibleFrom: m.compatibleFrom }),
     description,
     consumes: m.consumes ?? [],
     ...(m.fanout === undefined ? {} : { fanout: m.fanout }),

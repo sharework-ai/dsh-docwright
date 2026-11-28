@@ -32,6 +32,7 @@ UI 文案、市场 JSON、文档一律用这组词：不要混用 "name/标题/�
 - `title: { en: string, zh?: string }` — 多语言标题（可选）
 - `suite: string` — 所属套件，**写全限定名 `org/suite-code`**（作者只写 code 时，市场在发布时用 pack 自己的 org 补全；装载期只校验 code 形状）。市场在**套件发布时统一物化**：成员全部置为 `org/套件code`，`suite` 仍指向本套件但已不在成员名单的 pack 清空。套件行自带 `org` 字段（发布者组织，发布时从账号组织取），因此 `/api/suites` 与 pack 详情都能给出全限定身份。
 - `assets: { icon?: string, images?: string[] }` — 展示资产（可选）。路径相对 pack 根目录，按约定放在 `assets/` 下；装载期校验形状（不得以 `/` 开头、不得含 `..`）。资产**仍随包 tgz 分发**：市场页面在浏览器里解 tgz 取图，服务端不存资产副本。
+- `compatibleFrom: string` — **向后兼容下限**（插件语义键，可选）：本版本保证与自身版本不低于该值的消费方兼容。市场在投稿时从 manifest 提取进 packs 表，并随 `/api/index`、`/api/packs` 下发；插件在更新（单包与套件两条通道）时用它做兼容门槛——已安装消费方低于下限时第一次更新拒绝并列出受影响的消费方，用户确认（force）后才执行。字段缺失（老市场/老 manifest）即视为无限兼容、不做检查。
 
 市场的 `org` 不在 manifest——来自投稿账号的发布者组织。卡片全限定名 `org/name@version`（suite 同理）。
 

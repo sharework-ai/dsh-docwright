@@ -100,11 +100,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			return (await parse(await fetch(`/api/docwright/pack-updates${suffix}`, { headers: { accept: "application/json" } }))).updates;
 		}
 		/** Update one managed pack from the market (verified download, atomic swap). */
-		async function updateManagedPack(pack) {
+		async function updateManagedPack(pack, force = false) {
 			return (await parse(await fetch("/api/docwright/pack-update", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ pack })
+				body: JSON.stringify({
+					pack,
+					force
+				})
 			}))).version;
 		}
 		/** Delete one managed pack (its packsDir directory; restores a same-name builtin override if any). `force` bypasses the in-use guard (the UI sends it from the second confirm click, which named the consumers). */
@@ -136,21 +139,30 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		async function fetchSuiteStatus() {
 			return (await parse(await fetch("/api/docwright/suites", { headers: { accept: "application/json" } }))).suites;
 		}
-		/** Update a suite: refresh each outdated member to its market version. */
-		async function updateSuite(suite) {
+		/** Update a suite: refresh each outdated member to its market version. `force`
+		* answers the server's aggregated compat-break gate (consumers below a
+		* member's compat floor) after the user confirmed the warning. */
+		async function updateSuite(suite, force = false) {
 			return parse(await fetch("/api/docwright/suite-update", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ suite })
+				body: JSON.stringify({
+					suite,
+					force
+				})
 			}));
 		}
-		/** Delete a suite's installed members — all of them; suite members are
-		* consumed inside their suite by design, so there is no keep/force split. */
-		async function deleteSuite(suite) {
+		/** Delete a suite's installed members — all of them. Members with consumers
+		* outside the suite need force (the UI's force checkbox after the warning
+		* named those consumers). */
+		async function deleteSuite(suite, force = false) {
 			return parse(await fetch("/api/docwright/suite-delete", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ suite })
+				body: JSON.stringify({
+					suite,
+					force
+				})
 			}));
 		}
 		/** Install one pack (with its consumed closure) from the market into packsDir. */
@@ -262,8 +274,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmDeleteBreaks: "Confirm delete ({packs} consume it — their chains break)",
 			updatedDone: "Updated to v{version}.",
 			deletedDone: "Deleted.",
-			viewSuites: "Suites",
-			suitesEmpty: "The market lists no suites (or this market does not support suites). Single-pack installs are unaffected.",
+			suitesSection: "Suites",
+			packsSection: "Standalone packs",
+			suitesEmpty: "No suites installed (the market lists none, or it does not support suites). Single-pack installs are unaffected.",
 			suitesUnreachable: "Could not reach the pack market; suite status is unavailable.",
 			suiteManagedTip: "Suite-managed — install, update, and delete go through the suite",
 			suiteIncomplete: "incomplete",
@@ -273,11 +286,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			colMembers: "Members",
 			suiteDeleteSummary: "Delete members: {packs}",
 			suiteDeleteConfirm: "Confirm delete suite",
-			suiteKeepColumn: "Will keep",
-			suiteKeptBy: "consumed by {packs}",
-			suiteForce: "Also delete members consumed outside the suite (force)",
+			suiteExternalRef: "consumed outside the suite",
+			suiteExternalMembers: "Members consumed by packs outside the suite: {list}. Deleting breaks their chains.",
+			suiteForce: "Force delete (the whole suite goes, outside consumers break)",
 			suiteDeletedDone: "Deleted: {packs}.",
 			suiteFillHint: "Members are missing. Ask the session: doc_market_install { \"suite\": \"<name>\" } installs the rest.",
+			confirmForceUpdate: "Update anyway",
 			"err.gateRejected": "The request was rejected by the host (HTTP {status}): not logged in, or the origin check failed. Refresh the page and sign in again.",
 			"err.crossSiteWrite": "Write refused: the request origin does not match the deployment host (cross-site request). Operate from the dsh web UI.",
 			"err.bodyTooLarge": "The request body exceeds the {max}-byte limit; nothing was written. Reduce the request size.",
@@ -301,7 +315,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.packInUse": "Pack \"{pack}\" is consumed by installed packs ({consumers}); deleting it breaks their chains. Confirm the delete again to proceed anyway, or keep it.",
 			"err.suiteLaneMissing": "The suite lane is not wired on this deployment; nothing was written.",
 			"err.originMismatch": "Pack \"{pack}\" now resolves from a different root than the card showed — the views were reloaded in between. Refresh and retry; nothing was written.",
-			"err.marketNameClash": "The market index lists pack \"{pack}\" more than once; the target would be ambiguous. Nothing was written — report this to the market operator."
+			"err.marketNameClash": "The market index lists pack \"{pack}\" more than once; the target would be ambiguous. Nothing was written — report this to the market operator.",
+			"err.compatBreak": "Updating \"{pack}\" may break consumers below the compat floor: {consumers}. Upgrade those consumers to their latest versions first, then update; or confirm again to update anyway.",
+			"err.suiteConsumed": "Suite \"{pack}\" has members consumed by packs outside the suite ({consumers}); deleting it breaks their chains. Tick the force box to delete the whole suite anyway, or keep it."
 		};
 		const zh = {
 			nav: "Docwright 参数",
@@ -374,8 +390,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			confirmDeleteBreaks: "确认删除（{packs} 消费它，删除将断链）",
 			updatedDone: "已更新到 v{version}。",
 			deletedDone: "已删除。",
-			viewSuites: "套件",
-			suitesEmpty: "市场没有套件（或该市场不支持套件）。单个 pack 的安装不受影响。",
+			suitesSection: "套件",
+			packsSection: "独立包",
+			suitesEmpty: "没有已安装的套件（市场没有套件，或该市场不支持套件）。单个 pack 的安装不受影响。",
 			suitesUnreachable: "无法连接 pack 市场，套件状态不可用。",
 			suiteManagedTip: "由套件管理：安装、更新、删除都走套件",
 			suiteIncomplete: "不完整",
@@ -385,11 +402,12 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			colMembers: "成员",
 			suiteDeleteSummary: "删除成员：{packs}",
 			suiteDeleteConfirm: "确认删除套件",
-			suiteKeepColumn: "将保留",
-			suiteKeptBy: "被 {packs} 消费",
-			suiteForce: "同时删除被套件外 pack 消费的成员（强制）",
+			suiteExternalRef: "被套件外引用",
+			suiteExternalMembers: "以下成员被套件外的 pack 消费：{list}。删除会影响它们。",
+			suiteForce: "强制删除（整个套件删除，外部引用断链）",
 			suiteDeletedDone: "已删除：{packs}。",
 			suiteFillHint: "成员未装齐。请在会话中执行 doc_market_install { \"suite\": \"<名称>\" } 补齐。",
+			confirmForceUpdate: "仍要更新",
 			"err.gateRejected": "请求被宿主拒绝（HTTP {status}）：未登录或来源校验未通过。刷新页面重新登录后再试。",
 			"err.crossSiteWrite": "写入被拒绝：请求来源与部署主机不一致（跨站请求）。请从 dsh web 界面发起操作。",
 			"err.bodyTooLarge": "请求体超过 {max} 字节上限，未写入任何内容。请缩小请求内容。",
@@ -413,7 +431,9 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			"err.packInUse": "pack「{pack}」正被已安装的 {consumers} 消费，删除会让它们断链。再次确认删除可强制执行，或保留该 pack。",
 			"err.suiteLaneMissing": "该部署未接入套件通道，未做任何改动。",
 			"err.originMismatch": "pack「{pack}」当前生效的来源和卡片显示的不一致（期间列表被刷新过）。请刷新后重试；未写入任何内容。",
-			"err.marketNameClash": "市场索引中 pack「{pack}」出现了多次，安装目标不明确。未写入任何内容，请联系市场管理员处理。"
+			"err.marketNameClash": "市场索引中 pack「{pack}」出现了多次，安装目标不明确。未写入任何内容，请联系市场管理员处理。",
+			"err.compatBreak": "更新「{pack}」可能影响低于兼容下限的消费方：{consumers}。建议先把它们升级到最新版本再更新；再次确认可强制更新。",
+			"err.suiteConsumed": "套件「{pack}」有成员被套件外的 pack 消费（{consumers}），删除会影响它们。勾选强制删除才会删除整个套件，否则不删除。"
 		};
 		function translate(dict) {
 			return (key) => {
@@ -438,10 +458,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		//#endregion
 		//#region src/client/ParamsSection.tsx
 		/**
-		* The Docwright params section: four views over one catalog fetch — per-pack
-		* flat view, the suite overview (docs/designs/pack-suites.md), shared-param
-		* groups (the aggregation with effective-source resolution), and the plugin
-		* Config form. Controls map from the
+		* The Docwright params section: three views over one catalog fetch — the
+		* installed list (suite cards with their read-only member rows first, then
+		* standalone packs — docs/designs/pack-suites.md), shared-param groups (the
+		* aggregation with effective-source resolution), and the plugin Config
+		* form. Controls map from the
 		* ParamSpec type (number → numeric input, enum → select, boolean → switch,
 		* object → JSON-per-value with endpoints read-only); every parameter shows
 		* its author's description inline beneath the name, resolved to the active
@@ -449,8 +470,8 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		* en-fallback semantics of src/description.ts). Writes go through the
 		* plugin's own routes (src/http.ts), never the conversation; their error
 		* envelopes render through the locale catalog (locales.ts renderError). Any
-		* change in ANY view re-fetches the whole block, so the Packs and Suites
-		* tabs can never disagree.
+		* change in ANY view re-fetches the whole block, so the suite cards and the
+		* standalone pack list can never disagree.
 		*
 		* Styling: Tailwind utilities compiled from styles.css (injected once as
 		* client/client.css — see index.tsx). Accent colors come from the pack
@@ -489,6 +510,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`;
 		/** Suite chips keep the market suite cards' translucent purple. */
 		const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`;
+		/** The external-reference mark: a suite member consumed by packs OUTSIDE its
+		* suite (delete-time impact; the consumer list is named in the delete
+		* confirm, never on the row). */
+		const chipExternal = `${chip} cursor-pointer bg-[rgba(212,140,34,0.12)] border-[rgba(212,140,34,0.55)]`;
 		/** Anchor ids of the pack and suite cards (jump targets for the chips). The
 		* pack anchor carries the ORIGIN ROOT: two same-code packs from different
 		* roots (cross-root shadowing) must never collide on one id — the code alone
@@ -757,6 +782,18 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}
 			return map;
 		}
+		/** Per-suite external consumers: for each member, the installed packs that
+		* consume it and are NOT suite members themselves (the delete-time impact
+		* list; a member with entries renders the external-reference mark). */
+		function externalConsumersOf(suite, packs) {
+			const members = new Set(suite.members.map((m) => m.name));
+			const map = /* @__PURE__ */ new Map();
+			for (const member of suite.members) {
+				const consumers = packs.filter((p) => p.name !== member.name && !members.has(p.name) && p.consumes.includes(member.name)).map((p) => p.name);
+				if (consumers.length > 0) map.set(member.name, consumers);
+			}
+			return map;
+		}
 		/** Per-pack flat view (pack-author / troubleshooting perspective). Each card
 		* opens with a full-width blue-wash header band — pack identity reads as a
 		* section of its own. The card is the overview: identity, description, and
@@ -801,7 +838,59 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				}
 				return map;
 			}, [payload.shadowedPacks]);
-			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { className: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { className: muted }, laneDone) : null, payload.packs.map((p) => (0, react.createElement)(PackCard, {
+			/** A suite member's FULL pack card, rendered nested inside its suite card
+			* (params stay editable there; lane actions stay hidden — the suite owns
+			* install/update/delete). */
+			const renderMemberCard = (name) => {
+				const pack = payload.packs.find((p) => p.name === name);
+				if (pack === void 0) return null;
+				return (0, react.createElement)(PackCard, {
+					key: `${pack.name}-${pack.origin.root}`,
+					pack,
+					status: byName.get(pack.name),
+					checked: byName.has(pack.name),
+					laneState: lane.state,
+					checkOne,
+					t,
+					lang: props.lang,
+					resolveText: props.resolveText,
+					onJump: props.onJump,
+					onSaved: props.onSaved,
+					installed: installedNames,
+					suites: props.suites.get(pack.name) ?? [],
+					consumers: payload.packs.filter((other) => other.name !== pack.name && other.consumes.includes(pack.name)).map((other) => other.name),
+					disabled: disabledNames.has(pack.name),
+					shadowed: shadowedByName.get(pack.name) ?? [],
+					rootOf,
+					onDone: (text) => {
+						setLaneDone(text);
+						props.onSaved();
+						checkOne(pack.name);
+					}
+				});
+			};
+			const standalone = payload.packs.filter((p) => (props.suites.get(p.name) ?? []).length === 0);
+			const suiteRows = props.suitesLane?.state === "ok" ? props.suitesLane.rows : [];
+			return (0, react.createElement)("div", null, lane.state === "unreachable" ? (0, react.createElement)("p", { className: muted }, t("updateCheckFailed")) : null, laneDone !== void 0 ? (0, react.createElement)("p", { className: muted }, laneDone) : null, suiteRows.length > 0 ? [(0, react.createElement)("h4", {
+				key: "suites-head",
+				className: `${muted} m-0 mb-2 font-semibold`
+			}, t("suitesSection")), ...suiteRows.map((s) => (0, react.createElement)(SuiteCard, {
+				key: `${s.org ?? ""}-${s.name}`,
+				suite: s,
+				packs: payload.packs,
+				t,
+				lang: props.lang,
+				resolveText: props.resolveText,
+				onJump: props.onJump,
+				onSaved: props.onSaved,
+				renderMember: renderMemberCard
+			}))] : props.suitesLane !== void 0 ? (0, react.createElement)("p", {
+				key: "suites-empty",
+				className: muted
+			}, props.suitesLane.state === "unreachable" ? t("suitesUnreachable") : t("suitesEmpty")) : null, standalone.length > 0 && suiteRows.length > 0 ? (0, react.createElement)("h4", {
+				key: "packs-head",
+				className: `${muted} mt-3 mb-2 font-semibold`
+			}, t("packsSection")) : null, standalone.map((p) => (0, react.createElement)(PackCard, {
 				key: `${p.name}-${p.origin.root}`,
 				pack: p,
 				status: byName.get(p.name),
@@ -855,7 +944,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			})) : null, pack.consumes.length > 0 && props.suites.length > 0 ? (0, react.createElement)("span", { className: "opacity-60" }, "·") : null, props.suites.map((suite) => (0, react.createElement)("span", {
 				key: suite,
 				title: t("suiteManagedTip"),
-				onClick: () => props.onJump("suites", suiteAnchorId(suite)),
+				onClick: () => props.onJump("packs", suiteAnchorId(suite)),
 				className: suiteChip
 			}, (0, react.createElement)("span", { className: "inline-flex items-center" }, icon(SUITE_ICON_PATH, 12)), suite))) : null, (0, react.createElement)("div", { className: "mt-1 flex gap-2 items-center flex-wrap" }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
@@ -903,10 +992,10 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const [armed, setArmed] = (0, react.useState)(void 0);
 			const [busy, setBusy] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(void 0);
-			const run = (kind) => {
+			const run = (kind, updateForce = false) => {
 				setBusy(true);
 				setError(void 0);
-				const call = kind === "update" ? updateManagedPack(props.pack.name) : kind === "delete" ? deleteManagedPack(props.pack.name, props.consumers.length > 0) : setPackDisabled(props.pack.name, kind === "disable", props.consumers.length > 0 && kind === "disable");
+				const call = kind === "update" ? updateManagedPack(props.pack.name, updateForce) : kind === "delete" ? deleteManagedPack(props.pack.name, props.consumers.length > 0) : setPackDisabled(props.pack.name, kind === "disable", props.consumers.length > 0 && kind === "disable");
 				const doneText = kind === "update" ? void 0 : kind === "disable" ? t("disableDone") : kind === "enable" ? t("enableDone") : t("deletedDone");
 				call.then((result) => props.onDone(kind === "update" ? fill(t("updatedDone"), { version: typeof result === "string" ? result : "" }) : doneText ?? ""), (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => {
 					setBusy(false);
@@ -915,13 +1004,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			};
 			const standing = props.checked && props.laneState === "ready" ? props.status === void 0 || !props.status.onMarket ? t("notOnMarket") : props.status.updateAvailable ? fill(t("updateTo"), { version: props.status.marketVersion ?? "" }) : t("upToDate") : null;
 			const updateAvailable = props.checked && props.laneState === "ready" && props.status !== void 0 && props.status.onMarket && props.status.updateAvailable;
-			const checkLabel = props.checked && props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
+			const compatBlocked = error?.code === "compatBreak";
+			const checkLabel = props.checked && props.laneState === "checking" ? t("checking") : updateAvailable ? armed === "update" ? compatBlocked ? t("confirmForceUpdate") : t("confirmUpdate") : t("updateBtn") : t("checkForUpdates");
 			const rendered = rendered_error(error, props.lang);
 			return (0, react.createElement)("span", { className: "inline-flex gap-2 items-center" }, standing !== null ? (0, react.createElement)("span", { className: smallMuted }, standing) : null, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy || props.checked && props.laneState === "checking",
-				onClick: () => updateAvailable ? armed === "update" ? run("update") : setArmed("update") : props.check(props.pack.name)
+				onClick: () => updateAvailable ? armed === "update" ? run("update", compatBlocked) : setArmed("update") : props.check(props.pack.name)
 			}, checkLabel), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
@@ -953,43 +1043,31 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				...coded.detail !== void 0 ? { detail: coded.detail } : {}
 			}, lang);
 		}
-		/** Suites view (docs/designs/pack-suites.md): one card per market suite,
-		* each member row showing local vs market version. An empty list (the market
-		* has no suites or does not support them) and an unreachable market each
-		* render one explanatory line — never an error wall. Every action goes
-		* through the section-level refresh, so the Packs tab re-renders in sync. */
-		/** Suites tab: one card per suite, same two-column shape as the pack cards —
-		* suite identity on the left, info (description, member packs, actions) on
-		* the right. No table, no header row; the page font throughout. */
-		function SuitesView(props) {
-			const { lane, t } = props;
-			if (lane === void 0) return null;
-			if (lane.state === "unreachable") return (0, react.createElement)("p", { className: muted }, t("suitesUnreachable"));
-			if (lane.rows.length === 0) return (0, react.createElement)("p", { className: muted }, t("suitesEmpty"));
-			const rootOf = (0, react.useCallback)((pack) => props.payload.packs.find((p) => p.name === pack), [props.payload.packs]);
-			return (0, react.createElement)("div", null, lane.rows.map((s) => (0, react.createElement)(SuiteCard, {
-				key: `${s.org ?? ""}-${s.name}`,
-				suite: s,
-				packs: props.payload.packs,
-				t,
-				lang: props.lang,
-				resolveText: props.resolveText,
-				onJump: props.onJump,
-				onSaved: props.onSaved,
-				rootOf
-			})));
-		}
+		/** One suite card INSIDE the packs view (docs/designs/pack-suites.md): the
+		* suite is a grouping of the one installed list, not a separate tab. Member
+		* rows are read-only — install/update/delete go through the suite buttons;
+		* a member chip click expands the member's full pack card in place (its
+		* parameter declarations stay editable there, its lane actions stay hidden).
+		* Members with consumers OUTSIDE the suite carry the external-reference
+		* mark; deleting such a suite needs the force box (the confirm area names
+		* the affected consumers). A compatBreak refusal on 更新套件 arms one force
+		* re-run that answers the server's aggregated warning. */
 		function SuiteCard(props) {
 			const { suite, t, resolveText } = props;
 			const [armedDelete, setArmedDelete] = (0, react.useState)(false);
+			const [forceDelete, setForceDelete] = (0, react.useState)(false);
+			const [openMember, setOpenMember] = (0, react.useState)(void 0);
 			const [busy, setBusy] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [done, setDone] = (0, react.useState)(void 0);
 			const installed = suite.members.filter((m) => m.localVersion !== void 0);
-			const runUpdate = () => {
+			const external = (0, react.useMemo)(() => externalConsumersOf(suite, props.packs), [suite, props.packs]);
+			const needsForce = external.size > 0;
+			const compatBlocked = error?.code === "compatBreak";
+			const runUpdate = (force) => {
 				setBusy(true);
 				setError(void 0);
-				updateSuite(suite.name).then((result) => {
+				updateSuite(suite.name, force).then((result) => {
 					setDone(fill(t("suiteUpdateDone"), { packs: result.updated.map((u) => `${u.name}@${u.version}`).join(", ") || t("upToDate") }));
 					props.onSaved();
 				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
@@ -997,13 +1075,14 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const runDelete = () => {
 				setBusy(true);
 				setError(void 0);
-				deleteSuite(suite.name).then((result) => {
+				deleteSuite(suite.name, forceDelete).then((result) => {
 					setDone(fill(t("suiteDeletedDone"), { packs: result.deleted.join(", ") }));
 					setArmedDelete(false);
 					props.onSaved();
 				}, (cause) => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false));
 			};
 			const rendered = rendered_error(error, props.lang);
+			const installedNames = new Set(props.packs.map((p) => p.name));
 			return (0, react.createElement)("div", {
 				id: suiteAnchorId(suite.name),
 				className: `${card} flex gap-3.5`
@@ -1011,24 +1090,27 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				title: t("colMembers"),
 				className: "inline-flex items-center"
 			}, icon(SUITE_ICON_PATH)), suite.members.map((m) => {
-				const origin = props.rootOf(m.name)?.origin;
-				const installed = origin !== void 0;
+				const referenced = external.has(m.name);
+				const isOpen = openMember === m.name;
 				return (0, react.createElement)("span", {
 					key: m.name,
-					title: installed && origin !== void 0 ? `${m.name} · ${origin.kind} ${origin.root}` : m.name,
-					onClick: installed && origin !== void 0 ? () => props.onJump("packs", packAnchorId(origin, m.name)) : void 0,
-					className: installed ? `${chipOk} cursor-pointer` : chipMissing
-				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}`);
+					title: referenced ? `${m.name}: ${t("suiteExternalRef")}` : m.name,
+					onClick: installedNames.has(m.name) ? () => setOpenMember(isOpen ? void 0 : m.name) : void 0,
+					className: installedNames.has(m.name) === false ? chipMissing : referenced ? chipExternal : `${chipOk} cursor-pointer${isOpen ? " font-semibold" : ""}`
+				}, m.localVersion === void 0 ? m.name : `${m.name}@${m.localVersion}${referenced ? " ↗" : ""}`);
 			})), (0, react.createElement)("div", { className: actions }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
-				onClick: runUpdate
-			}, t("suiteUpdateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+				onClick: () => runUpdate(compatBlocked)
+			}, compatBlocked ? t("confirmForceUpdate") : t("suiteUpdateBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
 				disabled: busy,
-				onClick: () => setArmedDelete((v) => !v)
+				onClick: () => {
+					setArmedDelete((v) => !v);
+					setForceDelete(false);
+				}
 			}, armedDelete ? t("cancel") : t("deleteBtn")), (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
 				variant: "ghost",
@@ -1037,11 +1119,15 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}, t("zipBtn")), busy ? (0, react.createElement)("span", { className: smallMuted }, t("saving")) : null, done !== void 0 && !busy ? (0, react.createElement)("span", { className: smallMuted }, done) : null, rendered !== void 0 ? (0, react.createElement)(ErrorLine, {
 				error,
 				lang: props.lang
-			}) : null), armedDelete ? (0, react.createElement)("div", { className: `${smallMuted} mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5` }, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" }), " ", (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			}) : null), armedDelete ? (0, react.createElement)("div", { className: `${smallMuted} mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5` }, fill(t("suiteDeleteSummary"), { packs: installed.map((m) => m.name).join("、") || "—" }), needsForce ? (0, react.createElement)("div", { className: "mt-1" }, fill(t("suiteExternalMembers"), { list: [...external.entries()].map(([m, cs]) => `${m} ← ${cs.join(", ")}`).join("；") }), (0, react.createElement)("label", { className: "mt-1 flex items-center gap-1.5 cursor-pointer" }, (0, react.createElement)("input", {
+				type: "checkbox",
+				checked: forceDelete,
+				onChange: (e) => setForceDelete(e.target.checked)
+			}), t("suiteForce"))) : null, (0, react.createElement)("div", { className: "mt-1.5" }, (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				size: "sm",
-				disabled: busy || installed.length === 0,
+				disabled: busy || installed.length === 0 || needsForce && !forceDelete,
 				onClick: runDelete
-			}, t("suiteDeleteConfirm"))) : null));
+			}, t("suiteDeleteConfirm")))) : null, openMember !== void 0 ? (0, react.createElement)("div", { className: "mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5" }, props.renderMember(openMember) ?? (0, react.createElement)("p", { className: muted }, openMember)) : null));
 		}
 		function ConfigView(props) {
 			const { payload, t } = props;
@@ -1146,7 +1232,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 				lang: props.lang
 			}) : null));
 		}
-		/** The section: one fetch cycle, four views (docs/designs/pack-suites.md). */
+		/** The section: one fetch cycle, three views (docs/designs/pack-suites.md). */
 		function ParamsSection(props) {
 			const lang = props.lang === "zh" ? "zh" : "en";
 			const t = (0, react.useMemo)(() => translate(lang === "zh" ? zh : en), [lang]);
@@ -1154,10 +1240,11 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			const [suites, setSuites] = (0, react.useState)(void 0);
 			const [error, setError] = (0, react.useState)(void 0);
 			const [view, setView] = (0, react.useState)("packs");
-			/** Chip jumps: switch to the target tab, then scroll the anchored card
-			* into view once it has rendered (one frame is enough for React). */
-			const jumpTo = (0, react.useCallback)((target, anchor) => {
-				setView(target);
+			/** Chip jumps: the suites live inside the packs view now, so a legacy
+			* 'suites' target lands there too; then scroll the anchored card into view
+			* once it has rendered (one frame is enough for React). */
+			const jumpTo = (0, react.useCallback)((rawTarget, anchor) => {
+				setView(rawTarget === "suites" ? "packs" : rawTarget);
 				window.setTimeout(() => {
 					document.getElementById(anchor)?.scrollIntoView({
 						behavior: "smooth",
@@ -1195,12 +1282,6 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 					panelId: `${NS$1}-packs-panel`
 				},
 				{
-					value: "suites",
-					label: t("viewSuites"),
-					id: `${NS$1}-suites`,
-					panelId: `${NS$1}-suites-panel`
-				},
-				{
 					value: "groups",
 					label: t("viewGroups"),
 					id: `${NS$1}-groups`,
@@ -1228,14 +1309,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 			}) : null, view === "packs" ? (0, react.createElement)(PacksView, {
 				payload,
 				suites: suiteMarkers,
-				t,
-				lang,
-				resolveText: props.resolveText,
-				onJump: jumpTo,
-				onSaved: refresh
-			}) : null, view === "suites" ? (0, react.createElement)(SuitesView, {
-				lane: suites,
-				payload,
+				suitesLane: suites,
 				t,
 				lang,
 				resolveText: props.resolveText,
@@ -1357,7 +1431,7 @@ window.__ModuleLoader__.load({ id: "@sharework-ai/dsh-docwright", factory: (requ
 		//#endregion
 		//#region src/client/generated-css.ts
 		/** GENERATED by scripts/build-client-css.mjs from src/client/styles.css — do not edit. */
-		const CLIENT_CSS_BUNDLE = "/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */\n@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:block))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-font-weight:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial}}}@layer theme{:root,:host{--spacing:.25rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--font-weight-normal:400;--font-weight-semibold:600;--color-primary:#155dfc;--color-accent:#2b7fff}}@layer base;@layer components{.dw-root{font-family:var(--dsw-font-family,inherit);font-size:var(--dsh-content-font-size,14px);line-height:calc(24px + var(--dsh-content-font-delta,0px))}.dw-code{font-family:var(--dsh-font-family-code,ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)}}@layer utilities{.collapse{visibility:collapse}.invisible{visibility:hidden}.visible{visibility:visible}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.container{width:100%}@media (min-width:40rem){.container{max-width:40rem}}@media (min-width:48rem){.container{max-width:48rem}}@media (min-width:64rem){.container{max-width:64rem}}@media (min-width:80rem){.container{max-width:80rem}}@media (min-width:96rem){.container{max-width:96rem}}.m-0{margin:0}.-mx-4{margin-inline:calc(var(--spacing) * -4)}.-my-3{margin-block:calc(var(--spacing) * -3)}.mt-0{margin-top:0}.mt-0\\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-1\\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mb-1{margin-bottom:var(--spacing)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-2\\.5{margin-bottom:calc(var(--spacing) * 2.5)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.block{display:block}.contents{display:contents}.flex{display:flex}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.table{display:table}.h-\\[calc\\(100vh-150px\\)\\]{height:calc(100vh - 150px)}.min-h-\\[480px\\]{min-height:480px}.w-40{width:calc(var(--spacing) * 40)}.w-\\[170px\\]{width:170px}.w-full{width:100%}.max-w-\\[480px\\]{max-width:480px}.min-w-0{min-width:0}.flex-1{flex:1}.flex-\\[1_1_auto\\]{flex:auto}.flex-none{flex:none}.shrink-0{flex-shrink:0}.grow{flex-grow:1}.transform{transform:var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, )}.cursor-pointer{cursor:pointer}.resize{resize:both}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-baseline{align-items:baseline}.items-center{align-items:center}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-2\\.5{gap:calc(var(--spacing) * 2.5)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-3\\.5{gap:calc(var(--spacing) * 3.5)}.overflow-hidden{overflow:hidden}.rounded{border-radius:.25rem}.rounded-\\[var\\(--dsw-radius-xl\\,20px\\)\\]{border-radius:var(--dsw-radius-xl,20px)}.rounded-full{border-radius:2147483647px}.border{border-style:var(--tw-border-style);border-width:1px}.border-\\[0\\.5px\\]{border-style:var(--tw-border-style);border-width:.5px}.border-t-\\[0\\.5px\\]{border-top-style:var(--tw-border-style);border-top-width:.5px}.border-\\[rgba\\(127\\,127\\,127\\,0\\.30\\)\\]{border-color:#7f7f7f4d}.border-\\[rgba\\(147\\,51\\,234\\,0\\.38\\)\\]{border-color:#9333ea61}.border-\\[rgba\\(197\\,48\\,48\\,0\\.38\\)\\]{border-color:#c5303061}.border-\\[var\\(--dsw-alias-border-l4\\,transparent\\)\\]{border-color:var(--dsw-alias-border-l4,transparent)}.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:#155dfc12}@supports (color:color-mix(in lab, red, red)){.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:color-mix(in srgb,var(--color-primary) 7%,transparent)}}.bg-\\[rgba\\(127\\,127\\,127\\,0\\.12\\)\\]{background-color:#7f7f7f1f}.bg-\\[rgba\\(147\\,51\\,234\\,0\\.12\\)\\]{background-color:#9333ea1f}.bg-\\[rgba\\(197\\,48\\,48\\,0\\.10\\)\\]{background-color:#c530301a}.bg-\\[var\\(--dsw-alias-bg-layer-1\\)\\]{background-color:var(--dsw-alias-bg-layer-1)}.bg-\\[var\\(--dsw-alias-bg-layer-1\\,\\#fff\\)\\]{background-color:var(--dsw-alias-bg-layer-1,#fff)}.bg-\\[var\\(--dsw-alias-bg-layer-2\\,transparent\\)\\]{background-color:var(--dsw-alias-bg-layer-2,transparent)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-4{padding-inline:calc(var(--spacing) * 4)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-2\\.5{padding-block:calc(var(--spacing) * 2.5)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-px{padding-block:1px}.pt-1{padding-top:var(--spacing)}.pt-1\\.5{padding-top:calc(var(--spacing) * 1.5)}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\\[0\\.82rem\\]{font-size:.82rem}.font-normal{--tw-font-weight:var(--font-weight-normal);font-weight:var(--font-weight-normal)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.break-words{overflow-wrap:break-word}.whitespace-nowrap{white-space:nowrap}.whitespace-pre-wrap{white-space:pre-wrap}.text-\\[var\\(--color-accent\\,\\#2b7fff\\)\\]{color:var(--color-accent,#2b7fff)}.text-\\[var\\(--dsw-alias-label-secondary\\,inherit\\)\\]{color:var(--dsw-alias-label-secondary,inherit)}.text-\\[var\\(--dsw-alias-state-error-primary\\,\\#dc2626\\)\\]{color:var(--dsw-alias-state-error-primary,#dc2626)}.lowercase{text-transform:lowercase}.ordinal{--tw-ordinal:ordinal;font-variant-numeric:var(--tw-ordinal, ) var(--tw-slashed-zero, ) var(--tw-numeric-figure, ) var(--tw-numeric-spacing, ) var(--tw-numeric-fraction, )}.line-through{text-decoration-line:line-through}.no-underline{text-decoration-line:none}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.filter{filter:var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, )}}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-font-weight{syntax:\"*\";inherits:false}@property --tw-ordinal{syntax:\"*\";inherits:false}@property --tw-slashed-zero{syntax:\"*\";inherits:false}@property --tw-numeric-figure{syntax:\"*\";inherits:false}@property --tw-numeric-spacing{syntax:\"*\";inherits:false}@property --tw-numeric-fraction{syntax:\"*\";inherits:false}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}";
+		const CLIENT_CSS_BUNDLE = "/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */\n@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:block))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-font-weight:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial}}}@layer theme{:root,:host{--spacing:.25rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--font-weight-normal:400;--font-weight-semibold:600;--color-primary:#155dfc;--color-accent:#2b7fff}}@layer base;@layer components{.dw-root{font-family:var(--dsw-font-family,inherit);font-size:var(--dsh-content-font-size,14px);line-height:calc(24px + var(--dsh-content-font-delta,0px))}.dw-code{font-family:var(--dsh-font-family-code,ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)}}@layer utilities{.collapse{visibility:collapse}.invisible{visibility:hidden}.visible{visibility:visible}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.container{width:100%}@media (min-width:40rem){.container{max-width:40rem}}@media (min-width:48rem){.container{max-width:48rem}}@media (min-width:64rem){.container{max-width:64rem}}@media (min-width:80rem){.container{max-width:80rem}}@media (min-width:96rem){.container{max-width:96rem}}.m-0{margin:0}.-mx-4{margin-inline:calc(var(--spacing) * -4)}.-my-3{margin-block:calc(var(--spacing) * -3)}.mt-0{margin-top:0}.mt-0\\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-1\\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-3{margin-top:calc(var(--spacing) * 3)}.mb-1{margin-bottom:var(--spacing)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-2\\.5{margin-bottom:calc(var(--spacing) * 2.5)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.block{display:block}.contents{display:contents}.flex{display:flex}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.table{display:table}.h-\\[calc\\(100vh-150px\\)\\]{height:calc(100vh - 150px)}.min-h-\\[480px\\]{min-height:480px}.w-40{width:calc(var(--spacing) * 40)}.w-\\[170px\\]{width:170px}.w-full{width:100%}.max-w-\\[480px\\]{max-width:480px}.min-w-0{min-width:0}.flex-1{flex:1}.flex-\\[1_1_auto\\]{flex:auto}.flex-none{flex:none}.shrink-0{flex-shrink:0}.grow{flex-grow:1}.transform{transform:var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, )}.cursor-pointer{cursor:pointer}.resize{resize:both}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-baseline{align-items:baseline}.items-center{align-items:center}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-2\\.5{gap:calc(var(--spacing) * 2.5)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-3\\.5{gap:calc(var(--spacing) * 3.5)}.overflow-hidden{overflow:hidden}.rounded{border-radius:.25rem}.rounded-\\[var\\(--dsw-radius-xl\\,20px\\)\\]{border-radius:var(--dsw-radius-xl,20px)}.rounded-full{border-radius:2147483647px}.border{border-style:var(--tw-border-style);border-width:1px}.border-\\[0\\.5px\\]{border-style:var(--tw-border-style);border-width:.5px}.border-t-\\[0\\.5px\\]{border-top-style:var(--tw-border-style);border-top-width:.5px}.border-\\[rgba\\(127\\,127\\,127\\,0\\.30\\)\\]{border-color:#7f7f7f4d}.border-\\[rgba\\(147\\,51\\,234\\,0\\.38\\)\\]{border-color:#9333ea61}.border-\\[rgba\\(197\\,48\\,48\\,0\\.38\\)\\]{border-color:#c5303061}.border-\\[rgba\\(212\\,140\\,34\\,0\\.55\\)\\]{border-color:#d48c228c}.border-\\[var\\(--dsw-alias-border-l4\\,transparent\\)\\]{border-color:var(--dsw-alias-border-l4,transparent)}.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:#155dfc12}@supports (color:color-mix(in lab, red, red)){.bg-\\[color-mix\\(in_srgb\\,var\\(--color-primary\\)_7\\%\\,transparent\\)\\]{background-color:color-mix(in srgb,var(--color-primary) 7%,transparent)}}.bg-\\[rgba\\(127\\,127\\,127\\,0\\.12\\)\\]{background-color:#7f7f7f1f}.bg-\\[rgba\\(147\\,51\\,234\\,0\\.12\\)\\]{background-color:#9333ea1f}.bg-\\[rgba\\(197\\,48\\,48\\,0\\.10\\)\\]{background-color:#c530301a}.bg-\\[rgba\\(212\\,140\\,34\\,0\\.12\\)\\]{background-color:#d48c221f}.bg-\\[var\\(--dsw-alias-bg-layer-1\\)\\]{background-color:var(--dsw-alias-bg-layer-1)}.bg-\\[var\\(--dsw-alias-bg-layer-1\\,\\#fff\\)\\]{background-color:var(--dsw-alias-bg-layer-1,#fff)}.bg-\\[var\\(--dsw-alias-bg-layer-2\\,transparent\\)\\]{background-color:var(--dsw-alias-bg-layer-2,transparent)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-4{padding-inline:calc(var(--spacing) * 4)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-2\\.5{padding-block:calc(var(--spacing) * 2.5)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-px{padding-block:1px}.pt-1{padding-top:var(--spacing)}.pt-1\\.5{padding-top:calc(var(--spacing) * 1.5)}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\\[0\\.82rem\\]{font-size:.82rem}.font-normal{--tw-font-weight:var(--font-weight-normal);font-weight:var(--font-weight-normal)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.break-words{overflow-wrap:break-word}.whitespace-nowrap{white-space:nowrap}.whitespace-pre-wrap{white-space:pre-wrap}.text-\\[var\\(--color-accent\\,\\#2b7fff\\)\\]{color:var(--color-accent,#2b7fff)}.text-\\[var\\(--dsw-alias-label-secondary\\,inherit\\)\\]{color:var(--dsw-alias-label-secondary,inherit)}.text-\\[var\\(--dsw-alias-state-error-primary\\,\\#dc2626\\)\\]{color:var(--dsw-alias-state-error-primary,#dc2626)}.lowercase{text-transform:lowercase}.ordinal{--tw-ordinal:ordinal;font-variant-numeric:var(--tw-ordinal, ) var(--tw-slashed-zero, ) var(--tw-numeric-figure, ) var(--tw-numeric-spacing, ) var(--tw-numeric-fraction, )}.line-through{text-decoration-line:line-through}.no-underline{text-decoration-line:none}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.filter{filter:var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, )}}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-font-weight{syntax:\"*\";inherits:false}@property --tw-ordinal{syntax:\"*\";inherits:false}@property --tw-slashed-zero{syntax:\"*\";inherits:false}@property --tw-numeric-figure{syntax:\"*\";inherits:false}@property --tw-numeric-spacing{syntax:\"*\";inherits:false}@property --tw-numeric-fraction{syntax:\"*\";inherits:false}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}";
 		//#endregion
 		//#region src/client/index.tsx
 		/**

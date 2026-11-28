@@ -88,14 +88,14 @@ export interface WriteChannels {
   /** Pack-lane management (src/pack-manage.ts): market version standing, update, delete. Optional — hosts mount it only when a packsDir is configured. */
   readonly packLane?: {
     readonly checkUpdates: (pack?: string | undefined) => Promise<unknown>
-    readonly updatePack: (pack: string) => Promise<{ version: string }>
+    readonly updatePack: (pack: string, force?: boolean) => Promise<{ version: string }>
     readonly deletePack: (pack: string, opts?: { force?: boolean }) => Promise<void>
     /** Enable/disable toggle (docs/designs/pack-load-dirs.md 启用与禁用): writes the docwright config's disabledPacks array; suite members route to the suite name. */
     readonly setPackDisabled?: (pack: string, disabled: boolean, opts?: { force?: boolean }) => Promise<{ disabled: readonly string[] }>
     /** Suite lane (docs/designs/pack-suites.md): market suite list projected onto the local packsDir. */
     readonly suiteStatus?: () => Promise<unknown>
-    readonly updateSuite?: (suite: string) => Promise<unknown>
-    readonly deleteSuite?: (suite: string) => Promise<unknown>
+    readonly updateSuite?: (suite: string, force?: boolean) => Promise<unknown>
+    readonly deleteSuite?: (suite: string, force?: boolean) => Promise<unknown>
     /** Market installs (docs/designs/pack-suites.md install lanes): one pack with its consumed closure, or every suite member. Optional — deployments without a packsDir never install. */
     readonly installPack?: (pack: string) => Promise<unknown>
     readonly installSuite?: (suite: string) => Promise<unknown>
@@ -266,7 +266,8 @@ export function mountParamsRoutes(
     // a coded envelope the UI renders inline, so a poll never spins error UI.
     disposePackUpdate = post('/api/docwright/pack-update', async body => {
       const pack = packName(body)
-      const { version } = await lane.updatePack(pack)
+      const { force } = body as { force?: unknown }
+      const { version } = await lane.updatePack(pack, force === true)
       return { status: 200, payload: { ok: true, version } }
     })
     disposePackDelete = post('/api/docwright/pack-delete', async body => {
@@ -313,14 +314,15 @@ export function mountParamsRoutes(
     disposeSuiteUpdate = post('/api/docwright/suite-update', async body => {
       if (lane.updateSuite === undefined) throw new CodedError('suiteLaneMissing', 'the suite lane is not wired on this deployment; nothing was written')
       const suite = suiteName(body)
-      const result = await lane.updateSuite(suite)
+      const { force } = body as { force?: unknown }
+      const result = await lane.updateSuite(suite, force === true)
       return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
     })
     disposeSuiteDelete = post('/api/docwright/suite-delete', async body => {
       if (lane.deleteSuite === undefined) throw new CodedError('suiteLaneMissing', 'the suite lane is not wired on this deployment; nothing was written')
       const suite = suiteName(body)
       const { force } = body as { force?: unknown }
-      const result = await lane.deleteSuite(suite)
+      const result = await lane.deleteSuite(suite, force === true)
       return { status: 200, payload: { ok: true, ...result as Record<string, unknown> } }
     })
     // Install lanes: the browser market page sends these through the tab's

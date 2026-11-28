@@ -56,7 +56,7 @@ async function managedFixture(): Promise<{ deps: ManagedDeps; root: string; pack
 }
 
 /** A fake market: GET /api/index serves the given entries; GET /tarballs/<file> serves the built tarballs. */
-async function marketServer(entries: readonly { name: string; version: string; dir?: string; consumes?: readonly string[] }[]): Promise<{ url: string; dispose: () => Promise<void>; tarballs: Map<string, Buffer> }> {
+async function marketServer(entries: readonly { name: string; version: string; dir?: string; consumes?: readonly string[]; compatibleFrom?: string }[]): Promise<{ url: string; dispose: () => Promise<void>; tarballs: Map<string, Buffer> }> {
   const tarballs = new Map<string, Buffer>()
   const index = { ok: true, packs: [] as Record<string, unknown>[] }
   for (const entry of entries) {
@@ -75,6 +75,7 @@ async function marketServer(entries: readonly { name: string; version: string; d
       tarballSha256: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
       contentHash: await dirHash(entry.dir),
       consumes: entry.consumes ?? [],
+      ...(entry.compatibleFrom === undefined ? {} : { compatibleFrom: entry.compatibleFrom }),
     })
   }
   const server: Server = createServer((request, response) => {
@@ -189,6 +190,65 @@ describe('checkPackUpdates', () => {
     marketStack.push(fx)
     fx.deps.marketUrl = 'http://127.0.0.1:1'
     await expect(checkPackUpdates(fx.deps)).rejects.toThrow(/could not reach the pack market/)
+  })
+})
+
+describe('compat gate (compatibleFrom)', () => {
+  it('updatePack refuses when an installed consumer sits below the compat floor; force proceeds', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    await packFixtureConsuming(fx.packsDir, 'down', '1', ['ext'])
+    const reloaded = await loadPacks(fx.deps.builtinRoot, { extra: [fx.packsDir] })
+    fx.packs.clear()
+    for (const [name, pack] of reloaded) fx.packs.set(name, pack)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-compat-')), 'ext', '2')
+    const market = await marketServer([{ name: 'ext', version: '2', dir: newer, compatibleFrom: '1.1' }])
+    fx.deps.marketUrl = market.url
+    // down@1 < floor 1.1 → the first call refuses naming it; ext stays on 1.
+    await expect(updatePack(fx.deps, 'ext')).rejects.toThrow(/compat floor 1\.1: down@1/)
+    expect(fx.deps.packs.get('ext')?.manifest.version).toBe('1')
+    // Force (the confirmed re-call) updates anyway.
+    expect(await updatePack(fx.deps, 'ext', { force: true })).toBe('2')
+    expect(fx.deps.packs.get('ext')?.manifest.version).toBe('2')
+  })
+
+  it('updatePack skips the gate without a floor, with no consumers, or with consumers at/above it', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    // Consumer at the floor exactly → compatible, no gate.
+    await packFixtureConsuming(fx.packsDir, 'ok', '2', ['ext'])
+    const reloaded = await loadPacks(fx.deps.builtinRoot, { extra: [fx.packsDir] })
+    fx.packs.clear()
+    for (const [name, pack] of reloaded) fx.packs.set(name, pack)
+    const newer = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-compat-ok-')), 'ext', '3')
+    const market = await marketServer([{ name: 'ext', version: '3', dir: newer, compatibleFrom: '2' }])
+    fx.deps.marketUrl = market.url
+    expect(await updatePack(fx.deps, 'ext')).toBe('3')
+  })
+
+  it('updateSuite aggregates below-floor OUTSIDE-suite consumers into one gate; suite siblings never trip it', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    // pair = ext + sub (sub consumes ext — a sibling member, never a trigger);
+    // out consumes ext from OUTSIDE the suite at a version below the floor.
+    await packFixtureConsuming(fx.packsDir, 'ext', '1', [])
+    await packFixtureConsuming(fx.packsDir, 'sub', '1', ['ext'])
+    await packFixtureConsuming(fx.packsDir, 'out', '1', ['ext'])
+    const reloaded = await loadPacks(fx.deps.builtinRoot, { extra: [fx.packsDir] })
+    fx.packs.clear()
+    for (const [name, pack] of reloaded) fx.packs.set(name, pack)
+    const ext2 = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-suite-compat-')), 'ext', '2')
+    const sub2 = await packFixture(await mkdtemp(join(tmpdir(), 'docwright-suite-compat-')), 'sub', '2')
+    const market = await suiteMarketServer(
+      [{ name: 'ext', version: '2', dir: ext2, compatibleFrom: '1.1' }, { name: 'sub', version: '2', dir: sub2 }],
+      [{ name: 'pair', version: '2', members: ['ext', 'sub'] }],
+    )
+    marketStack.push(market)
+    await expect(updateSuite({ ...fx.deps, marketUrl: market.url }, 'pair')).rejects.toThrow(/outside the suite.*out@1/)
+    // Nothing was updated by the refused call.
+    expect(fx.deps.packs.get('ext')?.manifest.version).toBe('1')
+    const result = await updateSuite({ ...fx.deps, marketUrl: market.url }, 'pair', { force: true })
+    expect(result.updated.map(u => u.name).sort()).toEqual(['ext', 'sub'])
   })
 })
 
@@ -729,7 +789,7 @@ describe('checkPackUpdates per-pack scope: failure path', () => {
 /** A suite-aware fake market: /api/index, /api/suites, /api/suites/<name>,
  * and tarballs for entries that carry a dir. */
 async function suiteMarketServer(
-  packs: readonly { name: string; version: string; dir?: string; consumes?: readonly string[] }[],
+  packs: readonly { name: string; version: string; dir?: string; consumes?: readonly string[]; compatibleFrom?: string }[],
   suites: readonly { name: string; version: string; members: readonly string[]; description?: unknown; category?: string }[],
 ): Promise<{ url: string; dispose: () => Promise<void> }> {
   const tarballs = new Map<string, Buffer>()
@@ -745,7 +805,7 @@ async function suiteMarketServer(
       sha = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
       content = await dirHash(entry.dir)
     }
-    indexPacks.push({ name: entry.name, version: entry.version, tarball: `/tarballs/${entry.name}-${entry.version}.tgz`, tarballSha256: sha, contentHash: content, consumes: entry.consumes ?? [] })
+    indexPacks.push({ name: entry.name, version: entry.version, tarball: `/tarballs/${entry.name}-${entry.version}.tgz`, tarballSha256: sha, contentHash: content, consumes: entry.consumes ?? [], ...(entry.compatibleFrom === undefined ? {} : { compatibleFrom: entry.compatibleFrom }) })
   }
   const json = (response: import('node:http').ServerResponse, body: unknown): void => {
     response.writeHead(200, { 'content-type': 'application/json' })
@@ -904,12 +964,12 @@ describe('updateSuite', () => {
 })
 
 describe('deleteSuite', () => {
-  it('deletes EVERY installed member, even one consumed by a pack outside the suite', async () => {
+  it('refuses when a member has consumers outside the suite, deletes EVERY member only on force', async () => {
     const fx = await managedFixture()
     marketStack.push(fx)
-    // packsDir: a and b are the suite; c (outside) consumes a — a still goes:
-    // members are consumed inside their suite by design, so there is no
-    // keep/force split. c keeps loading and fails loud on its next generation.
+    // packsDir: a and b are the suite; c (outside) consumes a. The first call
+    // refuses naming c; the force re-call deletes the whole suite — members
+    // never go one by one, whether or not something outside consumes them.
     await packFixtureConsuming(fx.packsDir, 'a', '1', [])
     await packFixtureConsuming(fx.packsDir, 'b', '1', [])
     await packFixtureConsuming(fx.packsDir, 'c', '1', ['a'])
@@ -918,14 +978,32 @@ describe('deleteSuite', () => {
     for (const [name, pack] of reloaded) fx.packs.set(name, pack)
     const market = await suiteMarketServer([], [{ name: 'pair', version: '1', members: ['a', 'b', 'never-installed'] }])
     marketStack.push(market)
-    const result = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')
+    await expect(deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')).rejects.toThrow(/consumed by packs outside the suite \(c\)/)
+    await expect(readdir(join(fx.packsDir, 'a'))).resolves.toBeTruthy()
+    const result = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair', { force: true })
     expect([...result.deleted].sort()).toEqual(['a', 'b'])
     await expect(readdir(join(fx.packsDir, 'a'))).rejects.toThrow()
     await expect(readdir(join(fx.packsDir, 'b'))).rejects.toThrow()
     await expect(readdir(join(fx.packsDir, 'c'))).resolves.toBeTruthy()
     // Retrying never double-deletes: the unit is "installed members".
-    const again = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')
+    const again = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair', { force: true })
     expect(again.deleted).toEqual([])
+  })
+
+  it('deletes without force when no member has an outside consumer', async () => {
+    const fx = await managedFixture()
+    marketStack.push(fx)
+    await packFixtureConsuming(fx.packsDir, 'a', '1', [])
+    await packFixtureConsuming(fx.packsDir, 'b', '1', ['a'])
+    const reloaded = await loadPacks(fx.deps.builtinRoot, { extra: [fx.packsDir] })
+    fx.packs.clear()
+    for (const [name, pack] of reloaded) fx.packs.set(name, pack)
+    const market = await suiteMarketServer([], [{ name: 'pair', version: '1', members: ['a', 'b'] }])
+    marketStack.push(market)
+    // b consuming a is the DESIGNED shape (sibling members consume each
+    // other) — one confirm deletes, no force.
+    const result = await deleteSuite({ ...fx.deps, marketUrl: market.url }, 'pair')
+    expect([...result.deleted].sort()).toEqual(['a', 'b'])
   })
 })
 

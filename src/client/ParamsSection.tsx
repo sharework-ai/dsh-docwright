@@ -1,8 +1,9 @@
 /**
- * The Docwright params section: four views over one catalog fetch — per-pack
- * flat view, the suite overview (docs/designs/pack-suites.md), shared-param
- * groups (the aggregation with effective-source resolution), and the plugin
- * Config form. Controls map from the
+ * The Docwright params section: three views over one catalog fetch — the
+ * installed list (suite cards with their read-only member rows first, then
+ * standalone packs — docs/designs/pack-suites.md), shared-param groups (the
+ * aggregation with effective-source resolution), and the plugin Config
+ * form. Controls map from the
  * ParamSpec type (number → numeric input, enum → select, boolean → switch,
  * object → JSON-per-value with endpoints read-only); every parameter shows
  * its author's description inline beneath the name, resolved to the active
@@ -10,8 +11,8 @@
  * en-fallback semantics of src/description.ts). Writes go through the
  * plugin's own routes (src/http.ts), never the conversation; their error
  * envelopes render through the locale catalog (locales.ts renderError). Any
- * change in ANY view re-fetches the whole block, so the Packs and Suites
- * tabs can never disagree.
+ * change in ANY view re-fetches the whole block, so the suite cards and the
+ * standalone pack list can never disagree.
  *
  * Styling: Tailwind utilities compiled from styles.css (injected once as
  * client/client.css — see index.tsx). Accent colors come from the pack
@@ -63,6 +64,10 @@ const chipOk = `${chip} bg-[rgba(127,127,127,0.12)] border-[rgba(127,127,127,0.3
 const chipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`
 /** Suite chips keep the market suite cards' translucent purple. */
 const suiteChip = `${chip} gap-1 items-center cursor-pointer bg-[rgba(147,51,234,0.12)] border-[rgba(147,51,234,0.38)]`
+/** The external-reference mark: a suite member consumed by packs OUTSIDE its
+ * suite (delete-time impact; the consumer list is named in the delete
+ * confirm, never on the row). */
+const chipExternal = `${chip} cursor-pointer bg-[rgba(212,140,34,0.12)] border-[rgba(212,140,34,0.55)]`
 //#endregion
 
 /** Anchor ids of the pack and suite cards (jump targets for the chips). The
@@ -308,6 +313,21 @@ function suitesByPack(rows: readonly UiSuiteStatus[]): ReadonlyMap<string, reado
   return map
 }
 
+/** Per-suite external consumers: for each member, the installed packs that
+ * consume it and are NOT suite members themselves (the delete-time impact
+ * list; a member with entries renders the external-reference mark). */
+function externalConsumersOf(suite: UiSuiteStatus, packs: readonly UiPackEntry[]): ReadonlyMap<string, readonly string[]> {
+  const members = new Set(suite.members.map(m => m.name))
+  const map = new Map<string, string[]>()
+  for (const member of suite.members) {
+    const consumers = packs
+      .filter(p => p.name !== member.name && !members.has(p.name) && p.consumes.includes(member.name))
+      .map(p => p.name)
+    if (consumers.length > 0) map.set(member.name, consumers)
+  }
+  return map
+}
+
 /** Per-pack flat view (pack-author / troubleshooting perspective). Each card
  * opens with a full-width blue-wash header band — pack identity reads as a
  * section of its own. The card is the overview: identity, description, and
@@ -315,7 +335,7 @@ function suitesByPack(rows: readonly UiSuiteStatus[]): ReadonlyMap<string, reado
  * the installed-pack list reads at a glance. Market standing is CHECK-ON-DEMAND
  * (检查更新) — never fetched on view mount, and the button only turns into
  * 更新 after a check reports a newer version. */
-function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, readonly string[]>; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
+function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, readonly string[]>; suitesLane: SuitesLane | undefined; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
   const { payload, t } = props
   // Market standing, fetched ONLY when a card's 检查更新 is clicked — and
   // scoped to THAT card: one click answers exactly one pack (the server
@@ -344,10 +364,39 @@ function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, 
     }
     return map
   }, [payload.shadowedPacks])
+  /** A suite member's FULL pack card, rendered nested inside its suite card
+   * (params stay editable there; lane actions stay hidden — the suite owns
+   * install/update/delete). */
+  const renderMemberCard = (name: string) => {
+    const pack = payload.packs.find(p => p.name === name)
+    if (pack === undefined) return null
+    return h(PackCard, { key: `${pack.name}-${pack.origin.root}`, pack, status: byName.get(pack.name), checked: byName.has(pack.name), laneState: lane.state, checkOne, t, lang: props.lang,
+      resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(pack.name) ?? [],
+      consumers: payload.packs.filter(other => other.name !== pack.name && other.consumes.includes(pack.name)).map(other => other.name),
+      disabled: disabledNames.has(pack.name),
+      shadowed: shadowedByName.get(pack.name) ?? [],
+      rootOf,
+      onDone: text => { setLaneDone(text); props.onSaved(); checkOne(pack.name) } })
+  }
+  // One list, two nestings (docs/designs/pack-suites.md): installed suites
+  // with their member rows first — a member NEVER also renders standalone —
+  // then the packs outside any suite. An unreachable market keeps the
+  // standalone list fully working; the suite note is one muted line.
+  const standalone = payload.packs.filter(p => (props.suites.get(p.name) ?? []).length === 0)
+  const suiteRows = props.suitesLane?.state === 'ok' ? props.suitesLane.rows : []
   return h('div', null,
     lane.state === 'unreachable' ? h('p', { className: muted }, t('updateCheckFailed')) : null,
     laneDone !== undefined ? h('p', { className: muted }, laneDone) : null,
-    payload.packs.map((p: UiPackEntry) => h(PackCard, { key: `${p.name}-${p.origin.root}`, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
+    suiteRows.length > 0
+      ? [h('h4', { key: 'suites-head', className: `${muted} m-0 mb-2 font-semibold` }, t('suitesSection')),
+        ...suiteRows.map(s => h(SuiteCard, { key: `${s.org ?? ''}-${s.name}`, suite: s, packs: payload.packs, t, lang: props.lang, resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, renderMember: renderMemberCard }))]
+      : props.suitesLane !== undefined
+        ? h('p', { key: 'suites-empty', className: muted }, props.suitesLane.state === 'unreachable' ? t('suitesUnreachable') : t('suitesEmpty'))
+        : null,
+    standalone.length > 0 && suiteRows.length > 0
+      ? h('h4', { key: 'packs-head', className: `${muted} mt-3 mb-2 font-semibold` }, t('packsSection'))
+      : null,
+    standalone.map((p: UiPackEntry) => h(PackCard, { key: `${p.name}-${p.origin.root}`, pack: p, status: byName.get(p.name), checked: byName.has(p.name), laneState: lane.state, checkOne, t, lang: props.lang,
       resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(p.name) ?? [],
       consumers: payload.packs.filter(other => other.name !== p.name && other.consumes.includes(p.name)).map(other => other.name),
       disabled: disabledNames.has(p.name),
@@ -426,7 +475,7 @@ function PackCard(props: {
         props.suites.map(suite => h('span', {
           key: suite,
           title: t('suiteManagedTip'),
-          onClick: () => props.onJump('suites', suiteAnchorId(suite)),
+          onClick: () => props.onJump('packs', suiteAnchorId(suite)),
           className: suiteChip,
         },
           h('span', { className: 'inline-flex items-center' },
@@ -488,10 +537,10 @@ function PackLaneActions(props: {
   const [armed, setArmed] = useState<'update' | 'delete' | 'disable' | 'enable' | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | undefined>(undefined)
-  const run = (kind: 'update' | 'delete' | 'disable' | 'enable') => {
+  const run = (kind: 'update' | 'delete' | 'disable' | 'enable', updateForce = false) => {
     setBusy(true)
     setError(undefined)
-    const call = kind === 'update' ? updateManagedPack(props.pack.name)
+    const call = kind === 'update' ? updateManagedPack(props.pack.name, updateForce)
       : kind === 'delete' ? deleteManagedPack(props.pack.name, props.consumers.length > 0)
       : setPackDisabled(props.pack.name, kind === 'disable', props.consumers.length > 0 && kind === 'disable')
     const doneText = kind === 'update' ? undefined : kind === 'disable' ? t('disableDone') : kind === 'enable' ? t('enableDone') : t('deletedDone')
@@ -512,14 +561,18 @@ function PackLaneActions(props: {
   // The check button's faces: 检查更新 until a check reports a newer version,
   // then the two-step 更新; 检查中… while the round trip runs.
   const updateAvailable = props.checked && props.laneState === 'ready' && props.status !== undefined && props.status.onMarket && props.status.updateAvailable
+  // A compatBreak refusal arms the force path: the NEXT confirm click sends
+  // force: true (label flips to 仍要更新), answering the server's named
+  // consumers warning. The flag lives in the error — a fresh result resets it.
+  const compatBlocked = (error as { code?: string } | undefined)?.code === 'compatBreak'
   const checkLabel = props.checked && props.laneState === 'checking' ? t('checking')
-    : updateAvailable ? (armed === 'update' ? t('confirmUpdate') : t('updateBtn'))
+    : updateAvailable ? (armed === 'update' ? (compatBlocked ? t('confirmForceUpdate') : t('confirmUpdate')) : t('updateBtn'))
     : t('checkForUpdates')
   const rendered = rendered_error(error, props.lang)
   return h('span', { className: 'inline-flex gap-2 items-center' },
     standing !== null ? h('span', { className: smallMuted }, standing) : null,
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy || (props.checked && props.laneState === 'checking'),
-      onClick: () => (updateAvailable ? (armed === 'update' ? run('update') : setArmed('update')) : props.check(props.pack.name)) },
+      onClick: () => (updateAvailable ? (armed === 'update' ? run('update', compatBlocked) : setArmed('update')) : props.check(props.pack.name)) },
       checkLabel),
     h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => (armed === 'delete' ? run('delete') : setArmed('delete')) },
       armed === 'delete' ? (props.consumers.length > 0 ? fill(t('confirmDeleteBreaks'), { packs: props.consumers.join(', ') }) : t('confirmDelete')) : t('deleteBtn')),
@@ -550,51 +603,47 @@ function rendered_error(error: Error | undefined, lang: 'zh' | 'en'): { text: st
   }, lang)
 }
 
-/** Suites-tab lane state: the suite status rows, or the unreachable note. */
+/** Suites lane state: the suite status rows, or the unreachable note. */
 type SuitesLane = { state: 'ok' | 'unreachable'; rows: readonly UiSuiteStatus[] }
 
-/** Suites view (docs/designs/pack-suites.md): one card per market suite,
- * each member row showing local vs market version. An empty list (the market
- * has no suites or does not support them) and an unreachable market each
- * render one explanatory line — never an error wall. Every action goes
- * through the section-level refresh, so the Packs tab re-renders in sync. */
-
-/** Suites tab: one card per suite, same two-column shape as the pack cards —
- * suite identity on the left, info (description, member packs, actions) on
- * the right. No table, no header row; the page font throughout. */
-function SuitesView(props: { lane: SuitesLane | undefined; payload: ParamsPayload; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void }) {
-  const { lane, t } = props
-  if (lane === undefined) return null
-  if (lane.state === 'unreachable') return h('p', { className: muted }, t('suitesUnreachable'))
-  if (lane.rows.length === 0) return h('p', { className: muted }, t('suitesEmpty'))
-  const rootOf = useCallback((pack: string) => props.payload.packs.find(p => p.name === pack), [props.payload.packs])
-  return h('div', null, lane.rows.map(s => h(SuiteCard, { key: `${s.org ?? ''}-${s.name}`, suite: s, packs: props.payload.packs, t, lang: props.lang, resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, rootOf })))
-}
-
-
-function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void; rootOf: (pack: string) => UiPackEntry | undefined }) {
+/** One suite card INSIDE the packs view (docs/designs/pack-suites.md): the
+ * suite is a grouping of the one installed list, not a separate tab. Member
+ * rows are read-only — install/update/delete go through the suite buttons;
+ * a member chip click expands the member's full pack card in place (its
+ * parameter declarations stay editable there, its lane actions stay hidden).
+ * Members with consumers OUTSIDE the suite carry the external-reference
+ * mark; deleting such a suite needs the force box (the confirm area names
+ * the affected consumers). A compatBreak refusal on 更新套件 arms one force
+ * re-run that answers the server's aggregated warning. */
+function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[]; t: Translate; lang: 'zh' | 'en'; resolveText: (value: unknown) => string; onJump: (view: 'packs' | 'suites', anchor: string) => void; onSaved: () => void; renderMember: (name: string) => ReturnType<typeof h> | null }) {
   const { suite, t, resolveText } = props
   const [armedDelete, setArmedDelete] = useState(false)
+  const [forceDelete, setForceDelete] = useState(false)
+  const [openMember, setOpenMember] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | undefined>(undefined)
   const [done, setDone] = useState<string | undefined>(undefined)
   const installed = suite.members.filter(m => m.localVersion !== undefined)
-  const runUpdate = () => {
+  const external = useMemo(() => externalConsumersOf(suite, props.packs), [suite, props.packs])
+  const needsForce = external.size > 0
+  const compatBlocked = (error as { code?: string } | undefined)?.code === 'compatBreak'
+  const runUpdate = (force: boolean) => {
     setBusy(true); setError(undefined)
-    void updateSuite(suite.name).then(result => {
+    void updateSuite(suite.name, force).then(result => {
       setDone(fill(t('suiteUpdateDone'), { packs: result.updated.map(u => `${u.name}@${u.version}`).join(', ') || t('upToDate') }))
       props.onSaved()
     }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
   }
   const runDelete = () => {
     setBusy(true); setError(undefined)
-    void deleteSuite(suite.name).then(result => {
+    void deleteSuite(suite.name, forceDelete).then(result => {
       setDone(fill(t('suiteDeletedDone'), { packs: result.deleted.join(', ') }))
       setArmedDelete(false)
       props.onSaved()
     }, cause => setError(cause instanceof Error ? cause : new Error(String(cause)))).finally(() => setBusy(false))
   }
   const rendered = rendered_error(error, props.lang)
+  const installedNames = new Set(props.packs.map(p => p.name))
   return h('div', { id: suiteAnchorId(suite.name), className: `${card} flex gap-3.5` },
     h('div', { className: 'w-[170px] shrink-0 font-semibold' },
       h('div', { title: suite.org !== undefined && suite.org !== '' ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` },
@@ -607,29 +656,42 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
         h('span', { title: t('colMembers'), className: 'inline-flex items-center' },
           icon(SUITE_ICON_PATH)),
         suite.members.map(m => {
-          const memberPack = props.rootOf(m.name)
-          const origin = memberPack?.origin
-          const installed = origin !== undefined
+          const referenced = external.has(m.name)
+          const isOpen = openMember === m.name
           return h('span', {
             key: m.name,
-            title: installed && origin !== undefined ? `${m.name} · ${origin.kind} ${origin.root}` : m.name,
-            // An installed member jumps to its pack card; a missing one reads red in place.
-            onClick: installed && origin !== undefined ? () => props.onJump('packs', packAnchorId(origin, m.name)) : undefined,
-            className: installed ? `${chipOk} cursor-pointer` : chipMissing,
-          }, m.localVersion === undefined ? m.name : `${m.name}@${m.localVersion}`)
+            title: referenced ? `${m.name}: ${t('suiteExternalRef')}` : m.name,
+            // An installed member expands its full pack card in place; a
+            // missing one reads red and cannot go anywhere.
+            onClick: installedNames.has(m.name) ? () => setOpenMember(isOpen ? undefined : m.name) : undefined,
+            className: installedNames.has(m.name) === false ? chipMissing : referenced ? chipExternal : `${chipOk} cursor-pointer${isOpen ? ' font-semibold' : ''}`,
+          }, m.localVersion === undefined ? m.name : `${m.name}@${m.localVersion}${referenced ? ' ↗' : ''}`)
         })),
       h('div', { className: actions },
-        h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: runUpdate }, t('suiteUpdateBtn')),
-        h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => setArmedDelete(v => !v) },
-          armedDelete ? t('cancel') : t('deleteBtn')),        h(Button, { size: 'sm', variant: 'ghost', title: t('zipBtn'), onClick: () => downloadZipFile(`/api/docwright/suite-zip?suite=${encodeURIComponent(suite.name)}`, `${suite.name}.zip`) }, t('zipBtn')),
+        h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => runUpdate(compatBlocked) },
+          compatBlocked ? t('confirmForceUpdate') : t('suiteUpdateBtn')),
+        h(Button, { size: 'sm', variant: 'ghost', disabled: busy, onClick: () => { setArmedDelete(v => !v); setForceDelete(false) } },
+          armedDelete ? t('cancel') : t('deleteBtn')),
+        h(Button, { size: 'sm', variant: 'ghost', title: t('zipBtn'), onClick: () => downloadZipFile(`/api/docwright/suite-zip?suite=${encodeURIComponent(suite.name)}`, `${suite.name}.zip`) }, t('zipBtn')),
         busy ? h('span', { className: smallMuted }, t('saving')) : null,
         done !== undefined && !busy ? h('span', { className: smallMuted }, done) : null,
         rendered !== undefined ? h(ErrorLine, { error: error as Error, lang: props.lang }) : null),
       armedDelete
         ? h('div', { className: `${smallMuted} mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5` },
           fill(t('suiteDeleteSummary'), { packs: installed.map(m => m.name).join('、') || '—' }),
-          ' ',
-          h(Button, { size: 'sm', disabled: busy || installed.length === 0, onClick: runDelete }, t('suiteDeleteConfirm')))
+          needsForce
+            ? h('div', { className: 'mt-1' },
+                fill(t('suiteExternalMembers'), { list: [...external.entries()].map(([m, cs]) => `${m} ← ${cs.join(', ')}`).join('；') }),
+                h('label', { className: 'mt-1 flex items-center gap-1.5 cursor-pointer' },
+                  h('input', { type: 'checkbox', checked: forceDelete, onChange: (e: { target: { checked: boolean } }) => setForceDelete(e.target.checked) }),
+                  t('suiteForce')))
+            : null,
+          h('div', { className: 'mt-1.5' },
+            h(Button, { size: 'sm', disabled: busy || installed.length === 0 || (needsForce && !forceDelete), onClick: runDelete }, t('suiteDeleteConfirm'))))
+        : null,
+      openMember !== undefined
+        ? h('div', { className: 'mt-1.5 border-t-[0.5px] border-[var(--dsw-alias-border-l4,transparent)] pt-1.5' },
+            props.renderMember(openMember) ?? h('p', { className: muted }, openMember))
         : null))
 }
 
@@ -724,19 +786,20 @@ function ConfigView(props: { payload: ParamsPayload; t: Translate; lang: 'zh' | 
       error !== undefined ? h(ErrorLine, { error, lang: props.lang }) : null))
 }
 
-/** The section: one fetch cycle, four views (docs/designs/pack-suites.md). */
+/** The section: one fetch cycle, three views (docs/designs/pack-suites.md). */
 export function ParamsSection(props: { lang: string; resolveText: (value: unknown) => string }) {
   const lang = props.lang === 'zh' ? 'zh' : 'en'
   const t = useMemo<Translate>(() => translate(lang === 'zh' ? zh : en), [lang])
   const [payload, setPayload] = useState<ParamsPayload | undefined>(undefined)
   const [suites, setSuites] = useState<SuitesLane | undefined>(undefined)
   const [error, setError] = useState<Error | undefined>(undefined)
-  const [view, setView] = useState<'packs' | 'suites' | 'groups' | 'config'>('packs')
+  const [view, setView] = useState<'packs' | 'groups' | 'config'>('packs')
 
-  /** Chip jumps: switch to the target tab, then scroll the anchored card
-   * into view once it has rendered (one frame is enough for React). */
-  const jumpTo = useCallback((target: 'packs' | 'suites', anchor: string) => {
-    setView(target)
+  /** Chip jumps: the suites live inside the packs view now, so a legacy
+   * 'suites' target lands there too; then scroll the anchored card into view
+   * once it has rendered (one frame is enough for React). */
+  const jumpTo = useCallback((rawTarget: 'packs' | 'suites', anchor: string) => {
+    setView(rawTarget === 'suites' ? 'packs' : rawTarget)
     window.setTimeout(() => {
       document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 60)
@@ -747,9 +810,9 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
       setError(undefined)
     }).catch((e: Error) => setError(e))
     // The suite status rides the same refresh: any change in any view re-runs
-    // BOTH fetches, so the Packs and Suites tabs always read the same state.
-    // A suite-status failure is NOT a section failure — the Suites tab shows
-    // one note while the other three views keep working.
+    // BOTH fetches, so the suite cards and the standalone list always read
+    // the same state. A suite-status failure is NOT a section failure — the
+    // suites section shows one note while the other views keep working.
     fetchSuiteStatus().then(rows => setSuites({ state: 'ok', rows }))
       .catch(() => setSuites(prev => ({ state: 'unreachable', rows: prev?.rows ?? [] })))
   }, [])
@@ -763,11 +826,11 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
       h(Button, { size: 'sm', onClick: refresh }, t('retry')))
   }
   if (payload === undefined) return h('p', { className: `dw-root ${muted}` }, t('loading'))
-  // Packs first: the installed-pack overview is the landing view; suites,
-  // params groups and the plugin form follow (docs/designs/pack-suites.md).
+  // Packs first: the installed list (suites nested, then standalone packs)
+  // is the landing view; params groups and the plugin form follow
+  // (docs/designs/pack-suites.md).
   const tabs = [
     { value: 'packs', label: t('viewPacks'), id: `${NS}-packs`, panelId: `${NS}-packs-panel` },
-    { value: 'suites', label: t('viewSuites'), id: `${NS}-suites`, panelId: `${NS}-suites-panel` },
     { value: 'groups', label: t('viewGroups'), id: `${NS}-groups`, panelId: `${NS}-groups-panel` },
     { value: 'config', label: t('viewConfig'), id: `${NS}-config`, panelId: `${NS}-config-panel` },
   ] as const
@@ -775,9 +838,8 @@ export function ParamsSection(props: { lang: string; resolveText: (value: unknow
     h('h3', { className: 'm-0 mb-1 font-semibold' }, t('title')),
     h('p', { className: `${muted} m-0 mb-2` }, t('intro')),
     h('div', { className: 'mt-2 mb-3' },
-      h(SegmentedTabs, { items: [...tabs], value: view, onChange: v => setView(v as 'groups' | 'packs' | 'suites' | 'config'), label: t('title') })),
+      h(SegmentedTabs, { items: [...tabs], value: view, onChange: v => setView(v as 'groups' | 'packs' | 'config'), label: t('title') })),
     view === 'groups' ? h(GroupsView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh, onJump: jumpTo }) : null,
-    view === 'packs' ? h(PacksView, { payload, suites: suiteMarkers, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,
-    view === 'suites' ? h(SuitesView, { lane: suites, payload, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,
+    view === 'packs' ? h(PacksView, { payload, suites: suiteMarkers, suitesLane: suites, t, lang, resolveText: props.resolveText, onJump: jumpTo, onSaved: refresh }) : null,
     view === 'config' ? h(ConfigView, { payload, t, lang, resolveText: props.resolveText, onSaved: refresh }) : null)
 }

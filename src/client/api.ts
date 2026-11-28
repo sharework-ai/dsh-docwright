@@ -156,11 +156,11 @@ export async function fetchPackUpdates(pack?: string): Promise<readonly UiPackUp
 }
 
 /** Update one managed pack from the market (verified download, atomic swap). */
-export async function updateManagedPack(pack: string): Promise<string> {
+export async function updateManagedPack(pack: string, force = false): Promise<string> {
   const body = await parse<{ ok: true; version: string }>(await fetch('/api/docwright/pack-update', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ pack }),
+    body: JSON.stringify({ pack, force }),
   }))
   return body.version
 }
@@ -214,22 +214,25 @@ export async function fetchSuiteStatus(): Promise<readonly UiSuiteStatus[]> {
   return body.suites
 }
 
-/** Update a suite: refresh each outdated member to its market version. */
-export async function updateSuite(suite: string): Promise<{ updated: readonly { name: string; version: string }[]; unchanged: readonly string[]; missing: readonly string[] }> {
+/** Update a suite: refresh each outdated member to its market version. `force`
+ * answers the server's aggregated compat-break gate (consumers below a
+ * member's compat floor) after the user confirmed the warning. */
+export async function updateSuite(suite: string, force = false): Promise<{ updated: readonly { name: string; version: string }[]; unchanged: readonly string[]; missing: readonly string[] }> {
   return parse(await fetch('/api/docwright/suite-update', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ suite }),
+    body: JSON.stringify({ suite, force }),
   }))
 }
 
-/** Delete a suite's installed members — all of them; suite members are
- * consumed inside their suite by design, so there is no keep/force split. */
-export async function deleteSuite(suite: string): Promise<{ deleted: readonly string[] }> {
+/** Delete a suite's installed members — all of them. Members with consumers
+ * outside the suite need force (the UI's force checkbox after the warning
+ * named those consumers). */
+export async function deleteSuite(suite: string, force = false): Promise<{ deleted: readonly string[] }> {
   return parse(await fetch('/api/docwright/suite-delete', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ suite }),
+    body: JSON.stringify({ suite, force }),
   }))
 }
 
