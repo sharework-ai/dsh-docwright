@@ -6,6 +6,7 @@ docwright is a deepseek-harness (dsh) plugin: closed-loop document generation wi
 
 ```
 src/        plugin code (entry: index.ts; loop.ts is the core repair loop)
+src/client/ the browser half: slots mounting + settings/market UI (Tailwind, see "Browser client styling" below)
 packs/      the COSMIC pack source (authoring + verification fixture; NOT shipped in the npm package — packs are market-distributed, the plugin boots with zero builtin packs)
 examples/   runnable examples — packsdir/task-card is a NON-builtin pack consuming the builtin cosmic chain (see below)
 tests/      vitest; coverage gate 100% lines/functions/statements, 80% branches
@@ -22,7 +23,8 @@ A packsDir pack (`config.packsDir`, convention `<workspace>/.docwright/packs/`) 
 pnpm test               # vitest
 pnpm test:coverage      # coverage gate
 pnpm run build          # tsc -b + tsdown
-npx tsc -b tsconfig.json  # typecheck only
+pnpm run build:client   # compile Tailwind CSS + bundle client/client.js (runs build-client-css.mjs first)
+npx tsc -b tsconfig.json  # typecheck only (also compiles the client CSS first)
 pnpm run smoke:host     # pre-release: pack → real dsh host boot → tool assertions (no API key)
 ```
 
@@ -38,6 +40,19 @@ pnpm run smoke:host     # pre-release: pack → real dsh host boot → tool asse
 - Errors follow problem + cause + fix, with available options where applicable (unknown pack lists packs; bad language lists supported ones).
 - The repair loop is the product: every change to loop.ts needs a deterministic test (scripted LlmPort; no live model in unit tests).
 - Docs discipline: specs stay current-state (no design history); design docs lead with the final design and record rejected approaches in a closed appendix as named veto principles (see docs/designs/*).
+
+## Browser client styling (Tailwind)
+
+The plugin's client surfaces (src/client) are styled with Tailwind v4, source of truth `src/client/styles.css`. The accent palette mirrors the pack market's `@theme` (dsh-docwright-market `web/src/app.css` — primary blue-600 family, amber, danger); NEUTRAL surfaces, text and borders stay on the host's `--dsw-alias-*` tokens written as arbitrary values (`bg-[var(--dsw-alias-bg-layer-1)]`), so light/dark follows the shell. The market's own `prefers-color-scheme` neutrals are deliberately NOT copied — a plugin surface runs inside the host shell.
+
+Pipeline (all steps run by `build:client` and `typecheck`): `scripts/build-client-css.mjs` compiles styles.css (no preflight — only the theme+utilities layers are imported; a Tailwind reset would restyle the whole host app) to `client/client.css` and emits `src/client/generated-css.ts` (a string constant, gitignored, never hand-edited, excluded from Tailwind's own scanning via `@source not`). The bundle imports the constant and injects it once per page as `<style data-plugin-css="docwright/client.css">` (dsh-market's pattern). Component classes `.dw-root` (host conversation body family/size) and `.dw-code` (host code face) live in styles.css.
+
+Conventions and gotchas:
+
+- tsdown 0.12 has NO `define` option (`defineConfig` is identity; a `define` key forwards to rolldown and is rejected with a cryptic arktype warning). Build-time constants ride the bundle as generated modules.
+- Host ui-primitives (Button/Input/Pill/Switch/SegmentedTabs) keep their `style` props — arbitrary-value classes are for native elements only.
+- Class names compile global: only the utilities the client actually uses are emitted; never add Tailwind's base layer or the market's `.hidden { display:none !important }`.
+- Suite chips keep the market suite cards' translucent purple; dependency chips are translucent gray, red when the dependency is missing — both plain backgrounds so they never intercept clicks.
 
 ## Testing policy
 
