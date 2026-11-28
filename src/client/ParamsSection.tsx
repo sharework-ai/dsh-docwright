@@ -62,7 +62,7 @@ const actions = 'flex items-center gap-2 mt-2'
 // Pack DEPENDENCY references are plain link text: a rounded chip on them
 // reads as a static badge (or, in gray, as a disabled control), while a
 // dependency IS a link — theme-blue link face, hover underline.
-const linkText = `${code} text-[var(--color-primary,#155dfc)] cursor-pointer hover:underline`
+const linkText = `${code} text-[var(--dsw-alias-link,#155dfc)] cursor-pointer hover:underline`
 const chipOk = linkText
 const chipMissing = errorText
 // Suite MEMBER rows stay rounded chips: they are the suite's inventory (a
@@ -70,7 +70,7 @@ const chipMissing = errorText
 // inside the member band. Theme-blue tint marks the clickable ones, amber
 // the externally-referenced, red the missing.
 const chip = 'inline-flex rounded-full px-2 py-px text-[0.82rem] whitespace-nowrap border'
-const memberChip = `${chip} cursor-pointer bg-[rgba(21,93,252,0.08)] border-[rgba(21,93,252,0.35)] text-[var(--color-primary,#155dfc)] hover:bg-[rgba(21,93,252,0.16)]`
+const memberChip = `${chip} cursor-pointer bg-[color-mix(in_srgb,var(--dsw-alias-link,#155dfc)_10%,transparent)] border-[color-mix(in_srgb,var(--dsw-alias-link,#155dfc)_35%,transparent)] text-[var(--dsw-alias-link,#155dfc)] hover:bg-[color-mix(in_srgb,var(--dsw-alias-link,#155dfc)_18%,transparent)]`
 const memberChipExternal = `${chip} cursor-pointer bg-[rgba(212,140,34,0.12)] border-[rgba(212,140,34,0.55)]`
 const memberChipMissing = `${chip} bg-[rgba(197,48,48,0.10)] border-[rgba(197,48,48,0.38)] ${errorText}`
 //#endregion
@@ -641,8 +641,7 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
   return h('div', { id: suiteAnchorId(suite.name), className: card },
     h('div', { className: suiteHead },
       h('span', { className: `${name} text-[0.95rem]` },
-        suite.org !== undefined && suite.org !== '' ? `${suite.org}/` : '', suite.name),
-      ' ', h('span', { className: muted }, `v${suite.version}`),
+        `${suite.org !== undefined && suite.org !== '' ? `${suite.org}/` : ''}${suite.name}@v${suite.version}`),
       suite.incomplete ? h('span', { className: smallMuted }, t('suiteFillHint')) : null),
     h('div', { className: `${desc} mb-1` }, resolveText(suite.description)),
     h('div', null,
