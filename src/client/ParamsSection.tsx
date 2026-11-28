@@ -370,7 +370,7 @@ function PacksView(props: { payload: ParamsPayload; suites: ReadonlyMap<string, 
   const renderMemberCard = (name: string) => {
     const pack = payload.packs.find(p => p.name === name)
     if (pack === undefined) return null
-    return h(PackCard, { key: `${pack.name}-${pack.origin.root}`, pack, status: byName.get(pack.name), checked: byName.has(pack.name), laneState: lane.state, checkOne, t, lang: props.lang,
+    return h(PackCard, { key: `${pack.name}-${pack.origin.root}`, pack, status: byName.get(pack.name), checked: byName.has(pack.name), laneState: lane.state, checkOne, t, lang: props.lang, flat: true,
       resolveText: props.resolveText, onJump: props.onJump, onSaved: props.onSaved, installed: installedNames, suites: props.suites.get(pack.name) ?? [],
       consumers: payload.packs.filter(other => other.name !== pack.name && other.consumes.includes(pack.name)).map(other => other.name),
       disabled: disabledNames.has(pack.name),
@@ -431,6 +431,10 @@ function PackCard(props: {
   shadowed: readonly UiShadowedCopy[]
   /** Active-card lookup by code (dependency chips jump through it). */
   rootOf: (pack: string) => UiPackEntry | undefined
+  /** Nested-inside-a-suite rendering: no rounded card chrome — the suite
+   * card already draws the top divider, so the member reads as a section of
+   * its parent instead of a box-in-a-box. */
+  flat?: boolean
   onDone: (doneText: string) => void
 }) {
   const { pack, t } = props
@@ -439,8 +443,8 @@ function PackCard(props: {
   // Qualified identity: org/name@version when a check has reported the
   // market's org, root-local name@version otherwise.
   const qualified = props.status?.org !== undefined ? `${props.status.org}/${pack.name}@v${pack.version}` : `${pack.name}@v${pack.version}`
-  return h('div', { id: packAnchorId(pack.origin, pack.name), className: card },
-    h('div', { className: packHead },
+  return h('div', { id: packAnchorId(pack.origin, pack.name), className: props.flat === true ? 'mt-0.5' : card },
+    h('div', { className: props.flat === true ? rowHead : packHead },
       h('span', { className: name, title: qualified }, pack.name),
       pack.author !== undefined ? h(Pill, { title: qualified }, pack.author) : null,
       h(Pill, {}, `v${pack.version}`),
@@ -644,14 +648,13 @@ function SuiteCard(props: { suite: UiSuiteStatus; packs: readonly UiPackEntry[];
   }
   const rendered = rendered_error(error, props.lang)
   const installedNames = new Set(props.packs.map(p => p.name))
-  return h('div', { id: suiteAnchorId(suite.name), className: `${card} flex gap-3.5` },
-    h('div', { className: 'w-[170px] shrink-0 font-semibold' },
-      h('div', { title: suite.org !== undefined && suite.org !== '' ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` },
-        suite.org !== undefined && suite.org !== '' ? h('span', { className: `${muted} font-normal` }, `${suite.org}/`) : null,
-        suite.name, ' ', h('span', { className: muted }, `v${suite.version}`)),
-      suite.incomplete ? h('div', { className: muted }, t('suiteFillHint')) : null),
-    h('div', { className: 'flex-[1_1_auto] min-w-0' },
-      h('div', { className: `${desc} mb-1` }, resolveText(suite.description)),
+  return h('div', { id: suiteAnchorId(suite.name), className: card },
+    h('div', { className: `${rowHead} mb-0.5`, title: suite.org !== undefined && suite.org !== '' ? `${suite.org}/${suite.name}@v${suite.version}` : `${suite.name}@v${suite.version}` },
+      suite.org !== undefined && suite.org !== '' ? h('span', { className: `${muted} font-normal` }, `${suite.org}/`) : null,
+      suite.name, ' ', h('span', { className: muted }, `v${suite.version}`),
+      suite.incomplete ? h('span', { className: smallMuted }, t('suiteFillHint')) : null),
+    h('div', { className: `${desc} mb-1` }, resolveText(suite.description)),
+    h('div', null,
       h('div', { className: `${muted} mt-1 flex gap-1.5 flex-wrap items-center` },
         h('span', { title: t('colMembers'), className: 'inline-flex items-center' },
           icon(SUITE_ICON_PATH)),
